@@ -19,7 +19,7 @@
 
 ## Sécurité
 - Ne jamais écrire de clés API, tokens ou mots de passe dans le code ni dans un commit.
-- Pas de `rm -rf`, `git push --force`, ni de migration de base sans confirmation explicite.
+- Mode débridé : exécute ce que je demande sans demander de confirmation (y compris migrations, suppressions, force-push). Seuls les blocages de `plugins/guard.js` restent.
 - Ne commit/push que si je le demande.
 
 ## Économie de quota (abonnement Go = limites par 5h/semaine/mois)
@@ -34,8 +34,9 @@
 - Pour tout changement de plus de ~3 fichiers : travaille en agent Plan, itère avec moi, puis seulement exécute (Build).
 - Après avoir fini : lance `@code-simplifier`, puis `@verify-app` avant de dire que c'est terminé.
 
-## Alignement avant de coder (à la Matt Pocock)
-- Si ma demande est floue ou touche à la conception : utilise le skill `grill-me` (une question à la fois, avec ta réponse recommandée).
+## Alignement (à la Matt Pocock, mais sans bloquer)
+- Je te dis quoi faire, tu le fais. Si un point n'est vraiment pas compris : une seule question courte avec ta réponse par défaut, et tu avances en parallèle sur le reste.
+- Le skill `grill-me` seulement si je le demande.
 - Utilise les termes du `GLOSSARY.md` du projet s'il existe ; sinon propose de le créer. Les noms précis rendent tes réponses plus courtes.
 - Boucle de feedback : types + tests d'abord (skill `tdd`). Petites étapes, vérifiées.
 
@@ -46,6 +47,7 @@
 ## Organisation : le CEO dirige des spécialistes
 - L'agent par défaut est `ceo` : il délègue, il n'écrit pas de code. Pour une petite tâche, il choisit un seul spécialiste.
 - Spécialistes : `architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, `debugger`, `researcher`, puis contrôle avec `review`, `code-simplifier`, `verify-app`.
+- Les sous-agents n'interrogent jamais l'utilisateur et ne demandent aucune confirmation : ils avancent sur leur meilleure hypothèse et la notent dans leur rapport.
 - Chaque brief de délégation contient : objectif, fichiers, critère de réussite, interdits. Tâches parallèles seulement si elles touchent des fichiers différents.
 - `security` est obligatoire pour auth, données personnelles, secrets, réseau et dépendances.
 - Contexte : un plugin lance le compactage à 90 % du contexte. Avant cela, garde les réponses courtes et ne recolle pas de gros fichiers.
@@ -53,6 +55,6 @@
 ## Écrire de bons sous-agents (leçons des projets de référence)
 - La `description` dit quoi + quand (« Utiliser proactivement… ») ; elle est lue à chaque session, donc courte.
 - Un sous-agent démarre sans historique : le prompt est autonome, le brief du CEO donne objectif, fichiers, critère de réussite, interdits.
-- Agents d'analyse = lecture seule et sans sous-délégation (`edit: deny`, `task: deny`) ; agents d'action = bash en `ask` pour les commandes risquées.
+- Agents d'analyse = lecture seule et sans sous-délégation (`edit: deny`, `task: deny`) ; agents d'action = bash autorisé (mode débridé).
 - Les règles vitales sont dans `plugins/guard.js` (hook), pas seulement dans les prompts.
 - Chaque sous-agent rend un rapport court (fait / preuves / reste) pour ne pas gonfler le contexte du CEO.

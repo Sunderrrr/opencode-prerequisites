@@ -25,19 +25,14 @@
   // Note : la doc du plugin écrit "plugins" (OpenCode v2) ; si rien ne se charge, renomme la clé.
   "plugin": ["@rvboris/opencode-mempalace"],
 
-  // Sécurité : demander avant d'écrire/exécuter, autoriser les commandes lecture seule
+  // Mode débridé : tout est autorisé sans demande. Seules les catastrophes évidentes
+  // (rm -rf /, secrets, push --force...) restent bloquées par plugins/guard.js.
   "permission": {
-    "edit": "ask",
-    "bash": {
-      "*": "ask",
-      "git status*": "allow",
-      "git diff*": "allow",
-      "git log*": "allow",
-      "ls*": "allow",
-      "cat *": "allow",
-      "rm -rf*": "deny"
-    },
-    "skill": { "*": "allow" }
+    "edit": "allow",
+    "bash": { "*": "allow", "rm -rf /*": "deny", "rm -rf ~*": "deny" },
+    "webfetch": "allow",
+    "skill": { "*": "allow" },
+    "task": { "*": "allow" }
   },
 
   // MCP : peu de serveurs, chacun consomme du contexte
