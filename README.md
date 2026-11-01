@@ -23,7 +23,7 @@ Puis dans OpenCode : `/connect` → OpenCode Go → colle ta clé, et `/models` 
 - `config/mempalace.jsonc` : réglages de la mémoire persistante (plugin `@rvboris/opencode-mempalace`).
 - `config/plugins/notify.js` : notification quand une session attend (non testé).
 - `config/bin/agent-wt` : un worktree git par agent (`new`, `merge`, `remove`, `list`), installé dans `~/.local/bin`.
-- `config/agents/integrator.md` : seul agent qui fusionne les branches des agents parallèles.
+- `config/agents/integrator.md` : seul agent qui fusionne les branches des agents parallèles et ouvre les PR (mode PR, commande `/pr`).
 - `config/plugins/guard.js` : bloque la lecture des fichiers de secrets (`.env`, clés) et les commandes destructrices (`rm -rf /`, `push --force`, `DROP TABLE`, `curl | sh`).
 - `config/plugins/auto-compact.js` : compactage automatique à 90 % du contexte (non testé, ratio réglable avec `OPENCODE_COMPACT_RATIO`).
 

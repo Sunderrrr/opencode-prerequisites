@@ -75,3 +75,4 @@
 - **Seul `@integrator` fusionne** (`agent-wt merge`), un à la fois, tests complets après chaque fusion ; il résout les conflits en conservant les deux intentions et régénère les lockfiles au lieu de les fusionner.
 - **Les spécialistes ne poussent jamais** ; ils commitent localement. Push uniquement sur ma demande, après `git pull --rebase`, jamais `--force`.
 - Interdits en parallèle : `git stash` (partagé entre worktrees), `git reset --hard`, `git clean -fdx`, changer de branche dans le dépôt principal.
+- **Mode PR** : une seule branche `integration/<nom>` depuis `origin/main`, fusion des branches d'agents, rebase sur `origin/main` + tests juste avant le push, PR via `gh pr create`, re-synchronisation si `main` avance (3 fois max). `--force-with-lease` uniquement sur `integration/*`. PR multiples : ordre de dépendance, une seule fusionnée à la fois, rebase de la suivante après chaque fusion.

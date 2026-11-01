@@ -4,6 +4,8 @@
 #   agent-wt merge <tâche>        fusionne agent/<tâche> dans la branche courante du dépôt principal
 #   agent-wt remove <tâche>       supprime le worktree et la branche (après fusion)
 #   agent-wt list                 liste les worktrees d'agents
+#   agent-wt integration <nom> [base]  crée la branche integration/<nom> depuis origin/<base> (défaut main) pour une PR unique
+#   agent-wt sync [base]          rebase la branche courante sur origin/<base> (code 2 + fichiers si conflit)
 set -Eeuo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -44,6 +46,28 @@ case "$cmd" in
     ;;
   list)
     git -C "$MAIN" worktree list
+    ;;
+  integration)
+    safe "$task"
+    base="${3:-main}"
+    if [ -n "$(git -C "$MAIN" status --porcelain)" ]; then
+      echo "❌ Dépôt principal non propre : commite d'abord." >&2; exit 1
+    fi
+    git -C "$MAIN" fetch -q origin "$base"
+    git -C "$MAIN" switch -c "integration/$task" "origin/$base"
+    echo "✅ branche integration/$task créée depuis origin/$base"
+    ;;
+  sync)
+    base="${2:-main}"
+    git -C "$MAIN" fetch -q origin "$base"
+    if git -C "$MAIN" rebase "origin/$base"; then
+      echo "✅ rebasé sur origin/$base"
+    else
+      echo "⚠️  CONFLITS pendant le rebase sur origin/$base. Fichiers :" >&2
+      git -C "$MAIN" diff --name-only --diff-filter=U >&2
+      echo "Résous-les, 'git add', puis 'git rebase --continue' dans $MAIN (ou 'git rebase --abort')." >&2
+      exit 2
+    fi
     ;;
   *)
     sed -n '2,6p' "$0"; exit 1 ;;

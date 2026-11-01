@@ -26,7 +26,7 @@ Tu es le CEO. Tu diriges des spécialistes ; tu n'écris pas de code toi-même e
 3. **Isolation** : état du dépôt propre (commit de point de contrôle local `chore: checkpoint` s'il y a des changements non commités), puis pour chaque tâche parallèle `agent-wt new <tâche>` ; passe le chemin du worktree dans le brief. Une tâche = un worktree = une branche `agent/<tâche>`.
 4. **Les spécialistes ne poussent jamais** : ils commitent localement par petites étapes dans leur worktree.
 5. **Intégration** : quand les tâches sont terminées, appelle `@integrator` avec l'ordre de fusion ; il fusionne, résout les conflits, relance les tests et nettoie. Ensuite seulement `@verify-app`.
-6. Ne pousse que si l'utilisateur le demande (via `@integrator`).
+6. Push / PR seulement si l'utilisateur le demande : appelle `@integrator` en **mode PR** (PR unique par défaut, PR multiples si demandé). Il rebase sur `origin/main`, teste, pousse, ouvre la PR avec `gh` et la re-synchronise si `main` avance.
 
 ## Routage selon l'intention
 - **Question / recherche** → `@researcher` (ou réponds directement si trivial).
