@@ -77,14 +77,19 @@ if [ "$TOOLS" = 1 ]; then
   mkdir -p "$TMP/obscura" && tar -xzf "$TMP/o.tgz" -C "$TMP/obscura"
   find "$TMP/obscura" -type f \( -name obscura -o -name obscura-worker \) -exec cp {} "$BIN/" \;
   chmod +x "$BIN/obscura" "$BIN/obscura-worker" 2>/dev/null || true
-  "$BIN/obscura" --help >/dev/null 2>&1 && echo "✅ Obscura installé dans $BIN" \
-    || warn "obscura ne répond pas à --help : vérifie-le à la main (MCP obscura à désactiver sinon)."
+  if "$BIN/obscura" --help >/dev/null 2>&1; then
+    echo "✅ Obscura installé dans $BIN"
+  else
+    warn "obscura ne répond pas à --help : vérifie-le à la main (MCP obscura à désactiver sinon)."
+  fi
 
   if ! need trivy; then
     echo "⬇️  Trivy : installation dans $BIN..."
-    curl -fsSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh -o "$TMP/trivy-install.sh" \
-      && sh "$TMP/trivy-install.sh" -b "$BIN" \
-      || warn "Installation de Trivy échouée : https://trivy.dev/latest/getting-started/installation/"
+    if curl -fsSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh -o "$TMP/trivy-install.sh"; then
+      sh "$TMP/trivy-install.sh" -b "$BIN" || warn "Installation de Trivy échouée : https://trivy.dev/latest/getting-started/installation/"
+    else
+      warn "Téléchargement du script Trivy échoué : https://trivy.dev/latest/getting-started/installation/"
+    fi
   fi
   PATH="$BIN:$PATH" trivy plugin install mcp || warn "trivy plugin install mcp a échoué : relance-le à la main."
 

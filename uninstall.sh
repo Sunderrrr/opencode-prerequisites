@@ -6,9 +6,18 @@ set -Eeuo pipefail
 DEST="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 BIN="${OBSCURA_BIN_DIR:-$HOME/.local/bin}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
-last="$(ls -d "$DEST".bak-* 2>/dev/null | sort | tail -n 1 || true)"
+# Sauvegardes (le glob est trié ; les horodatages se trient dans l'ordre chronologique)
+last=""
+for b in "$DEST".bak-*; do
+  [ -d "$b" ] && last="$b"
+done
 
-if [ "${1:-}" = "--list" ]; then ls -d "$DEST".bak-* 2>/dev/null | sort || echo "(aucune sauvegarde)"; exit 0; fi
+if [ "${1:-}" = "--list" ]; then
+  found=0
+  for b in "$DEST".bak-*; do [ -d "$b" ] && { echo "$b"; found=1; }; done
+  [ "$found" = 1 ] || echo "(aucune sauvegarde)"
+  exit 0
+fi
 
 if [ -d "$DEST" ]; then
   mv "$DEST" "$DEST.removed-$STAMP"
