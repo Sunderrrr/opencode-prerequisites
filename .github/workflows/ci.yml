@@ -37,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: ShellCheck
-        run: shellcheck install.sh uninstall.sh doctor.sh scripts/*.sh config/bin/agent-wt
+        run: shellcheck install.sh uninstall.sh doctor.sh scripts/*.sh config/bin/*
 
   rust-template:
     runs-on: ${{ matrix.os }}
@@ -58,3 +58,50 @@ jobs:
           cargo fmt --all -- --check
           cargo clippy --all-targets -- -D warnings
           cargo test --all-targets
+
+  # Distributions : Arch (base d'Omarchy), Debian, Fedora, RHEL (Rocky)
+  distros:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Arch Linux (Omarchy)
+            image: archlinux:latest
+            setup: pacman -Syu --noconfirm nodejs npm git python tar gzip curl
+          - name: Debian 12
+            image: debian:12
+            setup: apt-get update && apt-get install -y nodejs npm git python3 curl ca-certificates tar gzip
+          - name: Debian 13
+            image: debian:13
+            setup: apt-get update && apt-get install -y nodejs npm git python3 curl ca-certificates tar gzip
+          - name: Fedora
+            image: fedora:latest
+            setup: dnf install -y nodejs npm git python3 tar gzip curl
+          - name: RHEL (Rocky 9)
+            image: rockylinux:9
+            setup: dnf module enable -y nodejs:20 && dnf install -y nodejs npm git python3 tar gzip curl
+    name: ${{ matrix.name }}
+    container: ${{ matrix.image }}
+    steps:
+      - name: Dépendances système
+        run: ${{ matrix.setup }}
+      - uses: actions/checkout@v7
+      - name: Validation du kit
+        run: node --version && node scripts/validate-kit.mjs
+      - name: Installation à blanc (complète puis légère)
+        run: |
+          export OPENCODE_CONFIG_DIR=/tmp/oc-full OBSCURA_BIN_DIR=/tmp/oc-bin
+          ./install.sh --no-tools 2>&1 | tee /tmp/install.log
+          grep -q "Système :" /tmp/install.log
+          OPENCODE_CONFIG_DIR=/tmp/oc-lite ./install.sh --lite
+          test "$(ls /tmp/oc-lite/agents | wc -l)" -eq 12
+      - name: Lanceurs MCP (choix du navigateur et du moteur de conteneurs)
+        run: |
+          mkdir -p /tmp/fake && cd /tmp/fake
+          printf '#!/bin/sh\necho "[npx] $*"\n' > npx && chmod +x npx
+          printf '#!/bin/sh\n[ "$1" = info ] && exit 0\necho "[podman] $*"\n' > podman && chmod +x podman
+          printf '#!/bin/sh\n' > chromium && chmod +x chromium
+          PATH=/tmp/fake:$PATH /tmp/oc-bin/oc-playwright-mcp | grep -- "--executable-path /tmp/fake/chromium"
+          PATH=/tmp/fake:/usr/bin:/bin /tmp/oc-bin/oc-terraform-mcp | grep -E "\[(podman|docker)\] run"
+

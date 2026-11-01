@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Lance le MCP Playwright (Microsoft) avec le navigateur du système s'il existe
+# (Arch/Omarchy, Fedora, Debian, Ubuntu...), sinon avec le Chromium téléchargé par Playwright.
+#   OC_PLAYWRIGHT_HEADED=1   fenêtre visible (sinon : headless quand on utilise le navigateur système)
+#   OC_PLAYWRIGHT_BROWSER=/chemin/vers/navigateur   force un navigateur précis
+set -Eeuo pipefail
+
+exe="${OC_PLAYWRIGHT_BROWSER:-}"
+if [ -z "$exe" ]; then
+  for c in chromium chromium-browser google-chrome-stable google-chrome brave-browser brave; do
+    if p="$(command -v "$c" 2>/dev/null)"; then exe="$p"; break; fi
+  done
+fi
+
+args=()
+if [ -n "$exe" ]; then
+  args+=(--executable-path "$exe")
+  [ "${OC_PLAYWRIGHT_HEADED:-0}" = 1 ] || args+=(--headless)
+  # Navigateur lancé en root (conteneur) : le sandbox Chromium est impossible
+  [ "$(id -u)" -ne 0 ] || args+=(--no-sandbox)
+fi
+
+exec npx -y @playwright/mcp@latest "${args[@]}" "$@"

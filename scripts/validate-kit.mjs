@@ -92,7 +92,7 @@ for (const f of walk(ROOT)) {
 }
 
 // 7. Scripts shell
-for (const f of [...ls(ROOT).filter((x) => x.endsWith(".sh")).map((x) => path.join(ROOT, x)), path.join(C, "bin", "agent-wt")]) {
+for (const f of [...ls(ROOT).filter((x) => x.endsWith(".sh")).map((x) => path.join(ROOT, x)), ...ls(path.join(C, "bin")).map((x) => path.join(C, "bin", x)), ...ls(path.join(ROOT, "scripts")).filter((x) => x.endsWith(".sh")).map((x) => path.join(ROOT, "scripts", x))]) {
   if (!fs.existsSync(f)) continue
   try { execFileSync("bash", ["-n", f], { stdio: "pipe" }) } catch (e) { err(`${path.relative(ROOT, f)} : erreur de syntaxe bash\n${e.stderr}`) }
 }

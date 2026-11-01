@@ -41,7 +41,17 @@ const OC = (() => {
 })()
 const runOc = (args, t = 20000) => spawnSync(OC, args, { encoding: "utf8", timeout: t, env: process.env, maxBuffer: 1 << 22 })
 
+let distro = os.platform()
+try {
+  const rel = fs.readFileSync("/etc/os-release", "utf8")
+  distro = rel.match(/^PRETTY_NAME="?([^"\n]+)"?/m)?.[1] ?? distro
+} catch { /* macOS ou autre */ }
+console.log(`Système : ${distro} · Node ${process.versions.node}`)
 console.log(`Dossier de config : ${DEST}\n`)
+if (!(process.env.PATH ?? "").split(path.delimiter).includes(BIN)) {
+  console.log(`⚠️  ${BIN} n'est pas dans ton PATH : ajoute  export PATH="${BIN}:$PATH"  à ton ~/.bashrc / ~/.zshrc (obscura, trivy, agent-wt, oc-new-rust)`)
+  warned++
+}
 
 // Node
 const major = Number(process.versions.node.split(".")[0])
@@ -91,10 +101,28 @@ console.log("\nMCP activés :")
 for (const [name, m] of Object.entries(cfg?.mcp ?? {})) {
   if (m.enabled === false) { console.log(`   · ${name} (désactivé)`); continue }
   if (m.type === "remote") { ok(`${name} → ${m.url}`); continue }
-  const bin = m.command?.[0]
+  const expand = (x) => String(x).replace(/\{env:(\w+)\}/g, (_, k) => process.env[k] ?? "")
+  const bin = expand(m.command?.[0] ?? "")
   if (!bin) { ko(`${name} : commande absente`); continue }
-  if (!has(bin)) { ko(`${name} : "${bin}" introuvable`); continue }
-  if (bin === "docker" && run("docker", ["info"], 10000).status !== 0) { wa(`${name} : Docker installé mais le démon ne répond pas`); continue }
+  const exists = path.isAbsolute(bin) ? fs.existsSync(bin) : has(bin)
+  if (!exists) { ko(`${name} : "${bin}" introuvable${path.isAbsolute(bin) ? " (relance ./install.sh)" : ""}`); continue }
+
+  if (bin.endsWith("oc-terraform-mcp") || bin === "docker") {
+    const rt = ["docker", "podman"].find((c) => has(c) && run(c, ["info"], 10000).status === 0)
+    const installed = ["docker", "podman"].filter(has)
+    rt ? ok(`${name} : ${rt} prêt`)
+       : installed.length ? wa(`${name} : ${installed.join("/")} installé mais le démon ne répond pas (Docker : sudo systemctl enable --now docker ; ton utilisateur doit être dans le groupe docker)`)
+       : ko(`${name} : ni docker ni podman installé`)
+    continue
+  }
+  if (bin.endsWith("oc-playwright-mcp")) {
+    const sys = ["chromium", "chromium-browser", "google-chrome-stable", "google-chrome", "brave-browser", "brave"].find(has)
+    const cache = path.join(HOME, ".cache", "ms-playwright")
+    sys ? ok(`${name} : navigateur système (${sys})`)
+        : fs.existsSync(cache) ? ok(`${name} : Chromium de Playwright (${cache})`)
+        : wa(`${name} : aucun navigateur (installe chromium avec ton gestionnaire de paquets, ou relance ./install.sh)`)
+    continue
+  }
   ok(`${name} : ${bin} disponible`)
 }
 

@@ -47,15 +47,16 @@
     // Navigateur piloté par l'IA (outil Microsoft). Installé et activé par install.sh (désactive-le si le contexte devient trop lourd).
     "playwright": {
       "type": "local",
-      "command": ["npx", "-y", "@playwright/mcp@latest"],
+      // Lanceur du kit : utilise Chromium/Chrome du système s'il existe, sinon celui de Playwright
+      "command": ["{env:HOME}/.local/bin/oc-playwright-mcp"],
       "enabled": true
     },
     // --- DevOps (lecture seule / sans écriture) ---
     // Documentation du Terraform Registry (providers/modules). Pas de TFE_TOKEN : aucune action sur HCP Terraform.
-    // Nécessite Docker. Vérifie les arguments avec : docker run -i --rm hashicorp/terraform-mcp-server:1.4.1 --help
+    // Nécessite Docker ou Podman.
     "terraform": {
       "type": "local",
-      "command": ["docker", "run", "-i", "--rm", "hashicorp/terraform-mcp-server:1.4.1", "stdio", "--toolsets=registry"],
+      "command": ["{env:HOME}/.local/bin/oc-terraform-mcp"], // Docker ou Podman, registre seulement
       "enabled": true
     },
     // Kubernetes en LECTURE SEULE (voir k8s-mcp.toml : read_only + Secrets bloqués). Utilise ton kubeconfig.

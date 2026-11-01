@@ -26,6 +26,24 @@ Ensuite : `opencode` → `/connect` → **OpenCode Go** → colle ta clé. Dans 
 
 Prérequis : Node.js 18+ (la CI tourne sur Node 26, voir `.nvmrc`). Windows : utilise WSL (les scripts sont en Bash). MemPalace s'installe dans son propre venv (Python 3.10–3.13, ou 3.12 téléchargé via `uv` si ton Python est trop récent) ; ajoute ensuite `export MEMPALACE_ADAPTER_PYTHON="$HOME/.mempalace/venv/bin/python"` à ton `~/.bashrc`. Pour relancer seulement cette étape : `./install.sh --memory-only`.
 
+## Distributions supportées
+
+Testées en CI (installation à blanc, validation, lanceurs) sur **Arch Linux (base d'Omarchy)**, **Debian 12 et 13**, **Ubuntu 24.04 et 26.04**, **Fedora** et **Rocky Linux 9 (RHEL)**. macOS est géré par le code (Intel et ARM) mais pas testé. L'installateur détecte ta distribution et te donne la commande de paquet adaptée quand il manque quelque chose.
+
+| | Arch / Omarchy | Debian / Ubuntu | Fedora / RHEL |
+|---|---|---|---|
+| Node.js | `pacman -S nodejs npm` (ou `mise use -g node`, déjà présent sur Omarchy) | `apt install nodejs npm` | `dnf install nodejs npm` |
+| Conteneurs (MCP terraform) | `docker` (+ `systemctl enable --now docker`, groupe `docker`) ou `podman` | `docker.io` ou `podman` | `podman` (déjà là) ou Docker CE |
+| GitHub CLI | `github-cli` | `gh` | `gh` |
+| Navigateur (MCP playwright) | Chromium du système (Omarchy en a un) | Chromium, ou celui de Playwright | Chromium, ou celui de Playwright |
+| Venv Python (MemPalace) | inclus ; Python 3.14+ → `uv` | `python3-venv` ; sinon `uv` | inclus ; sinon `uv` |
+
+Points propres à chaque famille :
+- **Omarchy / Arch** : Playwright ne supporte pas officiellement Arch. Le lanceur `oc-playwright-mcp` utilise donc le **Chromium du système** (headless ; `OC_PLAYWRIGHT_HEADED=1` pour voir la fenêtre) et l'installateur ne télécharge rien. `opencode` installé par `mise` est géré par `doctor.sh`.
+- **Debian / Ubuntu** : sans navigateur système, Playwright télécharge son Chromium ; s'il manque des bibliothèques : `sudo npx playwright install-deps chromium`.
+- **Fedora / RHEL** : Docker n'est pas fourni, `oc-terraform-mcp` choisit **Podman** automatiquement (et ignore un Docker dont le démon est arrêté). Les binaires d'Obscura et de Trivy sont des exécutables Linux génériques : `doctor.sh` vérifie qu'ils démarrent.
+- Les lanceurs `oc-playwright-mcp` et `oc-terraform-mcp` sont installés dans `~/.local/bin` (le dossier doit être dans le `PATH`).
+
 ## Profils
 
 | | Complet | Léger (`--lite`) |

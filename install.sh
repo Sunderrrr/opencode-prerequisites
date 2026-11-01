@@ -36,6 +36,61 @@ need() { command -v "$1" >/dev/null 2>&1; }
 warn() { echo "⚠️  $*" >&2; }
 die()  { echo "❌ $*" >&2; exit 1; }
 
+# --- Distribution (Omarchy/Arch, Debian/Ubuntu, Fedora/RHEL, macOS) : sert aux conseils d'installation ---
+DISTRO="inconnue"; PM=""
+if [ "$(uname -s)" = Darwin ]; then
+  DISTRO="macOS"; PM="brew"
+elif [ -r /etc/os-release ]; then
+  # shellcheck disable=SC1091
+  . /etc/os-release
+  DISTRO="${PRETTY_NAME:-${NAME:-linux}}"
+  case " ${ID:-} ${ID_LIKE:-} " in
+    *" arch "*|*" archlinux "*|*" omarchy "*) PM="pacman" ;;
+    *" debian "*|*" ubuntu "*) PM="apt" ;;
+    *" fedora "*|*" rhel "*|*" centos "*|*" rocky "*|*" almalinux "*) PM="dnf" ;;
+  esac
+fi
+
+# pkg_hint <outil> : commande d'installation adaptée à la distribution
+pkg_hint() {
+  local t="$1"
+  case "$PM:$t" in
+    pacman:docker) echo "sudo pacman -S --needed docker && sudo systemctl enable --now docker && sudo usermod -aG docker \$USER   (ou: sudo pacman -S podman)" ;;
+    apt:docker)    echo "sudo apt install docker.io   (ou: sudo apt install podman)" ;;
+    dnf:docker)    echo "sudo dnf install podman   (ou Docker CE : https://docs.docker.com/engine/install/)" ;;
+    brew:docker)   echo "brew install --cask docker" ;;
+    pacman:gh)     echo "sudo pacman -S --needed github-cli" ;;
+    apt:gh)        echo "sudo apt install gh   (sinon : https://github.com/cli/cli/blob/trunk/docs/install_linux.md)" ;;
+    dnf:gh)        echo "sudo dnf install gh" ;;
+    brew:gh)       echo "brew install gh" ;;
+    pacman:node)   echo "sudo pacman -S --needed nodejs npm   (ou: mise use -g node)" ;;
+    apt:node)      echo "sudo apt install nodejs npm   (ou: https://nodejs.org)" ;;
+    dnf:node)      echo "sudo dnf install nodejs npm" ;;
+    brew:node)     echo "brew install node" ;;
+    apt:venv)      echo "sudo apt install python3-venv" ;;
+    pacman:chromium) echo "sudo pacman -S --needed chromium" ;;
+    apt:chromium)    echo "sudo apt install chromium   (ou laisse Playwright télécharger le sien)" ;;
+    dnf:chromium)    echo "sudo dnf install chromium" ;;
+    *) echo "voir la documentation de ${t} pour ${DISTRO}" ;;
+  esac
+}
+
+# get_uv : trouve uv ou télécharge le binaire statique officiel (aucun paquet python3-venv requis)
+get_uv() {
+  if need uv; then echo uv; return 0; fi
+  local arch os
+  case "$(uname -m)" in x86_64) arch=x86_64 ;; aarch64|arm64) arch=aarch64 ;; *) return 1 ;; esac
+  case "$(uname -s)" in
+    Linux)  os="unknown-linux-musl" ;;
+    Darwin) os="apple-darwin" ;;
+    *) return 1 ;;
+  esac
+  mkdir -p "$TMP/uvbin"
+  curl -fsSL "https://github.com/astral-sh/uv/releases/latest/download/uv-$arch-$os.tar.gz" -o "$TMP/uv.tgz" \
+    && tar -xzf "$TMP/uv.tgz" -C "$TMP/uvbin" --strip-components=1 \
+    && [ -x "$TMP/uvbin/uv" ] && echo "$TMP/uvbin/uv"
+}
+
 # Lancé via sudo : $HOME serait celui de root (config, outils et MemPalace installés au mauvais endroit)
 if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$ALLOWROOT" != 1 ]; then
   die "Ne lance pas ce script avec sudo (il installerait tout dans $HOME, pas chez $SUDO_USER). Relance simplement : ./install.sh"
@@ -46,21 +101,20 @@ fi
 MEMVENV="$HOME/.mempalace/venv"
 setup_mempalace() {
   if [ ! -x "$MEMVENV/bin/python" ]; then
-    local py="" c
+    local py="" c made=0
     for c in python3.13 python3.12 python3.11 python3.10; do
       if need "$c"; then py="$c"; break; fi
     done
     mkdir -p "$HOME/.mempalace"
     if [ -n "$py" ]; then
       echo "   Python $py → venv $MEMVENV"
-      "$py" -m venv "$MEMVENV" || { warn "Création du venv échouée (paquet python3-venv manquant ?)"; return 1; }
+      if "$py" -m venv "$MEMVENV" 2>/dev/null; then made=1; else rm -rf "$MEMVENV"; warn "venv impossible avec $py ($(pkg_hint venv)) : je passe par uv."; fi
     else
       echo "   Aucun Python 3.10–3.13 trouvé ($(python3 --version 2>&1)) : j'utilise uv pour télécharger Python 3.12."
-      local UV=""
-      if need uv; then UV=uv
-      elif need python3 && python3 -m venv "$TMP/uvenv" && "$TMP/uvenv/bin/pip" install -q uv; then UV="$TMP/uvenv/bin/uv"
-      fi
-      [ -n "$UV" ] || { warn "uv indisponible : installe-le (https://docs.astral.sh/uv/) puis relance ./install.sh --memory-only"; return 1; }
+    fi
+    if [ "$made" = 0 ]; then
+      local UV
+      UV="$(get_uv)" || { warn "uv indisponible : installe-le (https://docs.astral.sh/uv/) puis relance ./install.sh --memory-only"; return 1; }
       "$UV" venv --seed --python 3.12 "$MEMVENV" || return 1
     fi
   fi
@@ -89,7 +143,7 @@ if [ "$MEMONLY" = 1 ]; then
   exit 0
 fi
 
-need node || die "Node.js est requis (validation, profil léger, MCP) : https://nodejs.org"
+need node || die "Node.js est requis (validation, profil léger, MCP). → $(pkg_hint node)"
 need opencode || warn "opencode introuvable. Installe-le : curl -fsSL https://opencode.ai/install | bash"
 
 # 1. Validation du kit avant toute copie
@@ -103,10 +157,10 @@ if [ -n "$(ls -A "$DEST" 2>/dev/null)" ]; then
 fi
 cp -a "$SRC/." "$DEST/"
 mkdir -p "$BIN"
-install -m 0755 "$SRC/bin/agent-wt" "$BIN/agent-wt"
+for f in "$SRC"/bin/*; do install -m 0755 "$f" "$BIN/$(basename "$f")"; done
 install -m 0755 "$HERE/scripts/new-rust-project.sh" "$BIN/oc-new-rust"
 cp -a "$HERE/templates" "$DEST/templates"
-echo "✅ Config installée dans $DEST ; agent-wt et oc-new-rust dans $BIN"
+echo "✅ Config installée dans $DEST ; lanceurs (agent-wt, oc-new-rust, oc-playwright-mcp, oc-terraform-mcp) dans $BIN"
 
 # 3. Profil léger
 if [ "$LITE" = 1 ]; then
@@ -116,8 +170,20 @@ fi
 # 4. Outils (profil complet seulement)
 if [ "$TOOLS" = 1 ]; then
   need npx || die "npx (Node.js) est requis pour context7/playwright."
-  echo "⬇️  Playwright : installation de Chromium..."
-  npx -y playwright install chromium
+  SYSBROWSER=""
+  for c in chromium chromium-browser google-chrome-stable google-chrome brave-browser brave; do
+    if need "$c"; then SYSBROWSER="$(command -v "$c")"; break; fi
+  done
+  if [ -n "$SYSBROWSER" ]; then
+    echo "✅ Navigateur système détecté ($SYSBROWSER) : le MCP Playwright l'utilisera, pas de téléchargement."
+  else
+    echo "⬇️  Playwright : installation de Chromium (aucun navigateur système trouvé)..."
+    npx -y playwright install chromium || warn "Chromium non installé. Sur ${DISTRO} : $(pkg_hint chromium)"
+    case "$PM" in
+      apt) echo "   Si Chromium ne démarre pas (bibliothèques manquantes) : sudo npx playwright install-deps chromium" ;;
+      pacman|dnf) echo "   Playwright ne supporte pas officiellement ${DISTRO} : le plus simple est le Chromium du système → $(pkg_hint chromium)" ;;
+    esac
+  fi
 
   case "$(uname -s)-$(uname -m)" in
     Linux-x86_64) PLAT="x86_64-linux" ;;
@@ -156,8 +222,12 @@ if [ "$TOOLS" = 1 ]; then
   fi
 fi
 
-need docker || warn "Docker introuvable : requis pour le MCP terraform (désactive-le sinon)."
-need gh || warn "gh (GitHub CLI) introuvable : requis pour /pr et la recherche GitHub (https://cli.github.com)."
+echo "ℹ️  Système : $DISTRO (gestionnaire : ${PM:-aucun reconnu})"
+if ! need docker && ! need podman; then
+  warn "Ni Docker ni Podman : requis pour le MCP terraform (ou mets \"enabled\": false). → $(pkg_hint docker)"
+fi
+need gh || warn "gh (GitHub CLI) introuvable : requis pour /pr et la recherche GitHub. → $(pkg_hint gh)"
+[ "$BIN" = "$HOME/.local/bin" ] || warn "Les MCP playwright et terraform pointent vers \$HOME/.local/bin (lanceurs oc-*) : copie-les depuis $BIN ou garde le dossier par défaut."
 case ":$PATH:" in *":$BIN:"*) ;; *) warn "Ajoute $BIN à ton PATH : export PATH=\"$BIN:\$PATH\"" ;; esac
 
 # 5. Skills de Matt Pocock (optionnel)

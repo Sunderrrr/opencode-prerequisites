@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# MCP Terraform (registre uniquement, sans jeton) via Docker ou Podman.
+# Choisit le moteur qui répond vraiment (un Docker installé mais arrêté est ignoré au profit de Podman).
+set -Eeuo pipefail
+
+rt=""; first=""
+for c in docker podman; do
+  command -v "$c" >/dev/null 2>&1 || continue
+  [ -n "$first" ] || first="$c"
+  if timeout 8 "$c" info >/dev/null 2>&1; then rt="$c"; break; fi
+done
+rt="${rt:-$first}"
+[ -n "$rt" ] || { echo "Ni docker ni podman n'est installé (requis pour le MCP terraform)." >&2; exit 1; }
+
+# Nom d'image complet : fonctionne pareil avec Docker et Podman
+exec "$rt" run -i --rm docker.io/hashicorp/terraform-mcp-server:1.4.1 stdio --toolsets=registry "$@"
