@@ -40,18 +40,18 @@
       "oauth": false,
       "enabled": true
     },
-    // Navigateur piloté par l'IA (outil Microsoft). Désactivé par défaut pour économiser le contexte.
+    // Navigateur piloté par l'IA (outil Microsoft). Installé et activé par install.sh (désactive-le si le contexte devient trop lourd).
     "playwright": {
       "type": "local",
       "command": ["npx", "-y", "@playwright/mcp@latest"],
-      "enabled": false // passe à true quand tu en as besoin
+      "enabled": true
     },
     // Navigateur headless léger en Rust (binaire `obscura` à installer, voir README).
     // Pas de --stealth par défaut ; ajoute-le seulement si tu en as besoin.
     "obscura": {
       "type": "local",
       "command": ["obscura", "mcp"],
-      "enabled": false // passe à true une fois le binaire installé
+      "enabled": true
     }
   }
 }

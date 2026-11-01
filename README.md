@@ -30,7 +30,10 @@ Aucune clé API dans ce dépôt : `export CONTEXT7_API_KEY=...` (optionnel).
 
 ## Navigateurs MCP (playwright / obscura)
 
-Les deux sont désactivés par défaut car chaque MCP ajoute du contexte. Dans `~/.config/opencode/opencode.jsonc`, mets `"enabled": true` sur **un seul** des deux.
+`install.sh` les installe et les active obligatoirement (il s'arrête si Node.js manque ou si le téléchargement échoue) :
 
-- **playwright** : rien à installer (`npx`), nécessite Node.js. Navigateurs : `npx playwright install chromium`.
-- **obscura** : télécharge le binaire (`obscura` + `obscura-worker`, dans le même dossier) depuis les [releases](https://github.com/h4ckf0r0day/obscura/releases), mets-le dans ton `PATH`, puis vérifie `obscura mcp`. Doc MCP : [wiki](https://github.com/h4ckf0r0day/obscura/wiki/Use-the-MCP-server).
+- **context7** : documentation à jour des librairies.
+- **playwright** (Microsoft) : `npx playwright install chromium`, nécessite Node.js.
+- **obscura** : télécharge `obscura` + `obscura-worker` depuis les [releases](https://github.com/h4ckf0r0day/obscura/releases) dans `~/.local/bin` (change avec `OBSCURA_BIN_DIR`). Assure-toi que ce dossier est dans ton `PATH`. Doc MCP : [wiki](https://github.com/h4ckf0r0day/obscura/wiki/Use-the-MCP-server).
+
+Chaque MCP ajoute du contexte : si ton quota Go fond trop vite, passe `"enabled": false` sur celui que tu n'utilises pas.
