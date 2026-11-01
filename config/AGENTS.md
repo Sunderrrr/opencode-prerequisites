@@ -49,3 +49,10 @@
 - Chaque brief de délégation contient : objectif, fichiers, critère de réussite, interdits. Tâches parallèles seulement si elles touchent des fichiers différents.
 - `security` est obligatoire pour auth, données personnelles, secrets, réseau et dépendances.
 - Contexte : un plugin lance le compactage à 90 % du contexte. Avant cela, garde les réponses courtes et ne recolle pas de gros fichiers.
+
+## Écrire de bons sous-agents (leçons des projets de référence)
+- La `description` dit quoi + quand (« Utiliser proactivement… ») ; elle est lue à chaque session, donc courte.
+- Un sous-agent démarre sans historique : le prompt est autonome, le brief du CEO donne objectif, fichiers, critère de réussite, interdits.
+- Agents d'analyse = lecture seule et sans sous-délégation (`edit: deny`, `task: deny`) ; agents d'action = bash en `ask` pour les commandes risquées.
+- Les règles vitales sont dans `plugins/guard.js` (hook), pas seulement dans les prompts.
+- Chaque sous-agent rend un rapport court (fait / preuves / reste) pour ne pas gonfler le contexte du CEO.

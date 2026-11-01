@@ -22,6 +22,7 @@ Puis dans OpenCode : `/connect` → OpenCode Go → colle ta clé, et `/models` 
 - `config/commands/` : `/check`, `/plan-first`, `/simplify`, `/verify`, `/learn`, `/ship`.
 - `config/mempalace.jsonc` : réglages de la mémoire persistante (plugin `@rvboris/opencode-mempalace`).
 - `config/plugins/notify.js` : notification quand une session attend (non testé).
+- `config/plugins/guard.js` : bloque la lecture des fichiers de secrets (`.env`, clés) et les commandes destructrices (`rm -rf /`, `push --force`, `DROP TABLE`, `curl | sh`).
 - `config/plugins/auto-compact.js` : compactage automatique à 90 % du contexte (non testé, ratio réglable avec `OPENCODE_COMPACT_RATIO`).
 
 ## Sources d'inspiration
@@ -53,3 +54,7 @@ Supermemory n'est pas inclus : il exige un compte et une clé API (`SUPERMEMORY_
 ## Modèle
 
 Tout tourne sur `opencode-go/deepseek-v4.1-flash`. Prérequis côté console OpenCode : *Settings › Privacy › Regions › Global* (obligatoire pour les modèles DeepSeek, réglable par un owner/admin). Vérifie l'ID avec `/models`.
+
+### D'où viennent ces conventions
+
+Inspiré de [VoltAgent/awesome-claude-code-subagents](https://github.com/VoltAgent/awesome-claude-code-subagents) (rôle, étapes « quand appelé », checklists, rapport final), de la [doc des sous-agents de Claude Code](https://code.claude.com/docs/en/sub-agents) (descriptions courtes avec « utiliser proactivement », prompt autonome, outils restreints, règles dures par hooks) et du schéma d'oh-my-opencode (orchestrateur + assistants en lecture seule qui ne délèguent pas).

@@ -3,6 +3,7 @@ description: Recherche dans le code et la doc (context7) puis rend un résumé c
 mode: subagent
 temperature: 0.2
 permission:
+  task: deny
   edit: deny
   bash: deny
 ---

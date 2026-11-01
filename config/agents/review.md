@@ -3,6 +3,7 @@ description: Relecture de code (bugs, sécurité, lisibilité) sans rien modifie
 mode: subagent
 temperature: 0.1
 permission:
+  task: deny
   edit: deny
   bash:
     "*": deny
