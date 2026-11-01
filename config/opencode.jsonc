@@ -14,16 +14,15 @@
   "default_agent": "ceo",
   "subagent_depth": 1, // les spécialistes ne lancent pas d'autres sous-agents
 
-  // Compactage : auto = filet de sécurité natif ; prune = retire les vieilles sorties d'outils.
-  // Le déclenchement à 90 % est fait par plugins/auto-compact.js.
-  "compaction": { "auto": true, "prune": true },
+  // Compactage natif : buffer "10%" = on compacte quand il reste 10 % de contexte, soit à 90 % d'utilisation.
+  "compaction": { "auto": true, "buffer": "10%" },
 
   // Équivalent du hook de formatage auto de Boris : formate après chaque édition
   "formatter": true,
 
   // Mémoire persistante entre sessions (nécessite `pip install mempalace`, fait par install.sh)
-  // Note : la doc du plugin écrit "plugins" (OpenCode v2) ; si rien ne se charge, renomme la clé.
-  "plugin": ["@rvboris/opencode-mempalace"],
+  // OpenCode v2 : clé "plugins" ("plugin" est marquée obsolète dans le schéma officiel).
+  "plugins": ["@rvboris/opencode-mempalace"],
 
   // Mode débridé : tout est autorisé sans demande. Seules les catastrophes évidentes
   // (rm -rf /, secrets, push --force...) restent bloquées par plugins/guard.js.

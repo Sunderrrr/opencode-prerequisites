@@ -45,6 +45,7 @@ const cfgPath = path.join(dest, "opencode.jsonc")
 const cfg = parseJsonc(fs.readFileSync(cfgPath, "utf8"))
 cfg.mcp = Object.fromEntries(Object.entries(cfg.mcp ?? {}).filter(([k]) => ["context7", "grep_app"].includes(k)))
 delete cfg.plugin
+delete cfg.plugins
 fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + "\n")
 for (const f of ["mempalace.jsonc", "k8s-mcp.toml"]) fs.rmSync(path.join(dest, f), { force: true })
 console.log(`Profil léger : ${keep.size} agents, MCP ${Object.keys(cfg.mcp).join(", ")}`)

@@ -78,8 +78,8 @@ setup_mempalace() {
 drop_mempalace_plugin() {
   # MemPalace indisponible : retire le plugin de la config installée pour qu'OpenCode démarre proprement
   if [ -f "$DEST/opencode.jsonc" ]; then
-    sed -i.bak '/"plugin": \["@rvboris\/opencode-mempalace"\]/d' "$DEST/opencode.jsonc" && rm -f "$DEST/opencode.jsonc.bak"
-    warn "Plugin MemPalace retiré de $DEST/opencode.jsonc (relance ./install.sh --memory-only quand tu auras réglé le problème, puis remets la ligne \"plugin\")."
+    sed -i.bak '/"plugins": \["@rvboris\/opencode-mempalace"\]/d' "$DEST/opencode.jsonc" && rm -f "$DEST/opencode.jsonc.bak"
+    warn "Plugin MemPalace retiré de $DEST/opencode.jsonc (relance ./install.sh --memory-only quand tu auras réglé le problème, puis remets la ligne \"plugins\")."
   fi
 }
 

@@ -18,6 +18,10 @@ jobs:
           node-version: 26
       - name: Valider le kit (config, agents, skills, plugins, secrets)
         run: node scripts/validate-kit.mjs
+      - name: Config conforme au schéma JSON officiel d'OpenCode (complet + léger)
+        run: |
+          pip install --quiet jsonschema
+          python3 scripts/validate-schema.py
       - name: Installation à blanc (complète puis légère, sans outils)
         run: |
           OPENCODE_CONFIG_DIR="$RUNNER_TEMP/full" OBSCURA_BIN_DIR="$RUNNER_TEMP/bin" ./install.sh --no-tools

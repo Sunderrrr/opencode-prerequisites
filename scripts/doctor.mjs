@@ -17,6 +17,30 @@ const wa = (m) => { warned++; console.log(`⚠️  ${m}`) }
 const run = (cmd, args, t = 20000) => spawnSync(cmd, args, { encoding: "utf8", timeout: t, env })
 const has = (c) => { const r = run(process.platform === "win32" ? "where" : "which", [c], 5000); return r.status === 0 }
 
+// Sortie lisible : fusionne les lignes identiques consécutives (ex. boucles de shim) et tronque.
+const squash = (txt, max = 12) => {
+  const out = []
+  for (const l of (txt ?? "").split("\n").map((x) => x.trimEnd()).filter(Boolean)) {
+    const last = out[out.length - 1]
+    if (last && last.line === l) last.n++
+    else out.push({ line: l, n: 1 })
+  }
+  const lines = out.map((o) => (o.n > 1 ? `${o.line}  (×${o.n})` : o.line))
+  return lines.slice(0, max).join("\n") + (lines.length > max ? `\n… (${lines.length - max} lignes de plus)` : "")
+}
+
+// opencode : on appelle le vrai binaire (les shims mise/asdf peuvent boucler hors d'un shell interactif)
+// et avec l'environnement d'origine (sans modifier le PATH).
+const OC = (() => {
+  if (has("mise")) {
+    const r = spawnSync("mise", ["which", "opencode"], { encoding: "utf8", timeout: 10000 })
+    const p = r.status === 0 ? r.stdout.trim().split("\n").pop() : ""
+    if (p && fs.existsSync(p)) return p
+  }
+  return "opencode"
+})()
+const runOc = (args, t = 20000) => spawnSync(OC, args, { encoding: "utf8", timeout: t, env: process.env, maxBuffer: 1 << 22 })
+
 console.log(`Dossier de config : ${DEST}\n`)
 
 // Node
@@ -25,7 +49,11 @@ major >= 18 ? ok(`Node ${process.versions.node}`) : ko(`Node ${process.versions.
 
 // OpenCode
 let hasOc = has("opencode")
-if (hasOc) ok(`opencode ${run("opencode", ["--version"], 8000).stdout.trim()}`)
+if (hasOc) {
+  const v = runOc(["--version"], 15000)
+  const ver = (v.stdout ?? "").match(/\d+\.\d+\.\d+/)?.[0]
+  ver ? ok(`opencode ${ver}${OC !== "opencode" ? ` (${OC})` : ""}`) : wa(`opencode répond mais sans numéro de version :\n${squash(v.stdout || v.stderr, 5)}`)
+}
 else ko("opencode introuvable (curl -fsSL https://opencode.ai/install | bash)")
 
 // Config
@@ -71,7 +99,7 @@ for (const [name, m] of Object.entries(cfg?.mcp ?? {})) {
 }
 
 // Plugins
-if (cfg?.plugin?.some?.((p) => p.includes("mempalace"))) {
+if ([...(cfg?.plugins ?? []), ...(cfg?.plugin ?? [])].some((p) => String(Array.isArray(p) ? p[0] : p).includes("mempalace"))) {
   const venvPy = path.join(HOME, ".mempalace", "venv", "bin", "python")
   const envPy = process.env.MEMPALACE_ADAPTER_PYTHON
   const py = envPy || (fs.existsSync(venvPy) ? venvPy : "python3")
@@ -102,13 +130,13 @@ try {
 // Lecture réelle par OpenCode
 if (hasOc) {
   console.log("\nLecture par OpenCode :")
-  const r = run("opencode", ["debug", "config"], 30000)
-  r.status === 0 ? ok("opencode debug config : configuration chargée sans erreur") : ko(`opencode debug config a échoué :\n${(r.stderr || r.stdout).trim().slice(0, 600)}`)
-  const m = run("opencode", ["mcp", "list"], 40000)
-  console.log((m.stdout || m.stderr || "").trim().split("\n").map((l) => "   " + l).join("\n"))
+  const r = runOc(["debug", "config"], 30000)
+  r.status === 0 ? ok("opencode debug config : configuration chargée sans erreur") : ko(`opencode debug config a échoué (code ${r.status ?? "timeout"}) :\n${squash(r.stderr || r.stdout)}`)
+  const m = runOc(["mcp", "list"], 40000)
+  console.log(squash(m.stdout || m.stderr).split("\n").map((l) => "   " + l).join("\n"))
   if (cfg?.default_agent) {
-    const a = run("opencode", ["debug", "agent", cfg.default_agent], 20000)
-    a.status === 0 ? ok(`agent ${cfg.default_agent} chargé`) : ko(`agent ${cfg.default_agent} non chargé : ${(a.stderr || "").trim().slice(0, 300)}`)
+    const a = runOc(["debug", "agent", cfg.default_agent], 20000)
+    a.status === 0 ? ok(`agent ${cfg.default_agent} chargé`) : ko(`agent ${cfg.default_agent} non chargé (code ${a.status ?? "timeout"}) :\n${squash(a.stderr || a.stdout)}`)
   }
 }
 
