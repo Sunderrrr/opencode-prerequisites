@@ -1,0 +1,49 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // Modèles OpenCode Go (vérifie les IDs avec /models : la liste change souvent)
+  "model": "opencode-go/kimi-k2.7-code",      // build : gros quota mensuel
+  "small_model": "opencode-go/glm-5.3-flash", // titres, résumés : quasi gratuit en quota
+
+  "autoupdate": "notify",
+
+  // Équivalent du hook de formatage auto de Boris : formate après chaque édition
+  "formatter": true,
+
+  // Les agents natifs : Plan raisonne, Explore est un sous-agent rapide
+  "agent": {
+    "plan": { "model": "opencode-go/glm-5.2" },
+    "explore": { "model": "opencode-go/mimo-v2.6-flash" }
+  },
+
+  // Sécurité : demander avant d'écrire/exécuter, autoriser les commandes lecture seule
+  "permission": {
+    "edit": "ask",
+    "bash": {
+      "*": "ask",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "ls*": "allow",
+      "cat *": "allow",
+      "rm -rf*": "deny"
+    },
+    "skill": { "*": "allow" }
+  },
+
+  // MCP : peu de serveurs, chacun consomme du contexte
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": { "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}" },
+      "oauth": false,
+      "enabled": true
+    },
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "@playwright/mcp@latest"],
+      "enabled": false // active-le au besoin : /mcp ou enabled:true
+    }
+  }
+}
