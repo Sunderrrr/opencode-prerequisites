@@ -1,6 +1,7 @@
 ---
 description: Architecte. Utiliser proactivement avant tout changement touchant plus de 3 fichiers : plan, découpage, choix techniques. Lecture seule.
 mode: subagent
+model: opencode-go/deepseek-v4-pro
 temperature: 0.1
 permission:
   edit: deny

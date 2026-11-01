@@ -1,68 +1,71 @@
 # opencode-prerequisites
 
-Mon kit d'init pour [OpenCode](https://opencode.ai) avec l'abonnement **OpenCode Go** : `AGENTS.md` global, agents, skills, commandes, MCP et notifications.
+Mon kit d'init pour [OpenCode](https://opencode.ai) avec l'abonnement **OpenCode Go** : un CEO qui dirige 24 agents spécialisés, des skills, des commandes, des MCP, de la mémoire, une sécurité git multi-agents et un gabarit de projet Rust.
+
+> ⚠️ Les agents sont en **mode débridé** (aucune demande de permission). Travaille dans un dépôt git propre et commité. Seuls les blocages de `config/plugins/guard.js` restent.
 
 ## Installation
 
 ```bash
 git clone https://github.com/Sunderrrr/opencode-prerequisites.git
 cd opencode-prerequisites
-./install.sh              # copie dans ~/.config/opencode (sauvegarde l'existant)
+./install.sh              # complet : config + Playwright, Obscura, Trivy, MemPalace
+./install.sh --lite       # léger : 12 agents, MCP context7 + grep_app, aucun outil lourd
+./install.sh --no-tools   # copie la config seulement
 ./install.sh --with-matt  # + skills complets de Matt Pocock (non testé)
 ```
 
-Puis dans OpenCode : `/connect` → OpenCode Go → colle ta clé, et `/models` pour vérifier que les IDs de `config/opencode.jsonc` existent encore.
+L'installateur valide le kit avant de copier, sauvegarde l'existant dans `~/.config/opencode.bak-<date>`, et n'écrit aucune clé.
+
+Ensuite : `opencode` → `/connect` → **OpenCode Go** → colle ta clé. Dans la console OpenCode : *Settings › Privacy › Regions › Global* (requis pour les modèles DeepSeek). Puis :
+
+```bash
+./doctor.sh      # diagnostic : config, agents, MCP, outils, modèles, lecture réelle par OpenCode
+./uninstall.sh   # restaure la dernière sauvegarde
+```
+
+Windows : utilise WSL (les scripts sont en Bash).
+
+## Profils
+
+| | Complet | Léger (`--lite`) |
+|---|---|---|
+| Agents | 25 | 12 (`ceo`, `architect`, `rust`, `backend`, `frontend`, `qa`, `security`, `debugger`, `researcher`, `review`, `verify-app`, `integrator`) |
+| MCP | context7, grep_app, terraform, kubernetes, trivy, playwright, obscura | context7, grep_app |
+| Mémoire | MemPalace | — |
+
+Le profil léger est dérivé du complet par `scripts/make-lite.mjs` : il n'y a pas deux configs à maintenir.
 
 ## Contenu
 
-- `config/opencode.jsonc` : modèle unique DeepSeek V4.1 Flash, permissions, formatage auto et MCP : **context7** (actif), **playwright** (Microsoft, désactivé) et **obscura** (désactivé).
-- `config/AGENTS.md` : règles globales (plan d'abord, boucle d'apprentissage, alignement avant de coder, quota).
-- `config/agents/` : **`ceo`** (agent par défaut, délègue), spécialistes par langage/outil (`rust` par défaut, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`) et par domaine `architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, et `review`, `researcher`, `debugger`, `code-simplifier`, `verify-app`.
-- `config/skills/` : `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`.
-- `config/commands/` : `/check`, `/plan-first`, `/simplify`, `/verify`, `/learn`, `/ship`.
-- `config/mempalace.jsonc` : réglages de la mémoire persistante (plugin `@rvboris/opencode-mempalace`).
-- `config/plugins/notify.js` : notification quand une session attend (non testé).
-- `config/bin/agent-wt` : un worktree git par agent (`new`, `merge`, `remove`, `list`), installé dans `~/.local/bin`.
-- `config/agents/integrator.md` : seul agent qui fusionne les branches des agents parallèles et ouvre les PR (mode PR, commande `/pr`).
-- `config/plugins/guard.js` : bloque la lecture des fichiers de secrets (`.env`, clés) et les commandes destructrices (`rm -rf /`, `push --force`, `DROP TABLE`, `curl | sh`).
-- `config/plugins/auto-compact.js` : compactage automatique à 90 % du contexte (non testé, ratio réglable avec `OPENCODE_COMPACT_RATIO`).
+- `config/opencode.jsonc` : modèle unique `opencode-go/deepseek-v4.1-flash` (gros quota), `deepseek-v4-pro` pour `ceo`, `architect` et `security`, permissions débridées, formatage auto, compactage.
+- `config/AGENTS.md` : règles globales (≈ 700 mots, lues à chaque session) : CEO, Rust par défaut, « terminé = prouvé », git multi-agents, sécurité internet, quota.
+- `config/agents/` : `ceo` (par défaut), domaine (`architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`), langages/outils (`rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`), contrôle (`review`, `code-simplifier`, `verify-app`), git (`integrator`).
+- `config/skills/` : `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`.
+- `config/commands/` : `/check`, `/plan-first`, `/simplify`, `/verify`, `/learn`, `/ship`, `/pr`, `/usage`.
+- `config/plugins/` : `guard.js` (bloque secrets et commandes destructrices), `auto-compact.js` (compactage à 90 % du contexte, `OPENCODE_COMPACT_RATIO`), `notify.js`.
+- `config/bin/agent-wt` : un worktree git par agent (`new`, `merge`, `remove`, `list`, `integration`, `sync`).
+- `templates/rust-project/` + `oc-new-rust <nom>` : projet Rust avec `AGENTS.md`, tests, CI GitHub Actions et `git init`.
+- `scripts/validate-kit.mjs` : validation (utilisée par l'installateur et la CI) ; `.github/workflows/ci.yml` : validation, installation à blanc, ShellCheck, gabarit Rust.
 
-## Sources d'inspiration
+## Comment ça marche
 
-Boris Cherny (workflow Claude Code), [mattpocock/skills](https://github.com/mattpocock/skills), docs OpenCode.
+**CEO.** Il cadre, découpe, délègue avec un brief complet (les sous-agents n'ont pas l'historique), puis fait valider par `verify-app` en boucle jusqu'à **VALIDÉ** (5 boucles max). Les sous-agents ne posent pas de question : ils avancent sur leur meilleure hypothèse et la notent dans leur rapport.
 
-Aucune clé API dans ce dépôt : `export CONTEXT7_API_KEY=...` (optionnel).
+**Validation.** Chaque agent qui produit du code ajoute des tests, lance la suite, exécute vraiment la fonctionnalité, et corrige jusqu'au vert. Désactiver ou affaiblir un test est interdit.
 
-## Navigateurs MCP (playwright / obscura)
+**Git sans conflit.** Un fichier = un propriétaire, un worktree par tâche parallèle, les spécialistes ne poussent jamais, `integrator` fusionne un à la fois avec tests après chaque fusion. Mode PR : branche `integration/<nom>`, rebase sur `origin/main`, `gh pr create`, re-synchronisation si `main` avance.
 
-`install.sh` les installe et les active obligatoirement (il s'arrête si Node.js manque ou si le téléchargement échoue) :
+**MCP DevOps (lecture seule).** `terraform` (docs du registre, via Docker, sans jeton), `kubernetes` (lecture seule, Secrets bloqués par `k8s-mcp.toml`), `trivy`. Internet : `websearch`/`webfetch`, `grep_app`, `gh`, agent `web-researcher` ; tout contenu externe est traité comme donnée, jamais comme instruction.
 
-- **context7** : documentation à jour des librairies.
-- **playwright** (Microsoft) : `npx playwright install chromium`, nécessite Node.js.
-- **obscura** : télécharge `obscura` + `obscura-worker` depuis les [releases](https://github.com/h4ckf0r0day/obscura/releases) dans `~/.local/bin` (change avec `OBSCURA_BIN_DIR`). Assure-toi que ce dossier est dans ton `PATH`. Doc MCP : [wiki](https://github.com/h4ckf0r0day/obscura/wiki/Use-the-MCP-server).
+**Quota.** `/usage` affiche `opencode stats`. Si le quota fond, passe en `--lite` ou mets `"enabled": false` sur un MCP.
 
-Chaque MCP ajoute du contexte : si ton quota Go fond trop vite, passe `"enabled": false` sur celui que tu n'utilises pas.
+## Ce qui n'est pas vérifié
 
-## Mémoire (MemPalace)
+Le kit est validé par script (`validate-kit.mjs`, CI) et `agent-wt`, `make-lite`, `new-rust-project.sh`, `doctor` et `install --no-tools` ont été testés, mais **pas dans une vraie session OpenCode** : les arguments des MCP `terraform`/`kubernetes`, la clé `plugin` (la doc de MemPalace écrit `plugins`, OpenCode v2), les noms d'événements de `guard.js`/`auto-compact.js` et la syntaxe `!`cmd`` de `/usage` sont à confirmer avec `./doctor.sh` puis `opencode mcp list`.
 
-`install.sh` fait `pip install --user mempalace` et `mempalace init ~/.mempalace/palace`, et la config charge le plugin [`@rvboris/opencode-mempalace`](https://github.com/rvboris/opencode-mempalace) (licence MIT, tout reste en local). Il demande Python 3.10+ et, d'après sa doc, OpenCode v2. Les réglages sont dans `~/.config/opencode/mempalace.jsonc` ; garde `privacyRedactionEnabled` à `true`.
+## Inspirations
 
-Supermemory n'est pas inclus : il exige un compte et une clé API (`SUPERMEMORY_API_KEY`).
+Boris Cherny (workflow Claude Code), [mattpocock/skills](https://github.com/mattpocock/skills), [VoltAgent/awesome-claude-code-subagents](https://github.com/VoltAgent/awesome-claude-code-subagents), [0xfurai/claude-code-subagents](https://github.com/0xfurai/claude-code-subagents), la [doc des sous-agents de Claude Code](https://code.claude.com/docs/en/sub-agents), oh-my-opencode et les docs OpenCode.
 
-## Équipe d'agents (CEO)
-
-`ceo` reçoit ta demande, la cadre (`grill-me`, `@architect`), délègue aux spécialistes puis contrôle (`@review`, `@verify-app`, `@security` si sensible). Ajoute un spécialiste en créant `config/agents/<nom>.md` avec `mode: subagent`. Change d'agent avec Tab dans OpenCode. Les spécialistes tournent en profondeur 1 (`subagent_depth`), donc pas de cascade qui brûle le quota.
-
-## Modèle
-
-Tout tourne sur `opencode-go/deepseek-v4.1-flash`. Prérequis côté console OpenCode : *Settings › Privacy › Regions › Global* (obligatoire pour les modèles DeepSeek, réglable par un owner/admin). Vérifie l'ID avec `/models`.
-
-### D'où viennent ces conventions
-
-Inspiré de [VoltAgent/awesome-claude-code-subagents](https://github.com/VoltAgent/awesome-claude-code-subagents) (rôle, étapes « quand appelé », checklists, rapport final), de la [doc des sous-agents de Claude Code](https://code.claude.com/docs/en/sub-agents) (descriptions courtes avec « utiliser proactivement », prompt autonome, outils restreints, règles dures par hooks) et du schéma d'oh-my-opencode (orchestrateur + assistants en lecture seule qui ne délèguent pas).
-
-## MCP DevOps et internet
-
-Actifs par défaut : **terraform** (docs du registre, via Docker, sans jeton), **kubernetes** (lecture seule, Secrets bloqués par `k8s-mcp.toml`, utilise ton kubeconfig), **trivy** (scan images/IaC/secrets), **grep_app** (recherche de code dans GitHub, sans compte). Internet : outils intégrés `websearch` et `webfetch`, agent `web-researcher`, skill `web-research`, et `gh search/api`.
-
-Je n'ai pas pu vérifier les arguments exacts de ces serveurs dans OpenCode ; si l'un échoue au démarrage, lance `opencode mcp debug <nom>` et corrige la ligne `command`.
+Licence MIT. Variables optionnelles : voir `.env.example`.

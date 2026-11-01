@@ -1,0 +1,17 @@
+[package]
+name = "{{name}}"
+version = "0.1.0"
+edition = "2021"
+description = "{{name}}"
+
+[dependencies]
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

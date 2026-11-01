@@ -1,0 +1,44 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Valider le kit (config, agents, skills, plugins, secrets)
+        run: node scripts/validate-kit.mjs
+      - name: Installation à blanc (complète puis légère, sans outils)
+        run: |
+          OPENCODE_CONFIG_DIR="$RUNNER_TEMP/full" OBSCURA_BIN_DIR="$RUNNER_TEMP/bin" ./install.sh --no-tools
+          OPENCODE_CONFIG_DIR="$RUNNER_TEMP/lite" OBSCURA_BIN_DIR="$RUNNER_TEMP/bin" ./install.sh --lite
+          test "$(ls "$RUNNER_TEMP/lite/agents" | wc -l)" -eq 12
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ShellCheck
+        run: shellcheck install.sh uninstall.sh doctor.sh scripts/*.sh config/bin/agent-wt
+
+  rust-template:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Générer et vérifier le gabarit Rust
+        run: |
+          git config --global user.name ci && git config --global user.email ci@example.com
+          ./scripts/new-rust-project.sh demo-ci "$RUNNER_TEMP"
+          cd "$RUNNER_TEMP/demo-ci"
+          cargo fmt --all -- --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test --all-targets

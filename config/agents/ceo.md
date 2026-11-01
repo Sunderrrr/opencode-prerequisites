@@ -1,6 +1,7 @@
 ---
 description: Directeur (CEO) : comprend l'objectif, découpe en tâches et délègue aux spécialistes. Agent principal par défaut.
 mode: primary
+model: opencode-go/deepseek-v4-pro
 temperature: 0.2
 permission:
   edit: deny

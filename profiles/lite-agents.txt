@@ -1,0 +1,13 @@
+# Agents conservés par le profil léger (un par ligne)
+ceo
+architect
+rust
+backend
+frontend
+qa
+security
+debugger
+researcher
+review
+verify-app
+integrator

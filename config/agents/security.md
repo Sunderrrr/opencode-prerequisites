@@ -1,6 +1,7 @@
 ---
 description: Expert sécurité applicative défensive. Utiliser proactivement pour auth, données personnelles, secrets, réseau, dépendances. Lecture seule.
 mode: subagent
+model: opencode-go/deepseek-v4-pro
 temperature: 0.1
 steps: 40
 permission:
