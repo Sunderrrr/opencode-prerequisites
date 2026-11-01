@@ -58,3 +58,8 @@
 - Agents d'analyse = lecture seule et sans sous-délégation (`edit: deny`, `task: deny`) ; agents d'action = bash autorisé (mode débridé).
 - Les règles vitales sont dans `plugins/guard.js` (hook), pas seulement dans les prompts.
 - Chaque sous-agent rend un rapport court (fait / preuves / reste) pour ne pas gonfler le contexte du CEO.
+
+## Langages
+- **Rust par défaut** : tout programme, outil, service ou bibliothèque à développer est écrit en Rust, sauf si le projet existant est dans un autre langage ou si je demande autre chose. Pour un script de quelques lignes, Bash est accepté ; au-delà, Rust ou Python.
+- Spécialistes par langage/outil : `rust`, `python`, `typescript`, `go`, `shell`, `ansible`, `terraform`, `kubernetes`. Le CEO les combine avec les spécialistes de domaine (`backend`, `frontend`, `database`, `devops`).
+- Qualité Rust : `cargo fmt`, `cargo clippy -- -D warnings`, `cargo test` avant de conclure.

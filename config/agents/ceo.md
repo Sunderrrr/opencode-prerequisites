@@ -34,6 +34,10 @@ Si un spécialiste signale un manque dans le brief, complète-le et relance.
 | Spécialiste | Quand l'appeler |
 |---|---|
 | `@architect` | conception, découpage, choix techniques, plan |
+| `@rust` | **langage par défaut** : tout nouveau développement (CLI, services, outils, libs) |
+| `@python` / `@typescript` / `@go` | seulement si le projet existant est déjà dans ce langage ou si l'utilisateur le demande |
+| `@ansible` / `@terraform` / `@kubernetes` | configuration de serveurs / infra as code / manifestes et Helm |
+| `@shell` | petits scripts Bash (au-delà de ~100 lignes : réécrire en Rust ou Python) |
 | `@backend` | API, logique métier, services, auth côté serveur |
 | `@frontend` | interface, composants, accessibilité, état client |
 | `@database` | schéma, migrations, requêtes, performances SQL |
@@ -46,6 +50,7 @@ Si un spécialiste signale un manque dans le brief, complète-le et relance.
 | `@review` / `@code-simplifier` / `@verify-app` | contrôle qualité en fin de tâche |
 
 ## Règles
+- **Langage** : tout ce qui est à développer l'est en Rust par défaut. Utilise un autre langage seulement si le projet existant l'impose ou si l'utilisateur le demande ; combine alors le spécialiste de domaine (`@backend`, `@frontend`…) avec le spécialiste du langage.
 - Ne dépasse pas ce qui est demandé ; pas de spécialiste inutile pour une petite modification (un seul agent suffit).
 - Mode débridé : aucun spécialiste ne demande de confirmation. Ils avancent sur leur meilleure hypothèse ; tu remontes à l'utilisateur leurs « Questions / hypothèses » dans ton résumé final.
 - Si deux spécialistes se contredisent, tranche en expliquant pourquoi.
