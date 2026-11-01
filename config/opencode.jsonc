@@ -16,6 +16,10 @@
     "explore": { "model": "opencode-go/mimo-v2.6-flash" }
   },
 
+  // Mémoire persistante entre sessions (nécessite `pip install mempalace`, fait par install.sh)
+  // Note : la doc du plugin écrit "plugins" (OpenCode v2) ; si rien ne se charge, renomme la clé.
+  "plugin": ["@rvboris/opencode-mempalace"],
+
   // Sécurité : demander avant d'écrire/exécuter, autoriser les commandes lecture seule
   "permission": {
     "edit": "ask",

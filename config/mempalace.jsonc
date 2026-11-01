@@ -1,0 +1,9 @@
+{
+  // Réglages du plugin opencode-mempalace
+  "autosaveEnabled": true,
+  "retrievalEnabled": true,
+  "keywordSaveEnabled": true,
+  "maxInjectedItems": 6,        // limite le contexte injecté (économise le quota Go)
+  "retrievalQueryLimit": 5,
+  "privacyRedactionEnabled": true // masque les secrets avant sauvegarde
+}

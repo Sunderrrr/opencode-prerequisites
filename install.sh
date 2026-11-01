@@ -52,6 +52,19 @@ chmod +x "$BIN/obscura" "$BIN/obscura-worker" 2>/dev/null || true
 "$BIN/obscura" --help >/dev/null 2>&1 && echo "✅ Obscura installé dans $BIN" || { echo "❌ obscura ne démarre pas" >&2; exit 1; }
 case ":$PATH:" in *":$BIN:"*) ;; *) echo "⚠️  Ajoute $BIN à ton PATH : export PATH=\"$BIN:\$PATH\"" ;; esac
 
+# --- Mémoire : MemPalace (plugin opencode-mempalace) ---
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "❌ Python 3.10+ est requis pour MemPalace." >&2; exit 1
+fi
+echo "⬇️  MemPalace : installation..."
+python3 -m pip install --user --upgrade mempalace \
+  || { echo "❌ pip a échoué. Essaie : python3 -m venv ~/.mempalace/venv && ~/.mempalace/venv/bin/pip install mempalace, puis export MEMPALACE_ADAPTER_PYTHON=~/.mempalace/venv/bin/python" >&2; exit 1; }
+if [ ! -d "$HOME/.mempalace/palace" ]; then
+  python3 -m mempalace init "$HOME/.mempalace/palace" 2>/dev/null \
+    || mempalace init "$HOME/.mempalace/palace" \
+    || echo "⚠️  Initialisation à faire à la main : mempalace init ~/.mempalace/palace"
+fi
+
 # Option : skills complets de Matt Pocock (npx skills add mattpocock/skills)
 if [ "${1:-}" = "--with-matt" ]; then
   npx -y skills@latest add mattpocock/skills -a opencode || echo "⚠️  Échec : essaie à la main (voir README du repo)"

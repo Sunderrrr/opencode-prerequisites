@@ -20,6 +20,7 @@ Puis dans OpenCode : `/connect` → OpenCode Go → colle ta clé, et `/models` 
 - `config/agents/` : `review`, `researcher`, `debugger`, `code-simplifier`, `verify-app`.
 - `config/skills/` : `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`.
 - `config/commands/` : `/check`, `/plan-first`, `/simplify`, `/verify`, `/learn`, `/ship`.
+- `config/mempalace.jsonc` : réglages de la mémoire persistante (plugin `@rvboris/opencode-mempalace`).
 - `config/plugins/notify.js` : notification quand une session attend (non testé).
 
 ## Sources d'inspiration
@@ -37,3 +38,9 @@ Aucune clé API dans ce dépôt : `export CONTEXT7_API_KEY=...` (optionnel).
 - **obscura** : télécharge `obscura` + `obscura-worker` depuis les [releases](https://github.com/h4ckf0r0day/obscura/releases) dans `~/.local/bin` (change avec `OBSCURA_BIN_DIR`). Assure-toi que ce dossier est dans ton `PATH`. Doc MCP : [wiki](https://github.com/h4ckf0r0day/obscura/wiki/Use-the-MCP-server).
 
 Chaque MCP ajoute du contexte : si ton quota Go fond trop vite, passe `"enabled": false` sur celui que tu n'utilises pas.
+
+## Mémoire (MemPalace)
+
+`install.sh` fait `pip install --user mempalace` et `mempalace init ~/.mempalace/palace`, et la config charge le plugin [`@rvboris/opencode-mempalace`](https://github.com/rvboris/opencode-mempalace) (licence MIT, tout reste en local). Il demande Python 3.10+ et, d'après sa doc, OpenCode v2. Les réglages sont dans `~/.config/opencode/mempalace.jsonc` ; garde `privacyRedactionEnabled` à `true`.
+
+Supermemory n'est pas inclus : il exige un compte et une clé API (`SUPERMEMORY_API_KEY`).
