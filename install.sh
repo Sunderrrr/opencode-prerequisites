@@ -32,5 +32,6 @@ cat <<'EOF'
   2. /models pour vérifier que les IDs du fichier opencode.jsonc existent encore.
   3. (optionnel) export CONTEXT7_API_KEY=...   # clé gratuite sur context7.com
   4. Dans un projet : lance `opencode` puis /init, ou demande le skill project-onboarding.
-  5. Skills communautaires : `npx skills add <repo>` (voir README).
+  5. Navigateur (optionnel) : active playwright OU obscura dans opencode.jsonc (voir README)
+  6. Skills communautaires : `npx skills add <repo>` (voir README).
 EOF

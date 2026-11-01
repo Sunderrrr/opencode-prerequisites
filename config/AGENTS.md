@@ -12,7 +12,8 @@
 
 ## Utiliser les outils
 - Pour la doc d'une librairie ou d'une API : utilise le MCP `context7` avant d'écrire du code (les APIs changent).
-- Pour tester une page web : MCP `playwright` (s'il est activé).
+- Pour tester une page web : MCP `playwright` (Microsoft) s'il est activé ; pour lire/scraper des pages simplement et légèrement : MCP `obscura` (`browser_navigate` puis `browser_markdown`). N'utilise qu'un seul des deux à la fois.
+- Ne scrape que des sites que j'ai demandés et respecte leurs conditions d'utilisation.
 - Pour un gros travail de lecture : délègue à `@explore` ou `@researcher` afin de garder le contexte propre.
 - Charge un skill (`skill` tool) quand sa description correspond à la tâche.
 
