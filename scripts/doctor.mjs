@@ -172,22 +172,43 @@ if (hasOc) {
   if (r.status !== 0) ko(`opencode debug config a échoué (code ${r.status ?? "timeout"}) :\n${squash(r.stderr || r.stdout)}`)
   else {
     ok("opencode debug config : configuration chargée sans erreur")
-    // Ce qu'OpenCode a VRAIMENT retenu, comparé à notre fichier (le schéma peut être valide sans que tout soit lu)
+    // Valeurs retenues par OpenCode : on cherche les clés où qu'elles soient (format de debug config non garanti)
     let rc = null
     for (const parse of [JSON.parse, parseJsonc]) { try { rc = parse(r.stdout); break } catch { /* essai suivant */ } }
-    if (!rc || typeof rc !== "object") wa(`sortie de debug config non lisible, comparaison impossible :\n${squash(r.stdout, 6)}`)
+    const deepFind = (o, key, depth = 0) => {
+      if (!o || typeof o !== "object" || depth > 6) return undefined
+      if (key in o) return o[key]
+      for (const v of Object.values(o)) { const f = deepFind(v, key, depth + 1); if (f !== undefined) return f }
+      return undefined
+    }
+    if (!rc || typeof rc !== "object") wa(`sortie de debug config non lisible (comparaison impossible) :\n${squash(r.stdout, 4)}`)
     else {
-      const want = Object.entries(mcpServers(cfg)).filter(([, v]) => !v.disabled && v.enabled !== false).map(([k]) => k)
-      const have = Object.keys(mcpServers(rc))
-      const missing = want.filter((k) => !have.includes(k))
-      missing.length === 0 ? ok(`OpenCode voit les ${have.length} serveurs MCP`)
-        : ko(`OpenCode ne voit pas ces MCP : ${missing.join(", ")} (il en voit ${have.length}). Vérifie qu'aucun autre fichier de config (opencode.json, config projet) ne les écrase : ls ${DEST}`)
-      if (cfg?.default_agent) (rc.default_agent ?? rc.defaultAgent) === cfg.default_agent ? ok(`default_agent retenu : ${cfg.default_agent}`) : ko(`default_agent attendu "${cfg.default_agent}", OpenCode a "${rc.default_agent ?? rc.defaultAgent ?? "rien"}"`)
-      if (cfg?.model) rc.model === cfg.model ? ok(`modèle retenu : ${rc.model}`) : wa(`modèle attendu ${cfg.model}, OpenCode a "${rc.model ?? "rien"}" (une config projet ou un autre fichier peut le surcharger)`)
+      const da = deepFind(rc, "default_agent") ?? deepFind(rc, "defaultAgent")
+      const md = deepFind(rc, "model")
+      if (cfg?.default_agent && da !== undefined) da === cfg.default_agent ? ok(`default_agent retenu : ${da}`) : ko(`default_agent attendu "${cfg.default_agent}", OpenCode a "${da}"`)
+      if (cfg?.model && md !== undefined && typeof md === "string") md === cfg.model ? ok(`modèle retenu : ${md}`) : wa(`modèle attendu ${cfg.model}, OpenCode a "${md}" (une config projet peut le surcharger)`)
+      if (da === undefined && md === undefined) console.log(`   (debug config : clés racine vues → ${Object.keys(rc).slice(0, 15).join(", ")})`)
     }
   }
-  const m = runOc(["mcp", "list"], 40000)
-  console.log(squash(m.stdout || m.stderr).split("\n").map((l) => "   " + l).join("\n"))
+
+  // Serveurs MCP : état réel vu par OpenCode (une ligne par serveur)
+  const m = runOc(["mcp", "list"], 60000)
+  const clean = (t) => (t ?? "").replace(/\x1b\[[0-9;]*[A-Za-z]/g, "")
+  const rows = clean(m.stdout || m.stderr).split("\n").map((l) => l.match(/^\s*([✓✗])\s+([\w.-]+)\s+(.*)$/)).filter(Boolean)
+  if (!rows.length) console.log(squash(clean(m.stdout || m.stderr)).split("\n").map((l) => "   " + l).join("\n"))
+  else {
+    const kc = (process.env.KUBECONFIG ?? path.join(HOME, ".kube", "config")).split(path.delimiter)[0]
+    const hasKube = fs.existsSync(kc) && /^current-context:\s*\S+/m.test(fs.readFileSync(kc, "utf8"))
+    for (const [, mark, name, rest] of rows) {
+      const why = rest.replace(/\s+/g, " ").slice(0, 130)
+      if (mark === "✓") ok(`MCP ${name} : ${why}`)
+      else if (name === "kubernetes" && !hasKube) wa(`MCP kubernetes : aucun contexte kubectl (${kc}) : le serveur quitte au démarrage. Désactive-le ("disabled": true) ou configure un cluster.`)
+      else ko(`MCP ${name} : ${why}`)
+    }
+    const seen = new Set(rows.map((x) => x[2]))
+    const missing = Object.entries(mcpServers(cfg)).filter(([k, v]) => !v.disabled && v.enabled !== false && !seen.has(k)).map(([k]) => k)
+    if (missing.length) ko(`OpenCode ne liste pas ces MCP : ${missing.join(", ")}`)
+  }
   if (cfg?.default_agent) {
     const a = runOc(["debug", "agents"], 20000)
     const txt = `${a.stdout ?? ""}${a.stderr ?? ""}`

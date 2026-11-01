@@ -6,20 +6,22 @@
 #   ./install.sh --lite         profil léger : 12 agents, MCP context7 + grep_app, sans outils lourds
 #   ./install.sh --no-tools     copie la config seulement (aucun téléchargement/installation d'outil)
 #   ./install.sh --memory-only  (re)tente seulement l'installation de MemPalace, sans rien recopier
+#   ./install.sh --shell-env    ajoute PATH et MEMPALACE_ADAPTER_PYTHON à ~/.bashrc / ~/.zshrc (une seule fois)
 #   ./install.sh --with-matt    + skills complets de Matt Pocock
 #   (ne lance pas ce script avec sudo : tout irait dans /root au lieu de ton dossier personnel)
 #   OPENCODE_CONFIG_DIR=...     autre dossier de destination ; OBSCURA_BIN_DIR=... dossier des binaires
 set -Eeuo pipefail
 
-LITE=0; TOOLS=1; MATT=0; MEMONLY=0; ALLOWROOT=0
+LITE=0; TOOLS=1; MATT=0; MEMONLY=0; ALLOWROOT=0; SHELLENV=0
 for a in "$@"; do
   case "$a" in
     --lite) LITE=1; TOOLS=0 ;;
     --no-tools) TOOLS=0 ;;
     --memory-only) MEMONLY=1 ;;
     --allow-root) ALLOWROOT=1 ;;
+    --shell-env) SHELLENV=1 ;;
     --with-matt) MATT=1 ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
     *) echo "Option inconnue : $a" >&2; exit 1 ;;
   esac
 done
@@ -178,6 +180,16 @@ if [ "$LITE" = 1 ]; then
   node "$HERE/scripts/make-lite.mjs" "$DEST"
 fi
 
+# 3b. Kubernetes : le serveur MCP quitte au démarrage s'il n'y a aucun contexte kubectl
+if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ]; then
+  kc="${KUBECONFIG:-$HOME/.kube/config}"
+  if ! grep -qs '^current-context: *[^ ]' "${kc%%:*}"; then
+    sed -i.bak 's|"kubernetes": {|"kubernetes": {\n        "disabled": true, // aucun contexte kubectl : retire cette ligne quand tu auras un cluster|' "$DEST/opencode.jsonc" \
+      && rm -f "$DEST/opencode.jsonc.bak"
+    echo "ℹ️  MCP kubernetes désactivé (aucun contexte kubectl dans ${kc%%:*}) : retire la ligne \"disabled\" de opencode.jsonc quand tu auras un cluster."
+  fi
+fi
+
 # 4. Outils (profil complet seulement)
 if [ "$TOOLS" = 1 ]; then
   need npx || die "npx (Node.js) est requis pour context7/playwright."
@@ -209,8 +221,12 @@ if [ "$TOOLS" = 1 ]; then
     || curl -fsSL "$BASE/obscura-$PLAT-no-render.tar.gz" -o "$TMP/o.tgz" \
     || die "Téléchargement d'obscura échoué."
   mkdir -p "$TMP/obscura" && tar -xzf "$TMP/o.tgz" -C "$TMP/obscura"
-  find "$TMP/obscura" -type f \( -name obscura -o -name obscura-worker \) -exec cp {} "$BIN/" \;
-  chmod +x "$BIN/obscura" "$BIN/obscura-worker" 2>/dev/null || true
+  # Copie vers un nom temporaire puis renommage : fonctionne même si obscura tourne déjà (« Text file busy »)
+  for f in obscura obscura-worker; do
+    src="$(find "$TMP/obscura" -type f -name "$f" | head -n 1)"
+    [ -n "$src" ] || continue
+    cp "$src" "$BIN/.$f.new" && chmod +x "$BIN/.$f.new" && mv -f "$BIN/.$f.new" "$BIN/$f"
+  done
   if "$BIN/obscura" --help >/dev/null 2>&1; then
     echo "✅ Obscura installé dans $BIN"
   else
@@ -240,6 +256,22 @@ fi
 need gh || warn "gh (GitHub CLI) introuvable : requis pour /pr et la recherche GitHub. → $(pkg_hint gh)"
 [ "$BIN" = "$HOME/.local/bin" ] || warn "Les MCP playwright et terraform pointent vers \$HOME/.local/bin (lanceurs oc-*) : copie-les depuis $BIN ou garde le dossier par défaut."
 case ":$PATH:" in *":$BIN:"*) ;; *) warn "Ajoute $BIN à ton PATH : export PATH=\"$BIN:\$PATH\"" ;; esac
+
+# Variables d'environnement dans le shell (opt-in, idempotent)
+if [ "$SHELLENV" = 1 ]; then
+  for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    [ -f "$rc" ] || continue
+    if ! grep -q 'opencode-prerequisites' "$rc"; then
+      {
+        echo ""
+        echo "# opencode-prerequisites"
+        echo "export PATH=\"$BIN:\$PATH\""
+        [ -x "$MEMVENV/bin/python" ] && echo "export MEMPALACE_ADAPTER_PYTHON=\"$MEMVENV/bin/python\""
+      } >> "$rc"
+      echo "✅ PATH et MEMPALACE_ADAPTER_PYTHON ajoutés à $rc (ouvre un nouveau terminal)"
+    fi
+  done
+fi
 
 # 5. Skills de Matt Pocock (optionnel)
 if [ "$MATT" = 1 ]; then
