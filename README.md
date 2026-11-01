@@ -17,11 +17,12 @@ Puis dans OpenCode : `/connect` → OpenCode Go → colle ta clé, et `/models` 
 
 - `config/opencode.jsonc` : modèles Go par rôle, permissions, formatage auto et MCP : **context7** (actif), **playwright** (Microsoft, désactivé) et **obscura** (désactivé).
 - `config/AGENTS.md` : règles globales (plan d'abord, boucle d'apprentissage, alignement avant de coder, quota).
-- `config/agents/` : `review`, `researcher`, `debugger`, `code-simplifier`, `verify-app`.
+- `config/agents/` : **`ceo`** (agent par défaut, délègue), spécialistes `architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, et `review`, `researcher`, `debugger`, `code-simplifier`, `verify-app`.
 - `config/skills/` : `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`.
 - `config/commands/` : `/check`, `/plan-first`, `/simplify`, `/verify`, `/learn`, `/ship`.
 - `config/mempalace.jsonc` : réglages de la mémoire persistante (plugin `@rvboris/opencode-mempalace`).
 - `config/plugins/notify.js` : notification quand une session attend (non testé).
+- `config/plugins/auto-compact.js` : compactage automatique à 90 % du contexte (non testé, ratio réglable avec `OPENCODE_COMPACT_RATIO`).
 
 ## Sources d'inspiration
 
@@ -44,3 +45,7 @@ Chaque MCP ajoute du contexte : si ton quota Go fond trop vite, passe `"enabled"
 `install.sh` fait `pip install --user mempalace` et `mempalace init ~/.mempalace/palace`, et la config charge le plugin [`@rvboris/opencode-mempalace`](https://github.com/rvboris/opencode-mempalace) (licence MIT, tout reste en local). Il demande Python 3.10+ et, d'après sa doc, OpenCode v2. Les réglages sont dans `~/.config/opencode/mempalace.jsonc` ; garde `privacyRedactionEnabled` à `true`.
 
 Supermemory n'est pas inclus : il exige un compte et une clé API (`SUPERMEMORY_API_KEY`).
+
+## Équipe d'agents (CEO)
+
+`ceo` reçoit ta demande, la cadre (`grill-me`, `@architect`), délègue aux spécialistes puis contrôle (`@review`, `@verify-app`, `@security` si sensible). Ajoute un spécialiste en créant `config/agents/<nom>.md` avec `mode: subagent`. Change d'agent avec Tab dans OpenCode. Les spécialistes tournent en profondeur 1 (`subagent_depth`), donc pas de cascade qui brûle le quota.

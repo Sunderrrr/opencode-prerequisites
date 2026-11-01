@@ -42,3 +42,10 @@
 ## Sessions parallèles
 - Une session = une tâche. Si je lance plusieurs sessions, chacune travaille dans sa propre branche/worktree (`git worktree add`) pour ne pas s'écraser.
 - Quand tu as fini ou que tu attends ma réponse, dis-le clairement en une ligne (une notification part automatiquement).
+
+## Organisation : le CEO dirige des spécialistes
+- L'agent par défaut est `ceo` : il délègue, il n'écrit pas de code. Pour une petite tâche, il choisit un seul spécialiste.
+- Spécialistes : `architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, `debugger`, `researcher`, puis contrôle avec `review`, `code-simplifier`, `verify-app`.
+- Chaque brief de délégation contient : objectif, fichiers, critère de réussite, interdits. Tâches parallèles seulement si elles touchent des fichiers différents.
+- `security` est obligatoire pour auth, données personnelles, secrets, réseau et dépendances.
+- Contexte : un plugin lance le compactage à 90 % du contexte. Avant cela, garde les réponses courtes et ne recolle pas de gros fichiers.
