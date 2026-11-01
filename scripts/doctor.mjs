@@ -72,8 +72,13 @@ for (const [name, m] of Object.entries(cfg?.mcp ?? {})) {
 
 // Plugins
 if (cfg?.plugin?.some?.((p) => p.includes("mempalace"))) {
-  const py = run(process.env.MEMPALACE_ADAPTER_PYTHON || "python3", ["-c", "import mempalace"], 8000)
-  py.status === 0 ? ok("MemPalace importable") : ko("MemPalace non installé (python3 -m pip install --user mempalace)")
+  const venvPy = path.join(HOME, ".mempalace", "venv", "bin", "python")
+  const envPy = process.env.MEMPALACE_ADAPTER_PYTHON
+  const py = envPy || (fs.existsSync(venvPy) ? venvPy : "python3")
+  const t = run(py, ["-c", "import mempalace"], 15000)
+  if (t.status !== 0) ko(`MemPalace non installé pour ${py} : lance ./install.sh --memory-only (ou retire le plugin de opencode.jsonc)`)
+  else if (!envPy && fs.existsSync(venvPy)) wa(`MemPalace est dans ${venvPy} mais MEMPALACE_ADAPTER_PYTHON n'est pas défini : ajoute à ton ~/.bashrc  export MEMPALACE_ADAPTER_PYTHON="${venvPy}"`)
+  else ok(`MemPalace importable (${py})`)
 }
 const pdir = path.join(DEST, "plugins")
 if (fs.existsSync(pdir)) ok(`plugins locaux : ${fs.readdirSync(pdir).join(", ")}`)

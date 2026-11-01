@@ -5,17 +5,19 @@
 #   ./install.sh                installation complète (outils inclus)
 #   ./install.sh --lite         profil léger : 12 agents, MCP context7 + grep_app, sans outils lourds
 #   ./install.sh --no-tools     copie la config seulement (aucun téléchargement/installation d'outil)
+#   ./install.sh --memory-only  (re)tente seulement l'installation de MemPalace, sans rien recopier
 #   ./install.sh --with-matt    + skills complets de Matt Pocock
 #   OPENCODE_CONFIG_DIR=...     autre dossier de destination ; OBSCURA_BIN_DIR=... dossier des binaires
 set -Eeuo pipefail
 
-LITE=0; TOOLS=1; MATT=0
+LITE=0; TOOLS=1; MATT=0; MEMONLY=0
 for a in "$@"; do
   case "$a" in
     --lite) LITE=1; TOOLS=0 ;;
     --no-tools) TOOLS=0 ;;
+    --memory-only) MEMONLY=1 ;;
     --with-matt) MATT=1 ;;
-    -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
     *) echo "Option inconnue : $a" >&2; exit 1 ;;
   esac
 done
@@ -31,6 +33,54 @@ trap 'rm -rf "$TMP"' EXIT
 need() { command -v "$1" >/dev/null 2>&1; }
 warn() { echo "⚠️  $*" >&2; }
 die()  { echo "❌ $*" >&2; exit 1; }
+
+
+# MemPalace dans un venv dédié (évite les erreurs PEP 668 et les Python trop récents sans wheels onnxruntime)
+MEMVENV="$HOME/.mempalace/venv"
+setup_mempalace() {
+  if [ ! -x "$MEMVENV/bin/python" ]; then
+    local py="" c
+    for c in python3.13 python3.12 python3.11 python3.10; do
+      if need "$c"; then py="$c"; break; fi
+    done
+    mkdir -p "$HOME/.mempalace"
+    if [ -n "$py" ]; then
+      echo "   Python $py → venv $MEMVENV"
+      "$py" -m venv "$MEMVENV" || { warn "Création du venv échouée (paquet python3-venv manquant ?)"; return 1; }
+    else
+      echo "   Aucun Python 3.10–3.13 trouvé ($(python3 --version 2>&1)) : j'utilise uv pour télécharger Python 3.12."
+      local UV=""
+      if need uv; then UV=uv
+      elif need python3 && python3 -m venv "$TMP/uvenv" && "$TMP/uvenv/bin/pip" install -q uv; then UV="$TMP/uvenv/bin/uv"
+      fi
+      [ -n "$UV" ] || { warn "uv indisponible : installe-le (https://docs.astral.sh/uv/) puis relance ./install.sh --memory-only"; return 1; }
+      "$UV" venv --seed --python 3.12 "$MEMVENV" || return 1
+    fi
+  fi
+  "$MEMVENV/bin/python" -m pip install -q --upgrade mempalace || return 1
+  if [ ! -f "$HOME/.mempalace/palace/mempalace.yaml" ]; then
+    # init attend un dossier existant et pose des questions : on le rend non interactif
+    mkdir -p "$HOME/.mempalace/palace"
+    "$MEMVENV/bin/mempalace" init "$HOME/.mempalace/palace" --yes --no-llm </dev/null >/dev/null 2>&1 \
+      || warn "Initialise à la main : $MEMVENV/bin/mempalace init ~/.mempalace/palace --yes --no-llm"
+  fi
+  echo "✅ MemPalace installé dans $MEMVENV"
+  echo "   ➜ Ajoute à ton ~/.bashrc (ou ~/.zshrc) :  export MEMPALACE_ADAPTER_PYTHON=\"$MEMVENV/bin/python\""
+}
+
+drop_mempalace_plugin() {
+  # MemPalace indisponible : retire le plugin de la config installée pour qu'OpenCode démarre proprement
+  if [ -f "$DEST/opencode.jsonc" ]; then
+    sed -i.bak '/"plugin": \["@rvboris\/opencode-mempalace"\]/d' "$DEST/opencode.jsonc" && rm -f "$DEST/opencode.jsonc.bak"
+    warn "Plugin MemPalace retiré de $DEST/opencode.jsonc (relance ./install.sh --memory-only quand tu auras réglé le problème, puis remets la ligne \"plugin\")."
+  fi
+}
+
+if [ "$MEMONLY" = 1 ]; then
+  echo "⬇️  MemPalace..."
+  setup_mempalace || die "MemPalace n'a pas pu être installé."
+  exit 0
+fi
 
 need node || die "Node.js est requis (validation, profil léger, MCP) : https://nodejs.org"
 need opencode || warn "opencode introuvable. Installe-le : curl -fsSL https://opencode.ai/install | bash"
@@ -93,12 +143,10 @@ if [ "$TOOLS" = 1 ]; then
   fi
   PATH="$BIN:$PATH" trivy plugin install mcp || warn "trivy plugin install mcp a échoué : relance-le à la main."
 
-  need python3 || die "Python 3.10+ est requis pour MemPalace."
-  echo "⬇️  MemPalace : installation..."
-  python3 -m pip install --user --upgrade mempalace \
-    || die "pip a échoué. Essaie : python3 -m venv ~/.mempalace/venv && ~/.mempalace/venv/bin/pip install mempalace puis export MEMPALACE_ADAPTER_PYTHON=~/.mempalace/venv/bin/python"
-  [ -d "$HOME/.mempalace/palace" ] || python3 -m mempalace init "$HOME/.mempalace/palace" 2>/dev/null \
-    || mempalace init "$HOME/.mempalace/palace" || warn "Initialise à la main : mempalace init ~/.mempalace/palace"
+  echo "⬇️  MemPalace..."
+  if ! setup_mempalace; then
+    drop_mempalace_plugin
+  fi
 fi
 
 need docker || warn "Docker introuvable : requis pour le MCP terraform (désactive-le sinon)."

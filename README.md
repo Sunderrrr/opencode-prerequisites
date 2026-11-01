@@ -24,7 +24,7 @@ Ensuite : `opencode` → `/connect` → **OpenCode Go** → colle ta clé. Dans 
 ./uninstall.sh   # restaure la dernière sauvegarde
 ```
 
-Prérequis : Node.js 18+ (la CI tourne sur Node 26, voir `.nvmrc`). Windows : utilise WSL (les scripts sont en Bash).
+Prérequis : Node.js 18+ (la CI tourne sur Node 26, voir `.nvmrc`). Windows : utilise WSL (les scripts sont en Bash). MemPalace s'installe dans son propre venv (Python 3.10–3.13, ou 3.12 téléchargé via `uv` si ton Python est trop récent) ; ajoute ensuite `export MEMPALACE_ADAPTER_PYTHON="$HOME/.mempalace/venv/bin/python"` à ton `~/.bashrc`. Pour relancer seulement cette étape : `./install.sh --memory-only`.
 
 ## Profils
 
@@ -32,7 +32,7 @@ Prérequis : Node.js 18+ (la CI tourne sur Node 26, voir `.nvmrc`). Windows : ut
 |---|---|---|
 | Agents | 25 | 12 (`ceo`, `architect`, `rust`, `backend`, `frontend`, `qa`, `security`, `debugger`, `researcher`, `review`, `verify-app`, `integrator`) |
 | MCP | context7, grep_app, terraform, kubernetes, trivy, playwright, obscura | context7, grep_app |
-| Mémoire | MemPalace | — |
+| Mémoire | MemPalace (venv `~/.mempalace/venv`, ≈ 500 Mo) | — |
 
 Le profil léger est dérivé du complet par `scripts/make-lite.mjs` : il n'y a pas deux configs à maintenir.
 
