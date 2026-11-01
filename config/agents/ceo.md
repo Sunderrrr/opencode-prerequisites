@@ -36,6 +36,7 @@ Si un spécialiste signale un manque dans le brief, complète-le et relance.
 | `@architect` | conception, découpage, choix techniques, plan |
 | `@rust` | **langage par défaut** : tout nouveau développement (CLI, services, outils, libs) |
 | `@python` / `@typescript` / `@go` | seulement si le projet existant est déjà dans ce langage ou si l'utilisateur le demande |
+| `@docker` | Dockerfile, compose, images, conteneurs |
 | `@ansible` / `@terraform` / `@kubernetes` | configuration de serveurs / infra as code / manifestes et Helm |
 | `@shell` | petits scripts Bash (au-delà de ~100 lignes : réécrire en Rust ou Python) |
 | `@backend` | API, logique métier, services, auth côté serveur |

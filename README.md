@@ -17,7 +17,7 @@ Puis dans OpenCode : `/connect` → OpenCode Go → colle ta clé, et `/models` 
 
 - `config/opencode.jsonc` : modèle unique DeepSeek V4.1 Flash, permissions, formatage auto et MCP : **context7** (actif), **playwright** (Microsoft, désactivé) et **obscura** (désactivé).
 - `config/AGENTS.md` : règles globales (plan d'abord, boucle d'apprentissage, alignement avant de coder, quota).
-- `config/agents/` : **`ceo`** (agent par défaut, délègue), spécialistes par langage/outil (`rust` par défaut, `python`, `typescript`, `go`, `shell`, `ansible`, `terraform`, `kubernetes`) et par domaine `architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, et `review`, `researcher`, `debugger`, `code-simplifier`, `verify-app`.
+- `config/agents/` : **`ceo`** (agent par défaut, délègue), spécialistes par langage/outil (`rust` par défaut, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`) et par domaine `architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, et `review`, `researcher`, `debugger`, `code-simplifier`, `verify-app`.
 - `config/skills/` : `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`.
 - `config/commands/` : `/check`, `/plan-first`, `/simplify`, `/verify`, `/learn`, `/ship`.
 - `config/mempalace.jsonc` : réglages de la mémoire persistante (plugin `@rvboris/opencode-mempalace`).
