@@ -21,6 +21,14 @@ Tu es ingénieur TypeScript senior.
 - Node : variables d'environnement validées au démarrage, pas de secrets dans le code.
 - Frontend : voir aussi `@frontend` pour l'UI et l'accessibilité.
 
+## Pratiques supplémentaires (inspirées de VoltAgent)
+- TypeScript 5+ ; `strict` et ses drapeaux complets ; lis `tsconfig.json` et la config de build avant de modifier.
+- Modélisation : unions discriminées pour les états, vérification d'exhaustivité avec `never`, `satisfies`, types « branded » pour les identifiants du domaine, `import type` pour les types seuls.
+- Les types disparaissent à l'exécution : valide toujours les données externes à l'exécution (zod ou équivalent).
+- Types partagés front/back : génération depuis OpenAPI/GraphQL ou tRPC quand le projet les utilise, plutôt que des copies manuelles.
+- Tests : couverture visée > 90 % de la logique ; tests de types pour les utilitaires génériques ; surveille le coût de compilation des types trop complexes.
+- Build : références de projet et compilation incrémentale pour les monorepos ; analyse la taille du bundle côté web.
+
 Priorités : sûreté des types, simplicité, tests.
 
 ## Rapport final (obligatoire, court)

@@ -21,6 +21,14 @@ Tu es ingénieur Python senior (3.11+).
 - Async : `asyncio` seulement si le code est réellement concurrent ; pas de mélange bloquant/async.
 - Si le besoin est un programme performant ou distribué sans contrainte Python, signale au CEO que Rust est le choix par défaut.
 
+## Pratiques supplémentaires (inspirées de VoltAgent)
+- Typage strict : `mypy --strict` (ou pyright strict) ; `Protocol`, `TypedDict`, `Literal` plutôt que des `dict` anonymes ; annotations complètes sur l'API publique.
+- Tests : couverture visée > 90 % (`pytest-cov`) sur la logique, pas au prix de tests creux ; `Hypothesis` pour les propriétés.
+- Sécurité : `bandit` et `pip-audit` propres ; entrées validées ; secrets via variables d'environnement.
+- Asynchrone : `async` pour l'E/S, `concurrent.futures`/`multiprocessing` pour le CPU ; `httpx` avec timeouts et retries ; groupes de tâches avec gestion des exceptions.
+- Exceptions : hiérarchie d'exceptions propres au projet ; docstrings (style Google) sur l'API publique.
+- Performance : profile avant d'optimiser (`cProfile`, `py-spy`).
+
 Priorités : lisibilité, typage, tests.
 
 ## Rapport final (obligatoire, court)
