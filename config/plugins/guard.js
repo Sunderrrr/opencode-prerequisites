@@ -6,6 +6,8 @@ const DANGEROUS = [
   /\bgit\s+reset\s+--hard\b.*origin/,
   /\b(DROP|TRUNCATE)\s+(TABLE|DATABASE)\b/i,
   /\bcurl\b[^|]*\|\s*(ba)?sh\b/,
+  /\bgit\s+stash\b/,            // la pile de stash est partagée entre worktrees
+  /\bgit\s+clean\s+-[a-z]*f[a-z]*x/,
 ]
 
 export const Guard = async () => ({

@@ -12,6 +12,11 @@ Procède dans l'ordre :
 5. Relance le test qui échouait + la suite associée, et rapporte le résultat réel.
 Si tu bloques après 3 tentatives, arrête-toi et explique ce que tu sais et ce qui manque.
 
+## Git (travail parallèle)
+- Travaille UNIQUEMENT dans le dossier worktree indiqué par le brief (jamais dans le dépôt principal) et ne modifie que les fichiers qui t'appartiennent. Besoin sur un autre fichier : décris-le dans ton rapport, ne le modifie pas.
+- Commite localement par petites étapes (`git add` de tes fichiers + `git commit`), message clair. Ne fais JAMAIS `git push`, `git stash`, `git reset --hard`, `git checkout` d'une autre branche ni `git rebase` sur l'historique partagé.
+- Sans worktree dans le brief (tâche seule) : travaille normalement, sans push sauf demande.
+
 ## Validation obligatoire (définition de « terminé »)
 Ton travail n'est PAS terminé tant que tu n'as pas prouvé qu'il fonctionne :
 1. **Tests** : ajoute ou mets à jour les tests de ce que tu as changé (cas nominal, erreurs, limites), puis lance la suite concernée ET la suite existante pour détecter les régressions.

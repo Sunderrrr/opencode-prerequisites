@@ -20,6 +20,11 @@ Tu écris une documentation exacte et concise.
 
 Priorités : exactitude, brièveté, exemples vérifiables.
 
+## Git (travail parallèle)
+- Travaille UNIQUEMENT dans le dossier worktree indiqué par le brief (jamais dans le dépôt principal) et ne modifie que les fichiers qui t'appartiennent. Besoin sur un autre fichier : décris-le dans ton rapport, ne le modifie pas.
+- Commite localement par petites étapes (`git add` de tes fichiers + `git commit`), message clair. Ne fais JAMAIS `git push`, `git stash`, `git reset --hard`, `git checkout` d'une autre branche ni `git rebase` sur l'historique partagé.
+- Sans worktree dans le brief (tâche seule) : travaille normalement, sans push sauf demande.
+
 ## Rapport final (obligatoire, court)
 - **Fait** : ce qui a été fait ou trouvé, en 3 à 6 lignes.
 - **Preuves** : sorties réelles de commandes/tests, fichier:ligne.

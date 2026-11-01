@@ -52,6 +52,12 @@ chmod +x "$BIN/obscura" "$BIN/obscura-worker" 2>/dev/null || true
 "$BIN/obscura" --help >/dev/null 2>&1 && echo "✅ Obscura installé dans $BIN" || { echo "❌ obscura ne démarre pas" >&2; exit 1; }
 case ":$PATH:" in *":$BIN:"*) ;; *) echo "⚠️  Ajoute $BIN à ton PATH : export PATH=\"$BIN:\$PATH\"" ;; esac
 
+# --- Outil git multi-agents : agent-wt ---
+BIN="${OBSCURA_BIN_DIR:-$HOME/.local/bin}"
+mkdir -p "$BIN"
+install -m 0755 "$SRC/bin/agent-wt" "$BIN/agent-wt"
+echo "✅ agent-wt installé dans $BIN"
+
 # --- Mémoire : MemPalace (plugin opencode-mempalace) ---
 if ! command -v python3 >/dev/null 2>&1; then
   echo "❌ Python 3.10+ est requis pour MemPalace." >&2; exit 1

@@ -68,3 +68,10 @@
 - Rien n'est terminé sans preuve : tests ajoutés/mis à jour, suite complète lancée, fonctionnalité exécutée pour de vrai, résultats réels cités (X passés, Y échoués).
 - Test ou vérification en échec : on corrige la cause racine et on relance jusqu'au vert (5 cycles max, puis rapport précis du blocage). Jamais de `skip`/`xfail`/`#[ignore]`, de suppression ni d'affaiblissement de test, ni de mock pour masquer l'erreur.
 - Le CEO fait valider par `@verify-app` (indépendant) et boucle correction → validation jusqu'à **VALIDÉ**.
+
+## Git avec plusieurs agents (zéro conflit)
+- **Un worktree par tâche** : `agent-wt new <tâche>` crée `.worktrees/<tâche>` sur la branche `agent/<tâche>` ; chaque agent parallèle travaille uniquement dedans.
+- **Un fichier = un propriétaire** : le CEO attribue les fichiers avant de paralléliser. Même fichier pour deux tâches → séquentiel. Fichiers chauds (registres, schéma, manifestes, lockfiles, CI) = un seul propriétaire.
+- **Seul `@integrator` fusionne** (`agent-wt merge`), un à la fois, tests complets après chaque fusion ; il résout les conflits en conservant les deux intentions et régénère les lockfiles au lieu de les fusionner.
+- **Les spécialistes ne poussent jamais** ; ils commitent localement. Push uniquement sur ma demande, après `git pull --rebase`, jamais `--force`.
+- Interdits en parallèle : `git stash` (partagé entre worktrees), `git reset --hard`, `git clean -fdx`, changer de branche dans le dépôt principal.

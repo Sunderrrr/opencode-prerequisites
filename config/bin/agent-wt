@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# agent-wt : un worktree git isolé par tâche d'agent, pour éviter les conflits en travail parallèle.
+#   agent-wt new <tâche> [base]   crée .worktrees/<tâche> sur la branche agent/<tâche>
+#   agent-wt merge <tâche>        fusionne agent/<tâche> dans la branche courante du dépôt principal
+#   agent-wt remove <tâche>       supprime le worktree et la branche (après fusion)
+#   agent-wt list                 liste les worktrees d'agents
+set -Eeuo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+# si on est dans un worktree, remonter au dépôt principal
+MAIN="$(cd "$ROOT" && git worktree list --porcelain | awk '/^worktree /{print $2; exit}')"
+WT_DIR="$MAIN/.worktrees"
+cmd="${1:-}"; task="${2:-}"
+
+safe() { [[ "$1" =~ ^[a-zA-Z0-9._-]+$ ]] || { echo "Nom de tâche invalide : $1" >&2; exit 1; }; }
+
+case "$cmd" in
+  new)
+    safe "$task"
+    base="${3:-HEAD}"
+    mkdir -p "$WT_DIR"
+    grep -qx '.worktrees/' "$MAIN/.git/info/exclude" 2>/dev/null || echo '.worktrees/' >> "$MAIN/.git/info/exclude"
+    git -C "$MAIN" worktree add -b "agent/$task" "$WT_DIR/$task" "$base" >/dev/null
+    echo "$WT_DIR/$task"
+    ;;
+  merge)
+    safe "$task"
+    if [ -n "$(git -C "$WT_DIR/$task" status --porcelain)" ]; then
+      echo "❌ $task a des changements non commités : commite d'abord dans $WT_DIR/$task" >&2; exit 1
+    fi
+    if git -C "$MAIN" merge --no-ff -m "merge agent/$task" "agent/$task"; then
+      echo "✅ agent/$task fusionné"
+    else
+      echo "⚠️  CONFLITS dans agent/$task. Fichiers :" >&2
+      git -C "$MAIN" diff --name-only --diff-filter=U >&2
+      echo "Résous-les, puis 'git add' + 'git commit' dans $MAIN (ou 'git merge --abort')." >&2
+      exit 2
+    fi
+    ;;
+  remove)
+    safe "$task"
+    git -C "$MAIN" worktree remove --force "$WT_DIR/$task"
+    git -C "$MAIN" branch -d "agent/$task" 2>/dev/null || echo "Branche agent/$task conservée (non fusionnée ?)"
+    ;;
+  list)
+    git -C "$MAIN" worktree list
+    ;;
+  *)
+    sed -n '2,6p' "$0"; exit 1 ;;
+esac
