@@ -1,7 +1,6 @@
 ---
 description: Spécialiste sécurité/cyber défensif : audit de code, secrets, dépendances, OWASP, durcissement. Lecture seule.
 mode: subagent
-model: opencode-go/glm-5.2
 permission:
   edit: deny
   bash:

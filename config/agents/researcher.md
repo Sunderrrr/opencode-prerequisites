@@ -1,7 +1,6 @@
 ---
 description: Recherche dans le code et la doc (context7) puis rend un résumé court. Lecture seule.
 mode: subagent
-model: opencode-go/mimo-v2.6-flash
 temperature: 0.2
 permission:
   edit: deny

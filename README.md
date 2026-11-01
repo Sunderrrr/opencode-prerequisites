@@ -15,7 +15,7 @@ Puis dans OpenCode : `/connect` → OpenCode Go → colle ta clé, et `/models` 
 
 ## Contenu
 
-- `config/opencode.jsonc` : modèles Go par rôle, permissions, formatage auto et MCP : **context7** (actif), **playwright** (Microsoft, désactivé) et **obscura** (désactivé).
+- `config/opencode.jsonc` : modèle unique DeepSeek V4.1 Flash, permissions, formatage auto et MCP : **context7** (actif), **playwright** (Microsoft, désactivé) et **obscura** (désactivé).
 - `config/AGENTS.md` : règles globales (plan d'abord, boucle d'apprentissage, alignement avant de coder, quota).
 - `config/agents/` : **`ceo`** (agent par défaut, délègue), spécialistes `architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, et `review`, `researcher`, `debugger`, `code-simplifier`, `verify-app`.
 - `config/skills/` : `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`.
@@ -49,3 +49,7 @@ Supermemory n'est pas inclus : il exige un compte et une clé API (`SUPERMEMORY_
 ## Équipe d'agents (CEO)
 
 `ceo` reçoit ta demande, la cadre (`grill-me`, `@architect`), délègue aux spécialistes puis contrôle (`@review`, `@verify-app`, `@security` si sensible). Ajoute un spécialiste en créant `config/agents/<nom>.md` avec `mode: subagent`. Change d'agent avec Tab dans OpenCode. Les spécialistes tournent en profondeur 1 (`subagent_depth`), donc pas de cascade qui brûle le quota.
+
+## Modèle
+
+Tout tourne sur `opencode-go/deepseek-v4.1-flash`. Prérequis côté console OpenCode : *Settings › Privacy › Regions › Global* (obligatoire pour les modèles DeepSeek, réglable par un owner/admin). Vérifie l'ID avec `/models`.

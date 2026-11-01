@@ -1,9 +1,12 @@
 {
   "$schema": "https://opencode.ai/config.json",
 
-  // Modèles OpenCode Go (vérifie les IDs avec /models : la liste change souvent)
-  "model": "opencode-go/kimi-k2.7-code",      // build : gros quota mensuel
-  "small_model": "opencode-go/glm-5.3-flash", // titres, résumés : quasi gratuit en quota
+  // Modèles OpenCode Go (vérifie les IDs avec /models : la liste change souvent).
+  // Tout tourne sur DeepSeek V4.1 Flash (gros quota : ~216 000 requêtes/mois).
+  // Les agents n'ont pas de modèle propre : ils héritent de celui-ci. Pour en changer un,
+  // ajoute `model: opencode-go/<id>` dans son fichier agents/<nom>.md.
+  "model": "opencode-go/deepseek-v4.1-flash",
+  "small_model": "opencode-go/deepseek-v4.1-flash",
 
   "autoupdate": "notify",
 
@@ -17,12 +20,6 @@
 
   // Équivalent du hook de formatage auto de Boris : formate après chaque édition
   "formatter": true,
-
-  // Les agents natifs : Plan raisonne, Explore est un sous-agent rapide
-  "agent": {
-    "plan": { "model": "opencode-go/glm-5.2" },
-    "explore": { "model": "opencode-go/mimo-v2.6-flash" }
-  },
 
   // Mémoire persistante entre sessions (nécessite `pip install mempalace`, fait par install.sh)
   // Note : la doc du plugin écrit "plugins" (OpenCode v2) ; si rien ne se charge, renomme la clé.

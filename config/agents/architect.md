@@ -1,7 +1,6 @@
 ---
 description: Architecte : conception, découpage en étapes, choix techniques et plan. Lecture seule.
 mode: subagent
-model: opencode-go/glm-5.2
 permission:
   edit: deny
   bash: deny

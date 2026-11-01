@@ -1,7 +1,6 @@
 ---
 description: Spécialiste documentation : README, docs d'API, changelog, ADR, commentaires utiles.
 mode: subagent
-model: opencode-go/mimo-v2.6-flash
 permission:
   bash: deny
 temperature: 0.1
