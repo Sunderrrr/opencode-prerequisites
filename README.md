@@ -24,7 +24,7 @@ Ensuite : `opencode` → `/connect` → **OpenCode Go** → colle ta clé. Dans 
 ./uninstall.sh   # restaure la dernière sauvegarde
 ```
 
-Windows : utilise WSL (les scripts sont en Bash).
+Prérequis : Node.js 18+ (la CI tourne sur Node 26, voir `.nvmrc`). Windows : utilise WSL (les scripts sont en Bash).
 
 ## Profils
 
