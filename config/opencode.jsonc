@@ -35,58 +35,54 @@
     "task": { "*": "allow" }
   },
 
-  // MCP : peu de serveurs, chacun consomme du contexte
+  // MCP : peu de serveurs, chacun consomme du contexte.
+  // Schéma OpenCode v2 : les serveurs sont dans "servers" (la forme plate est obsolète et n'est pas lue par la 2.x).
+  // Pour en couper un : ajoute  "disabled": true  dans son bloc.
   "mcp": {
-    "context7": {
-      "type": "remote",
-      "url": "https://mcp.context7.com/mcp",
-      "headers": { "CONTEXT7_API_KEY": "{env:CONTEXT7_API_KEY}" },
-      "oauth": false,
-      "enabled": true
-    },
-    // Navigateur piloté par l'IA (outil Microsoft). Installé et activé par install.sh (désactive-le si le contexte devient trop lourd).
-    "playwright": {
-      "type": "local",
-      // Lanceur du kit : utilise Chromium/Chrome du système s'il existe, sinon celui de Playwright
-      "command": ["{env:HOME}/.local/bin/oc-playwright-mcp"],
-      "enabled": true
-    },
-    // --- DevOps (lecture seule / sans écriture) ---
-    // Documentation du Terraform Registry (providers/modules). Pas de TFE_TOKEN : aucune action sur HCP Terraform.
-    // Nécessite Docker ou Podman.
-    "terraform": {
-      "type": "local",
-      "command": ["{env:HOME}/.local/bin/oc-terraform-mcp"], // Docker ou Podman, registre seulement
-      "enabled": true
-    },
-    // Kubernetes en LECTURE SEULE (voir k8s-mcp.toml : read_only + Secrets bloqués). Utilise ton kubeconfig.
-    // Vérifie le flag avec : npx kubernetes-mcp-server@latest --help
-    "kubernetes": {
-      "type": "local",
-      "command": ["npx", "-y", "kubernetes-mcp-server@latest", "--config", "{env:HOME}/.config/opencode/k8s-mcp.toml"],
-      "enabled": true
-    },
-    // Scan de vulnérabilités / misconfigurations / secrets (images, IaC, code). Nécessite `trivy` + plugin mcp (install.sh).
-    "trivy": {
-      "type": "local",
-      "command": ["trivy", "mcp"],
-      "enabled": true
-    },
-    // --- Internet / GitHub ---
-    // Recherche de code dans des millions de dépôts GitHub publics (Vercel). Pas de compte.
-    "grep_app": {
-      "type": "remote",
-      "url": "https://mcp.grep.app",
-      "oauth": false,
-      "enabled": true
-    },
-
-    // Navigateur headless léger en Rust (binaire `obscura` à installer, voir README).
-    // Pas de --stealth par défaut ; ajoute-le seulement si tu en as besoin.
-    "obscura": {
-      "type": "local",
-      "command": ["obscura", "mcp"],
-      "enabled": true
+    "timeout": { "startup": 120000 }, // premier lancement : npx / image Docker à télécharger
+    "servers": {
+      // Documentation à jour des librairies. Clé API gratuite optionnelle (limites plus hautes) :
+      // ajoute  "headers": { "CONTEXT7_API_KEY": "<ta clé>" }  si tu en as une.
+      "context7": {
+        "type": "remote",
+        "url": "https://mcp.context7.com/mcp",
+        "oauth": false
+      },
+      // Navigateur piloté par l'IA (outil Microsoft). Lanceur du kit : utilise Chromium/Chrome du système s'il existe,
+      // sinon celui de Playwright.
+      "playwright": {
+        "type": "local",
+        "command": ["{env:HOME}/.local/bin/oc-playwright-mcp"]
+      },
+      // --- DevOps (lecture seule / sans écriture) ---
+      // Documentation du Terraform Registry (providers/modules). Pas de TFE_TOKEN : aucune action sur HCP Terraform.
+      // Nécessite Docker ou Podman (le lanceur choisit celui qui répond).
+      "terraform": {
+        "type": "local",
+        "command": ["{env:HOME}/.local/bin/oc-terraform-mcp"]
+      },
+      // Kubernetes en LECTURE SEULE (voir k8s-mcp.toml : read_only + Secrets bloqués). Utilise ton kubeconfig.
+      "kubernetes": {
+        "type": "local",
+        "command": ["npx", "-y", "kubernetes-mcp-server@latest", "--config", "{env:HOME}/.config/opencode/k8s-mcp.toml"]
+      },
+      // Scan de vulnérabilités / misconfigurations / secrets (images, IaC, code). Nécessite `trivy` + plugin mcp (install.sh).
+      "trivy": {
+        "type": "local",
+        "command": ["trivy", "mcp"]
+      },
+      // --- Internet / GitHub ---
+      // Recherche de code dans des millions de dépôts GitHub publics (Vercel). Pas de compte.
+      "grep_app": {
+        "type": "remote",
+        "url": "https://mcp.grep.app",
+        "oauth": false
+      },
+      // Navigateur headless léger en Rust (binaire `obscura`, installé par install.sh). Pas de --stealth par défaut.
+      "obscura": {
+        "type": "local",
+        "command": ["obscura", "mcp"]
+      }
     }
   }
 }

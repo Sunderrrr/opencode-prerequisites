@@ -6,7 +6,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { parseJsonc } from "./lib/jsonc.mjs"
+import { parseJsonc, mcpServers } from "./lib/jsonc.mjs"
 
 const dest = process.argv[2]
 if (!dest) { console.error("usage : make-lite.mjs <dossier-config>"); process.exit(1) }
@@ -43,9 +43,10 @@ fs.writeFileSync(ceoPath, ceo)
 fs.appendFileSync(path.join(dest, "AGENTS.md"), `\n## Profil léger\nAgents disponibles : ${[...keep].join(", ")}. Ignore les autres noms d'agents cités plus haut.\n`)
 const cfgPath = path.join(dest, "opencode.jsonc")
 const cfg = parseJsonc(fs.readFileSync(cfgPath, "utf8"))
-cfg.mcp = Object.fromEntries(Object.entries(cfg.mcp ?? {}).filter(([k]) => ["context7", "grep_app"].includes(k)))
+const keepMcp = Object.fromEntries(Object.entries(mcpServers(cfg)).filter(([k]) => ["context7", "grep_app"].includes(k)))
+cfg.mcp = { ...(cfg.mcp?.timeout ? { timeout: cfg.mcp.timeout } : {}), servers: keepMcp }
 delete cfg.plugin
 delete cfg.plugins
 fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + "\n")
 for (const f of ["mempalace.jsonc", "k8s-mcp.toml"]) fs.rmSync(path.join(dest, f), { force: true })
-console.log(`Profil léger : ${keep.size} agents, MCP ${Object.keys(cfg.mcp).join(", ")}`)
+console.log(`Profil léger : ${keep.size} agents, MCP ${Object.keys(keepMcp).join(", ")}`)

@@ -157,6 +157,17 @@ if [ -n "$(ls -A "$DEST" 2>/dev/null)" ]; then
 fi
 cp -a "$SRC/." "$DEST/"
 mkdir -p "$BIN"
+# Retire les fichiers que le kit installait avant et qui n'existent plus (ex. plugins/auto-compact.js),
+# sans toucher à tes propres fichiers : on se base sur la liste des fichiers déjà installés par le kit.
+MANIFEST="$DEST/.opencode-prerequisites.manifest"
+( cd "$SRC" && find . -type f ! -path './bin/*' | sed 's|^\./||' | sort ) > "$TMP/new.manifest"
+{ [ -f "$MANIFEST" ] && cat "$MANIFEST"; echo "plugins/auto-compact.js"; } | sort -u > "$TMP/old.manifest"
+comm -23 "$TMP/old.manifest" "$TMP/new.manifest" | while IFS= read -r f; do
+  case "$f" in ""|*..*|/*) continue ;; esac
+  if [ -e "$DEST/$f" ]; then rm -f "$DEST/$f" && echo "🧹 Retiré (n'existe plus dans le kit) : $f"; fi
+done
+cp "$TMP/new.manifest" "$MANIFEST"
+
 for f in "$SRC"/bin/*; do install -m 0755 "$f" "$BIN/$(basename "$f")"; done
 install -m 0755 "$HERE/scripts/new-rust-project.sh" "$BIN/oc-new-rust"
 cp -a "$HERE/templates" "$DEST/templates"

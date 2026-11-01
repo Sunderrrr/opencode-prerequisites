@@ -5,7 +5,7 @@ import os from "node:os"
 import path from "node:path"
 import { execFileSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
-import { parseJsonc, frontmatter } from "./lib/jsonc.mjs"
+import { parseJsonc, frontmatter, mcpServers } from "./lib/jsonc.mjs"
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const C = path.join(ROOT, "config")
@@ -19,7 +19,9 @@ const read = (f) => fs.readFileSync(f, "utf8")
 let cfg
 try { cfg = parseJsonc(read(path.join(C, "opencode.jsonc"))) } catch (e) { err(`opencode.jsonc illisible : ${e.message}`) }
 if (cfg) {
-  for (const [name, m] of Object.entries(cfg.mcp ?? {})) {
+  if (cfg.mcp && !cfg.mcp.servers) err('mcp : les serveurs doivent être dans "mcp.servers" (la forme plate n\'est pas lue par OpenCode 2.x)')
+  for (const [name, m] of Object.entries(mcpServers(cfg))) {
+    if ("enabled" in m) err(`mcp.servers.${name} : "enabled" n'existe pas en v2, utilise "disabled": true`)
     if (m.type === "local" && !(Array.isArray(m.command) && m.command.length)) err(`mcp.${name} : command (tableau) requis`)
     else if (m.type === "remote" && !/^https:\/\//.test(m.url ?? "")) err(`mcp.${name} : url https requise`)
     else if (m.type !== "local" && m.type !== "remote") err(`mcp.${name} : type doit être local ou remote`)
@@ -103,7 +105,7 @@ for (const f of [...ls(ROOT).filter((x) => x.endsWith(".sh")).map((x) => path.jo
   try { execFileSync("bash", ["-n", f], { stdio: "pipe" }) } catch (e) { err(`${path.relative(ROOT, f)} : erreur de syntaxe bash\n${e.stderr}`) }
 }
 
-console.log(`Agents: ${Object.keys(agents).length} · MCP: ${Object.keys(cfg?.mcp ?? {}).length} · Skills: ${ls(path.join(C, "skills")).length}`)
+console.log(`Agents: ${Object.keys(agents).length} · MCP: ${Object.keys(mcpServers(cfg)).length} · Skills: ${ls(path.join(C, "skills")).length}`)
 warns.forEach((w) => console.log(`⚠️  ${w}`))
 if (errors.length) { errors.forEach((e) => console.error(`❌ ${e}`)); process.exit(1) }
 console.log("✅ Kit valide")

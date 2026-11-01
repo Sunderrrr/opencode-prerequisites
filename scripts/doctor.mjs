@@ -4,7 +4,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
-import { parseJsonc, frontmatter } from "./lib/jsonc.mjs"
+import { parseJsonc, frontmatter, mcpServers } from "./lib/jsonc.mjs"
 
 const HOME = os.homedir()
 const DEST = process.env.OPENCODE_CONFIG_DIR || path.join(HOME, ".config", "opencode")
@@ -98,8 +98,8 @@ if (has("gh")) run("gh", ["auth", "status"], 8000).status === 0 ? ok("gh connect
 
 // MCP activés : vérifie leurs prérequis
 console.log("\nMCP activés :")
-for (const [name, m] of Object.entries(cfg?.mcp ?? {})) {
-  if (m.enabled === false) { console.log(`   · ${name} (désactivé)`); continue }
+for (const [name, m] of Object.entries(mcpServers(cfg))) {
+  if (m.enabled === false || m.disabled === true) { console.log(`   · ${name} (désactivé)`); continue }
   if (m.type === "remote") { ok(`${name} → ${m.url}`); continue }
   const expand = (x) => String(x).replace(/\{env:(\w+)\}/g, (_, k) => process.env[k] ?? "")
   const bin = expand(m.command?.[0] ?? "")
@@ -119,7 +119,17 @@ for (const [name, m] of Object.entries(cfg?.mcp ?? {})) {
     const sys = ["chromium", "chromium-browser", "google-chrome-stable", "google-chrome", "brave-browser", "brave"].find(has)
     const cache = path.join(HOME, ".cache", "ms-playwright")
     sys ? ok(`${name} : navigateur système (${sys})`)
-        : fs.existsSync(cache) ? ok(`${name} : Chromium de Playwright (${cache})`)
+        : fs.existsSync(cache) ? (() => {
+            ok(`${name} : Chromium de Playwright (${cache})`)
+            const dirs = fs.readdirSync(cache).filter((d) => /^chromium(_headless_shell)?-/.test(d))
+            for (const d of dirs) {
+              const base = path.join(cache, d)
+              const exe = fs.readdirSync(base).map((x) => path.join(base, x, x.includes("headless") ? "headless_shell" : "chrome")).find(fs.existsSync)
+              if (!exe || !has("ldd")) continue
+              const missing = (run("ldd", [exe], 15000).stdout ?? "").split("\n").filter((l) => l.includes("not found")).map((l) => l.trim().split(" ")[0])
+              if (missing.length) { wa(`${name} : bibliothèques manquantes pour ${d} : ${[...new Set(missing)].slice(0, 8).join(", ")}${missing.length > 8 ? "…" : ""} → le plus simple : un Chromium système (Arch/Omarchy : sudo pacman -S --needed chromium ; Debian/Ubuntu : sudo npx playwright install-deps chromium)`); break }
+            }
+          })()
         : wa(`${name} : aucun navigateur (installe chromium avec ton gestionnaire de paquets, ou relance ./install.sh)`)
     continue
   }
@@ -159,12 +169,31 @@ try {
 if (hasOc) {
   console.log("\nLecture par OpenCode :")
   const r = runOc(["debug", "config"], 30000)
-  r.status === 0 ? ok("opencode debug config : configuration chargée sans erreur") : ko(`opencode debug config a échoué (code ${r.status ?? "timeout"}) :\n${squash(r.stderr || r.stdout)}`)
+  if (r.status !== 0) ko(`opencode debug config a échoué (code ${r.status ?? "timeout"}) :\n${squash(r.stderr || r.stdout)}`)
+  else {
+    ok("opencode debug config : configuration chargée sans erreur")
+    // Ce qu'OpenCode a VRAIMENT retenu, comparé à notre fichier (le schéma peut être valide sans que tout soit lu)
+    let rc = null
+    for (const parse of [JSON.parse, parseJsonc]) { try { rc = parse(r.stdout); break } catch { /* essai suivant */ } }
+    if (!rc || typeof rc !== "object") wa(`sortie de debug config non lisible, comparaison impossible :\n${squash(r.stdout, 6)}`)
+    else {
+      const want = Object.entries(mcpServers(cfg)).filter(([, v]) => !v.disabled && v.enabled !== false).map(([k]) => k)
+      const have = Object.keys(mcpServers(rc))
+      const missing = want.filter((k) => !have.includes(k))
+      missing.length === 0 ? ok(`OpenCode voit les ${have.length} serveurs MCP`)
+        : ko(`OpenCode ne voit pas ces MCP : ${missing.join(", ")} (il en voit ${have.length}). Vérifie qu'aucun autre fichier de config (opencode.json, config projet) ne les écrase : ls ${DEST}`)
+      if (cfg?.default_agent) (rc.default_agent ?? rc.defaultAgent) === cfg.default_agent ? ok(`default_agent retenu : ${cfg.default_agent}`) : ko(`default_agent attendu "${cfg.default_agent}", OpenCode a "${rc.default_agent ?? rc.defaultAgent ?? "rien"}"`)
+      if (cfg?.model) rc.model === cfg.model ? ok(`modèle retenu : ${rc.model}`) : wa(`modèle attendu ${cfg.model}, OpenCode a "${rc.model ?? "rien"}" (une config projet ou un autre fichier peut le surcharger)`)
+    }
+  }
   const m = runOc(["mcp", "list"], 40000)
   console.log(squash(m.stdout || m.stderr).split("\n").map((l) => "   " + l).join("\n"))
   if (cfg?.default_agent) {
-    const a = runOc(["debug", "agent", cfg.default_agent], 20000)
-    a.status === 0 ? ok(`agent ${cfg.default_agent} chargé`) : ko(`agent ${cfg.default_agent} non chargé (code ${a.status ?? "timeout"}) :\n${squash(a.stderr || a.stdout)}`)
+    const a = runOc(["debug", "agents"], 20000)
+    const txt = `${a.stdout ?? ""}${a.stderr ?? ""}`
+    a.status !== 0 ? wa(`opencode debug agents indisponible (code ${a.status ?? "timeout"}) :\n${squash(txt, 4)}`)
+      : txt.includes(cfg.default_agent) ? ok(`agent ${cfg.default_agent} connu d'OpenCode`)
+      : ko(`agent ${cfg.default_agent} absent de la liste d'OpenCode (debug agents). Vérifie ${path.join(DEST, "agents")}`)
   }
 }
 

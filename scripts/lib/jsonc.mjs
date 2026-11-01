@@ -33,3 +33,10 @@ export function frontmatter(md) {
   }
   return fm
 }
+
+// Serveurs MCP : forme v2 (mcp.servers) ou ancienne forme plate (mcp.<nom>), pour lire les deux.
+export function mcpServers(cfg) {
+  const m = cfg?.mcp ?? {}
+  if (m.servers && typeof m.servers === "object") return m.servers
+  return Object.fromEntries(Object.entries(m).filter(([k, v]) => k !== "timeout" && v && typeof v === "object"))
+}
