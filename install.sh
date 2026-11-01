@@ -7,17 +7,19 @@
 #   ./install.sh --no-tools     copie la config seulement (aucun téléchargement/installation d'outil)
 #   ./install.sh --memory-only  (re)tente seulement l'installation de MemPalace, sans rien recopier
 #   ./install.sh --with-matt    + skills complets de Matt Pocock
+#   (ne lance pas ce script avec sudo : tout irait dans /root au lieu de ton dossier personnel)
 #   OPENCODE_CONFIG_DIR=...     autre dossier de destination ; OBSCURA_BIN_DIR=... dossier des binaires
 set -Eeuo pipefail
 
-LITE=0; TOOLS=1; MATT=0; MEMONLY=0
+LITE=0; TOOLS=1; MATT=0; MEMONLY=0; ALLOWROOT=0
 for a in "$@"; do
   case "$a" in
     --lite) LITE=1; TOOLS=0 ;;
     --no-tools) TOOLS=0 ;;
     --memory-only) MEMONLY=1 ;;
+    --allow-root) ALLOWROOT=1 ;;
     --with-matt) MATT=1 ;;
-    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
     *) echo "Option inconnue : $a" >&2; exit 1 ;;
   esac
 done
@@ -33,6 +35,11 @@ trap 'rm -rf "$TMP"' EXIT
 need() { command -v "$1" >/dev/null 2>&1; }
 warn() { echo "⚠️  $*" >&2; }
 die()  { echo "❌ $*" >&2; exit 1; }
+
+# Lancé via sudo : $HOME serait celui de root (config, outils et MemPalace installés au mauvais endroit)
+if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$ALLOWROOT" != 1 ]; then
+  die "Ne lance pas ce script avec sudo (il installerait tout dans $HOME, pas chez $SUDO_USER). Relance simplement : ./install.sh"
+fi
 
 
 # MemPalace dans un venv dédié (évite les erreurs PEP 668 et les Python trop récents sans wheels onnxruntime)
