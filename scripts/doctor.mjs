@@ -94,7 +94,21 @@ ok(`${skills} skills, ${fs.existsSync(path.join(DEST, "commands")) ? fs.readdirS
 for (const [c, why] of [["git", "worktrees (2.5+)"], ["gh", "/pr et recherche GitHub"], ["agent-wt", "worktrees par agent"], ["oc-new-rust", "gabarit Rust"]]) {
   has(c) ? ok(`${c} disponible`) : wa(`${c} introuvable (${why})`)
 }
-if (has("gh")) run("gh", ["auth", "status"], 8000).status === 0 ? ok("gh connecté") : wa("gh non connecté (gh auth login)")
+if (has("gh")) {
+  // `gh auth status` peut renvoyer un code d'erreur alors que gh fonctionne (jeton jugé incomplet, 2e compte, trousseau lent...) :
+  // on essaie donc aussi un vrai appel d'API, et on affiche la cause réelle si les deux échouent.
+  const g = run("gh", ["auth", "status"], 25000)
+  if (g.status === 0) ok("gh connecté")
+  else {
+    const who = run("gh", ["api", "user", "--jq", ".login"], 25000)
+    const login = who.status === 0 ? (who.stdout ?? "").trim() : ""
+    if (login) ok(`gh connecté (${login}) — remarque : \`gh auth status\` renvoie le code ${g.status ?? g.signal} (voir sa sortie : gh auth status ; echo $?)`)
+    else {
+      const why = g.error ? `erreur de lancement : ${g.error.message}` : g.status === null ? `délai dépassé (${g.signal ?? "timeout"}) : trousseau verrouillé ?` : squash(g.stderr || g.stdout, 4)
+      wa(`gh non connecté (code ${g.status ?? "aucun"}) : ${why}`)
+    }
+  }
+}
 
 // MCP activés : vérifie leurs prérequis
 console.log("\nMCP activés :")
