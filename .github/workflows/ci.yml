@@ -6,7 +6,11 @@ on:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-26.04]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -21,14 +25,22 @@ jobs:
           test "$(ls "$RUNNER_TEMP/lite/agents" | wc -l)" -eq 12
 
   shellcheck:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-26.04]
     steps:
       - uses: actions/checkout@v7
       - name: ShellCheck
         run: shellcheck install.sh uninstall.sh doctor.sh scripts/*.sh config/bin/agent-wt
 
   rust-template:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-26.04]
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
