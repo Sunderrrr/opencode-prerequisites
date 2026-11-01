@@ -80,7 +80,7 @@ jobs:
             setup: dnf install -y nodejs npm git python3 tar gzip curl
           - name: RHEL (Rocky 9)
             image: rockylinux:9
-            setup: dnf module enable -y nodejs:20 && dnf install -y nodejs npm git python3 tar gzip curl
+            setup: dnf module enable -y nodejs:20 && dnf install -y nodejs npm git python3 tar gzip
     name: ${{ matrix.name }}
     container: ${{ matrix.image }}
     steps:

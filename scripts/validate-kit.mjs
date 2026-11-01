@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Valide le kit : config, agents, skills, commandes, plugins, MCP, secrets. Utilisé par la CI et doctor.
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import { execFileSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
@@ -74,8 +75,13 @@ for (const f of ls(path.join(C, "commands")).filter((x) => x.endsWith(".md"))) {
 
 // 5. Plugins (syntaxe)
 for (const f of ls(path.join(C, "plugins")).filter((x) => x.endsWith(".js"))) {
-  try { execFileSync(process.execPath, ["--check", path.join(C, "plugins", f)], { stdio: "pipe" }) }
-  catch (e) { err(`plugins/${f} : erreur de syntaxe\n${e.stderr}`) }
+  // Les plugins sont des modules ES : on les vérifie comme .mjs (Node < 22 lit un .js en CommonJS et rejette « export »)
+  const tmp = path.join(os.tmpdir(), `oc-plugin-${process.pid}-${f.replace(/\.js$/, "")}.mjs`)
+  try {
+    fs.writeFileSync(tmp, read(path.join(C, "plugins", f)))
+    execFileSync(process.execPath, ["--check", tmp], { stdio: "pipe" })
+  } catch (e) { err(`plugins/${f} : erreur de syntaxe\n${e.stderr}`) }
+  finally { fs.rmSync(tmp, { force: true }) }
 }
 
 // 6. Secrets
