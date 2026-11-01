@@ -52,6 +52,19 @@ chmod +x "$BIN/obscura" "$BIN/obscura-worker" 2>/dev/null || true
 "$BIN/obscura" --help >/dev/null 2>&1 && echo "✅ Obscura installé dans $BIN" || { echo "❌ obscura ne démarre pas" >&2; exit 1; }
 case ":$PATH:" in *":$BIN:"*) ;; *) echo "⚠️  Ajoute $BIN à ton PATH : export PATH=\"$BIN:\$PATH\"" ;; esac
 
+# --- Trivy (scan sécurité) + plugin MCP ---
+if ! command -v trivy >/dev/null 2>&1; then
+  echo "⬇️  Trivy : installation dans $BIN..."
+  curl -fsSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh -o "$TMP/trivy-install.sh" \
+    && sh "$TMP/trivy-install.sh" -b "$BIN" \
+    || { echo "❌ Installation de Trivy échouée : https://trivy.dev/latest/getting-started/installation/" >&2; exit 1; }
+fi
+PATH="$BIN:$PATH" trivy plugin install mcp || echo "⚠️  trivy plugin install mcp a échoué : relance-le à la main."
+
+# --- Docker (requis pour le MCP terraform) ---
+command -v docker >/dev/null 2>&1 || echo "⚠️  Docker introuvable : le MCP terraform en a besoin (https://docs.docker.com/get-docker/)."
+command -v gh >/dev/null 2>&1 || echo "⚠️  gh (GitHub CLI) introuvable : requis pour /pr et la recherche GitHub (https://cli.github.com)."
+
 # --- Outil git multi-agents : agent-wt ---
 BIN="${OBSCURA_BIN_DIR:-$HOME/.local/bin}"
 mkdir -p "$BIN"

@@ -29,7 +29,7 @@ Tu es le CEO. Tu diriges des spécialistes ; tu n'écris pas de code toi-même e
 6. Push / PR seulement si l'utilisateur le demande : appelle `@integrator` en **mode PR** (PR unique par défaut, PR multiples si demandé). Il rebase sur `origin/main`, teste, pousse, ouvre la PR avec `gh` et la re-synchronise si `main` avance.
 
 ## Routage selon l'intention
-- **Question / recherche** → `@researcher` (ou réponds directement si trivial).
+- **Question / recherche** → `@researcher` (code du projet) ou `@web-researcher` (internet/GitHub) (ou réponds directement si trivial).
 - **Bug / test qui échoue** → `@debugger`, puis `@qa` si le test manquait.
 - **Nouvelle fonctionnalité** → `@architect` → spécialistes → contrôle qualité.
 - **Audit / revue** → `@security` et/ou `@review`, sans modification.
@@ -58,6 +58,7 @@ Si un spécialiste signale un manque dans le brief, complète-le et relance.
 | `@docs` | README, docs d'API, changelog, ADR |
 | `@integrator` | fusion des branches d'agents parallèles, conflits git, nettoyage des worktrees |
 | `@debugger` | bug ou test qui échoue |
+| `@web-researcher` | infos sur internet/GitHub : docs, exemples de code d'autres dépôts, comparaisons de projets, nouveautés |
 | `@researcher` | recherche rapide en lecture seule |
 | `@review` / `@code-simplifier` / `@verify-app` | contrôle qualité en fin de tâche |
 

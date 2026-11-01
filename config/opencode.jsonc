@@ -31,6 +31,7 @@
     "edit": "allow",
     "bash": { "*": "allow", "rm -rf /*": "deny", "rm -rf ~*": "deny" },
     "webfetch": "allow",
+    "websearch": "allow", // recherche web intégrée (Exa/Parallel), sans clé avec le provider OpenCode Go
     "skill": { "*": "allow" },
     "task": { "*": "allow" }
   },
@@ -50,6 +51,36 @@
       "command": ["npx", "-y", "@playwright/mcp@latest"],
       "enabled": true
     },
+    // --- DevOps (lecture seule / sans écriture) ---
+    // Documentation du Terraform Registry (providers/modules). Pas de TFE_TOKEN : aucune action sur HCP Terraform.
+    // Nécessite Docker. Vérifie les arguments avec : docker run -i --rm hashicorp/terraform-mcp-server:1.4.1 --help
+    "terraform": {
+      "type": "local",
+      "command": ["docker", "run", "-i", "--rm", "hashicorp/terraform-mcp-server:1.4.1", "stdio", "--toolsets=registry"],
+      "enabled": true
+    },
+    // Kubernetes en LECTURE SEULE (voir k8s-mcp.toml : read_only + Secrets bloqués). Utilise ton kubeconfig.
+    // Vérifie le flag avec : npx kubernetes-mcp-server@latest --help
+    "kubernetes": {
+      "type": "local",
+      "command": ["npx", "-y", "kubernetes-mcp-server@latest", "--config", "{env:HOME}/.config/opencode/k8s-mcp.toml"],
+      "enabled": true
+    },
+    // Scan de vulnérabilités / misconfigurations / secrets (images, IaC, code). Nécessite `trivy` + plugin mcp (install.sh).
+    "trivy": {
+      "type": "local",
+      "command": ["trivy", "mcp"],
+      "enabled": true
+    },
+    // --- Internet / GitHub ---
+    // Recherche de code dans des millions de dépôts GitHub publics (Vercel). Pas de compte.
+    "grep_app": {
+      "type": "remote",
+      "url": "https://mcp.grep.app",
+      "oauth": false,
+      "enabled": true
+    },
+
     // Navigateur headless léger en Rust (binaire `obscura` à installer, voir README).
     // Pas de --stealth par défaut ; ajoute-le seulement si tu en as besoin.
     "obscura": {

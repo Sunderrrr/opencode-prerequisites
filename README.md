@@ -60,3 +60,9 @@ Tout tourne sur `opencode-go/deepseek-v4.1-flash`. Prérequis côté console Ope
 ### D'où viennent ces conventions
 
 Inspiré de [VoltAgent/awesome-claude-code-subagents](https://github.com/VoltAgent/awesome-claude-code-subagents) (rôle, étapes « quand appelé », checklists, rapport final), de la [doc des sous-agents de Claude Code](https://code.claude.com/docs/en/sub-agents) (descriptions courtes avec « utiliser proactivement », prompt autonome, outils restreints, règles dures par hooks) et du schéma d'oh-my-opencode (orchestrateur + assistants en lecture seule qui ne délèguent pas).
+
+## MCP DevOps et internet
+
+Actifs par défaut : **terraform** (docs du registre, via Docker, sans jeton), **kubernetes** (lecture seule, Secrets bloqués par `k8s-mcp.toml`, utilise ton kubeconfig), **trivy** (scan images/IaC/secrets), **grep_app** (recherche de code dans GitHub, sans compte). Internet : outils intégrés `websearch` et `webfetch`, agent `web-researcher`, skill `web-research`, et `gh search/api`.
+
+Je n'ai pas pu vérifier les arguments exacts de ces serveurs dans OpenCode ; si l'un échoue au démarrage, lance `opencode mcp debug <nom>` et corrige la ligne `command`.
