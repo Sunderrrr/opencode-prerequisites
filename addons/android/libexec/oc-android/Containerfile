@@ -1,0 +1,55 @@
+# Image Android pour oc-android : JDK 17, SDK Android, Gradle, émulateur (x86_64, google_apis).
+# Construite par `oc-android build-image` ; tous les ARG sont fournis par ce script.
+FROM docker.io/library/ubuntu:24.04
+
+ARG ACCEPT_ANDROID_LICENSES=no
+ARG API
+ARG BUILD_TOOLS
+ARG CLT_URL
+ARG CLT_SHA1
+ARG GRADLE_VERSION
+ARG GRADLE_URL
+ARG GRADLE_SHA256
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    ANDROID_HOME=/opt/android-sdk \
+    ANDROID_SDK_ROOT=/opt/android-sdk \
+    GRADLE_HOME=/opt/gradle \
+    OC_ANDROID_API=${API}
+ENV PATH="${PATH}:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/emulator:/opt/gradle/bin"
+
+# Les licences du SDK Android doivent être acceptées explicitement par l'utilisateur (oc-android build-image --accept-licenses)
+RUN test "${ACCEPT_ANDROID_LICENSES}" = "yes" || { echo "Licences Android non acceptées : relance avec --accept-licenses" >&2; exit 1; }
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      openjdk-17-jdk-headless ca-certificates curl unzip git procps iproute2 \
+      libnss3 libpulse0 libgl1 libgbm1 libasound2t64 libx11-6 libxcb1 libxext6 libxi6 libxtst6 \
+      libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libxkbcommon0 libdbus-1-3 \
+ && rm -rf /var/lib/apt/lists/*
+
+# Outils en ligne de commande Android : archive officielle, somme SHA-1 vérifiée
+RUN mkdir -p /opt/android-sdk/cmdline-tools \
+ && curl -fsSL "${CLT_URL}" -o /tmp/clt.zip \
+ && echo "${CLT_SHA1}  /tmp/clt.zip" | sha1sum -c - \
+ && unzip -q /tmp/clt.zip -d /opt/android-sdk/cmdline-tools \
+ && mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest \
+ && rm /tmp/clt.zip
+
+# Gradle (sert à créer le « wrapper » d'un nouveau projet) : archive officielle, SHA-256 vérifié
+RUN curl -fsSL "${GRADLE_URL}" -o /tmp/gradle.zip \
+ && echo "${GRADLE_SHA256}  /tmp/gradle.zip" | sha256sum -c - \
+ && unzip -q /tmp/gradle.zip -d /opt \
+ && mv "/opt/gradle-${GRADLE_VERSION}" /opt/gradle \
+ && rm /tmp/gradle.zip
+
+# Composants du SDK : plate-forme, build-tools, émulateur et image système
+RUN yes | sdkmanager --licenses > /dev/null \
+ && sdkmanager --install "platform-tools" "emulator" "platforms;android-${API}" "build-tools;${BUILD_TOOLS}" "system-images;android-${API};google_apis;x86_64" \
+ && chmod -R a+rwX /opt/android-sdk
+
+COPY emulator-entrypoint.sh /usr/local/bin/oc-emulator-entrypoint
+RUN chmod +x /usr/local/bin/oc-emulator-entrypoint
+
+WORKDIR /workspace
+CMD ["bash"]

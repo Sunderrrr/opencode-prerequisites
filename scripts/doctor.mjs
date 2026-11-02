@@ -172,27 +172,22 @@ for (const [name, m] of Object.entries(mcpServers(cfg))) {
   ok(`${name} : ${bin} disponible`)
 }
 
-// Android (facultatif) : JDK, SDK, adb, émulateur, KVM, appareils
-if (fs.existsSync(path.join(DEST, "agents", "android.md"))) {
-  console.log("\nAndroid (facultatif, pour les agents android et mobile-tester) :")
-  const sdkCandidates = [process.env.ANDROID_HOME, process.env.ANDROID_SDK_ROOT, path.join(HOME, "Android", "Sdk"), path.join(HOME, "Library", "Android", "sdk"), "/opt/android-sdk", "/usr/lib/android-sdk"].filter(Boolean)
-  const sdk = sdkCandidates.find((d) => fs.existsSync(path.join(d, "platform-tools")) || fs.existsSync(path.join(d, "cmdline-tools")))
-  const tool = (rel, bin) => { const p = sdk && path.join(sdk, rel); return p && fs.existsSync(p) ? p : (has(bin) ? bin : null) }
-  const jv = run("java", ["-version"], 10000)
-  const jmajor = Number(((jv.stderr ?? "") + (jv.stdout ?? "")).match(/version "(\d+)/)?.[1])
-  Number.isFinite(jmajor) ? (jmajor >= 17 ? ok(`JDK ${jmajor}`) : wa(`JDK ${jmajor} trop ancien (17+ requis pour Gradle/AGP)`)) : wa("JDK introuvable (17+ requis) : Arch jdk17-openjdk · Debian/Ubuntu openjdk-17-jdk · Fedora java-17-openjdk-devel")
-  sdk ? ok(`SDK Android : ${sdk}${process.env.ANDROID_HOME ? "" : "  (ANDROID_HOME non défini : exporte-le dans ton shell pour Gradle et Android Studio)"}`) : wa("SDK Android introuvable (ANDROID_HOME, ~/Android/Sdk) : voir la section Android du README")
-  const adb = tool("platform-tools/adb", "adb")
-  adb ? ok(`adb : ${adb}`) : wa("adb introuvable (Arch android-tools · Debian/Ubuntu adb · Fedora android-tools)")
-  const emu = tool("emulator/emulator", "emulator")
-  emu ? ok("émulateur Android présent") : wa("émulateur absent (sdkmanager \"emulator\" \"system-images;android-<n>;google_apis;x86_64\")")
-  tool("cmdline-tools/latest/bin/sdkmanager", "sdkmanager") ? ok("sdkmanager / avdmanager présents") : wa("cmdline-tools absents (nécessaires pour installer plates-formes et images système)")
-  if (process.platform === "linux") {
-    try { fs.accessSync("/dev/kvm", fs.constants.R_OK | fs.constants.W_OK); ok("/dev/kvm accessible (émulateur accéléré)") }
-    catch { wa("/dev/kvm inaccessible : l'émulateur sera inutilisable (ajoute-toi au groupe kvm : sudo usermod -aG kvm $USER, puis reconnecte-toi)") }
+// Module Android (option --android) : toolchain Podman
+if (fs.existsSync(path.join(DEST, "android", "Containerfile"))) {
+  console.log("\nModule Android (Podman) :")
+  const oc = path.join(BIN, "oc-android")
+  if (!fs.existsSync(oc)) ko(`${oc} introuvable : relance ./install.sh --android`)
+  else {
+    const r = run(oc, ["doctor"], 60000)
+    const lines = ((r.stdout ?? "") + (r.stderr ?? "")).split("\n").map((l) => l.trim()).filter(Boolean)
+    if (!lines.length) wa("oc-android doctor n'a rien répondu")
+    for (const l of lines) {
+      if (l.startsWith("✅")) ok(l.slice(2).trim())
+      else if (l.startsWith("❌")) wa(`${l.slice(1).trim()} (module Android facultatif)`)
+      else if (l.startsWith("⚠️")) wa(l.replace(/^⚠️\s*/, ""))
+      else console.log(`   · ${l.replace(/^ℹ️\s*/, "")}`)
+    }
   }
-  if (emu) { const l = run(emu, ["-list-avds"], 15000); const avds = (l.stdout ?? "").split("\n").map((x) => x.trim()).filter(Boolean); console.log(`   · AVD : ${avds.length ? avds.join(", ") : "aucun (création sur demande : avdmanager create avd …)"}`) }
-  if (adb) { const d = run(adb, ["devices"], 15000); const devs = (d.stdout ?? "").split("\n").slice(1).map((x) => x.trim()).filter(Boolean); console.log(`   · appareils connectés : ${devs.length ? devs.join(" | ") : "aucun"}`) }
 }
 
 // Plugins

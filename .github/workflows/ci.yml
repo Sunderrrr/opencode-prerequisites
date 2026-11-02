@@ -26,6 +26,20 @@ jobs:
         run: |
           pip install --quiet jsonschema
           python3 scripts/validate-schema.py
+      - name: "Module Android (faux podman : commandes, montages, protections, faux adb)"
+        run: node scripts/test-android.mjs
+      - name: Containerfile Android (hadolint, erreurs seulement)
+        run: docker run --rm -i docker.io/hadolint/hadolint hadolint --failure-threshold error - < addons/android/libexec/oc-android/Containerfile
+      - name: Installation avec le module Android, mémorisation puis retrait
+        run: |
+          export OPENCODE_CONFIG_DIR="$RUNNER_TEMP/android" OBSCURA_BIN_DIR="$RUNNER_TEMP/abin"
+          ./install.sh --no-tools --android
+          test -f "$OPENCODE_CONFIG_DIR/agents/android.md" && test -f "$OPENCODE_CONFIG_DIR/skills/android-dev/SKILL.md"
+          ./install.sh --no-tools                      # sans option : le module est conservé
+          test -f "$OPENCODE_CONFIG_DIR/agents/mobile-tester.md"
+          test "$(grep -c '>>> android' "$OPENCODE_CONFIG_DIR/agents/ceo.md")" -eq 1
+          ./install.sh --no-tools --no-android
+          test ! -e "$OPENCODE_CONFIG_DIR/agents/android.md"
       - name: Installation à blanc (complète puis légère, sans outils)
         run: |
           OPENCODE_CONFIG_DIR="$RUNNER_TEMP/full" OBSCURA_BIN_DIR="$RUNNER_TEMP/bin" ./install.sh --no-tools
@@ -41,7 +55,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: ShellCheck
-        run: shellcheck install.sh uninstall.sh doctor.sh scripts/*.sh config/bin/*
+        run: shellcheck install.sh uninstall.sh doctor.sh scripts/*.sh config/bin/* addons/android/bin/* addons/android/libexec/oc-android/*.sh addons/android/libexec/oc-android/adb-shim
 
   rust-template:
     runs-on: ${{ matrix.os }}
@@ -105,11 +119,8 @@ jobs:
           check() { OC_REA_NODE_VERSION="$1" ./config/bin/oc-rea-mcp --check >/dev/null 2>&1; }
           for v in 26.12.1 26.13.0 27.0.0 24.22.1 24.30.0 22.23.4; do check "$v" || { echo "attendu OK : $v"; exit 1; }; done
           for v in 26.7.0 26.12.0 25.9.0 24.22.0 22.23.3 20.19.0 18.0.0; do check "$v" && { echo "attendu KO : $v"; exit 1; } || true; done
-      - name: oc-mobile-mcp (adb requis, SDK retrouvé via ANDROID_HOME)
-        run: |
-          mkdir -p /tmp/sdk/platform-tools && printf '#!/bin/sh\necho adb\n' > /tmp/sdk/platform-tools/adb && chmod +x /tmp/sdk/platform-tools/adb
-          ANDROID_HOME=/tmp/sdk PATH=/usr/bin:/bin ./config/bin/oc-mobile-mcp --check
-          if PATH=/usr/bin:/bin HOME=/nonexistent ./config/bin/oc-mobile-mcp --check 2>/dev/null; then echo "sans adb : doit échouer"; exit 1; fi
+      - name: Module Android (tests avec faux podman, sans Docker)
+        run: node scripts/test-android.mjs
       - name: Lanceurs MCP (choix du navigateur et du moteur de conteneurs)
         run: |
           mkdir -p /tmp/fake && cd /tmp/fake

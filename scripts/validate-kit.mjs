@@ -31,42 +31,47 @@ if (cfg) {
   }
 }
 
-// 2. Agents
+// 2. Agents (noyau + modules addons/*)
 const agents = {}
-for (const f of ls(path.join(C, "agents")).filter((x) => x.endsWith(".md"))) {
+const addonDirs = ls(path.join(ROOT, "addons")).map((d) => path.join(ROOT, "addons", d)).filter((d) => fs.statSync(d).isDirectory())
+const agentDirs = [path.join(C, "agents"), ...addonDirs.map((d) => path.join(d, "agents"))]
+for (const dir of agentDirs) for (const f of ls(dir).filter((x) => x.endsWith(".md"))) {
   const name = f.slice(0, -3)
-  const md = read(path.join(C, "agents", f))
+  const rel = path.relative(ROOT, path.join(dir, f))
+  const md = read(path.join(dir, f))
   const fm = frontmatter(md)
-  if (!fm) { err(`agents/${f} : frontmatter manquant`); continue }
+  if (!fm) { err(`${rel} : frontmatter manquant`); continue }
+  if (agents[name]) err(`${rel} : agent "${name}" défini deux fois`)
   agents[name] = fm
-  if (!fm.description) err(`agents/${f} : description manquante`)
-  else if (fm.description.length > 320) warn(`agents/${f} : description longue (${fm.description.length} car.) : coûte du contexte à chaque session`)
-  if (!["primary", "subagent", "all"].includes(fm.mode)) err(`agents/${f} : mode invalide (${fm.mode})`)
-  if (!/^[a-z][a-z0-9-]*$/.test(name)) err(`agents/${f} : nom invalide`)
-  if (!md.split(/^---$/m)[2]?.trim()) err(`agents/${f} : prompt vide`)
+  if (!fm.description) err(`${rel} : description manquante`)
+  else if (fm.description.length > 320) warn(`${rel} : description longue (${fm.description.length} car.) : coûte du contexte à chaque session`)
+  if (!["primary", "subagent", "all"].includes(fm.mode)) err(`${rel} : mode invalide (${fm.mode})`)
+  if (!/^[a-z][a-z0-9-]*$/.test(name)) err(`${rel} : nom invalide`)
+  if (!md.split(/^---$/m)[2]?.trim()) err(`${rel} : prompt vide`)
 }
 if (cfg?.default_agent) {
   if (!agents[cfg.default_agent]) err(`default_agent "${cfg.default_agent}" : fichier agents/${cfg.default_agent}.md introuvable`)
   else if (agents[cfg.default_agent].mode !== "primary") err(`default_agent "${cfg.default_agent}" doit avoir mode: primary`)
 }
-// Mentions @agent dans le CEO
+// Mentions @agent dans le CEO et dans les blocs que les modules y ajoutent
 const builtin = new Set(["explore", "general", "plan", "build"])
-if (fs.existsSync(path.join(C, "agents", "ceo.md"))) {
-  const ceo = read(path.join(C, "agents", "ceo.md"))
-  for (const m of ceo.matchAll(/(?:^|[\s(`|/])@([a-z][a-z0-9-]+)/g)) {
-    if (!agents[m[1]] && !builtin.has(m[1])) err(`ceo.md mentionne @${m[1]} mais agents/${m[1]}.md n'existe pas`)
+const ceoFiles = [path.join(C, "agents", "ceo.md"), ...addonDirs.flatMap((d) => ls(d).filter((x) => /^ceo\..*\.md$/.test(x)).map((x) => path.join(d, x)))]
+for (const f of ceoFiles.filter(fs.existsSync)) {
+  for (const m of read(f).matchAll(/(?:^|[\s(`|/])@([a-z][a-z0-9-]+)/g)) {
+    if (!agents[m[1]] && !builtin.has(m[1])) err(`${path.relative(ROOT, f)} mentionne @${m[1]} mais aucun agent de ce nom n'existe`)
   }
 }
 
-// 3. Skills
-for (const d of ls(path.join(C, "skills"))) {
-  const f = path.join(C, "skills", d, "SKILL.md")
-  if (!fs.existsSync(f)) { err(`skills/${d} : SKILL.md manquant`); continue }
+// 3. Skills (noyau + modules)
+for (const base of [path.join(C, "skills"), ...addonDirs.map((d) => path.join(d, "skills"))]) for (const d of ls(base)) {
+  const f = path.join(base, d, "SKILL.md")
+  const rel = path.relative(ROOT, path.join(base, d))
+  if (!fs.existsSync(f)) { err(`${rel} : SKILL.md manquant`); continue }
   const fm = frontmatter(read(f))
-  if (!fm) { err(`skills/${d}/SKILL.md : frontmatter manquant`); continue }
-  if (fm.name !== d) err(`skills/${d} : name ("${fm.name}") doit égaler le dossier`)
-  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(fm.name ?? "")) err(`skills/${d} : name invalide`)
-  if (!fm.description || fm.description.length > 1024) err(`skills/${d} : description absente ou > 1024`)
+  if (!fm) { err(`${rel}/SKILL.md : frontmatter manquant`); continue }
+  if (fm.name !== d) err(`${rel} : name ("${fm.name}") doit égaler le dossier`)
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(fm.name ?? "")) err(`${rel} : name invalide`)
+  if (!fm.description || fm.description.length > 1024) err(`${rel} : description absente ou > 1024`)
 }
 
 // 4. Commandes
@@ -100,6 +105,29 @@ for (const f of ls(path.join(C, "libexec")).filter((x) => x.endsWith(".mjs"))) {
   catch (e) { err(`libexec/${f} : erreur de syntaxe\n${e.stderr}`) }
 }
 
+// 5c. Modules : scripts shell, scripts Node, Containerfile
+for (const d of addonDirs) {
+  const shellFiles = [...ls(path.join(d, "bin")).map((x) => path.join(d, "bin", x)), ...ls(path.join(d, "libexec")).flatMap((sub) => {
+    const full = path.join(d, "libexec", sub)
+    return fs.statSync(full).isDirectory() ? ls(full).map((x) => path.join(full, x)) : [full]
+  })]
+  for (const f of shellFiles) {
+    const rel = path.relative(ROOT, f)
+    if (f.endsWith(".mjs")) { try { execFileSync(process.execPath, ["--check", f], { stdio: "pipe" }) } catch (e) { err(`${rel} : erreur de syntaxe\n${e.stderr}`) } }
+    else if (/^#!.*\b(ba)?sh\b/.test(read(f).split("\n")[0] ?? "")) { try { execFileSync("bash", ["-n", f], { stdio: "pipe" }) } catch (e) { err(`${rel} : erreur de syntaxe bash\n${e.stderr}`) } }
+  }
+  const cf = path.join(d, "libexec", "oc-android", "Containerfile")
+  if (path.basename(d) === "android") {
+    if (!fs.existsSync(cf)) err("addons/android : Containerfile manquant")
+    else {
+      const t = read(cf)
+      if (!/ARG ACCEPT_ANDROID_LICENSES/.test(t) || !/ACCEPT_ANDROID_LICENSES.*=\s*"yes"/.test(t)) err("Containerfile Android : la garde d'acceptation des licences est absente")
+      if (!/sha1sum -c/.test(t) || !/sha256sum -c/.test(t)) err("Containerfile Android : les téléchargements doivent être vérifiés par somme de contrôle")
+      if (/:latest\b/.test(t.split("\n").filter((l) => /^FROM /.test(l)).join("\n"))) err("Containerfile Android : image de base non épinglée (:latest)")
+    }
+  }
+}
+
 // 6. Secrets
 const SECRET = [/sk-[A-Za-z0-9]{20,}/, /ghp_[A-Za-z0-9]{30,}/, /gho_[A-Za-z0-9]{30,}/, /AKIA[0-9A-Z]{16}/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /xox[bap]-[A-Za-z0-9-]{10,}/]
 const walk = (d) => ls(d).flatMap((x) => {
@@ -119,7 +147,7 @@ for (const f of [...ls(ROOT).filter((x) => x.endsWith(".sh")).map((x) => path.jo
   try { execFileSync("bash", ["-n", f], { stdio: "pipe" }) } catch (e) { err(`${path.relative(ROOT, f)} : erreur de syntaxe bash\n${e.stderr}`) }
 }
 
-console.log(`Agents: ${Object.keys(agents).length} · MCP: ${Object.keys(mcpServers(cfg)).length} · Skills: ${ls(path.join(C, "skills")).length}`)
+console.log(`Agents: ${Object.keys(agents).length} · MCP: ${Object.keys(mcpServers(cfg)).length} · Skills: ${ls(path.join(C, "skills")).length + addonDirs.reduce((n, d) => n + ls(path.join(d, "skills")).length, 0)} · Modules: ${addonDirs.length}`)
 warns.forEach((w) => console.log(`⚠️  ${w}`))
 if (errors.length) { errors.forEach((e) => console.error(`❌ ${e}`)); process.exit(1) }
 console.log("✅ Kit valide")

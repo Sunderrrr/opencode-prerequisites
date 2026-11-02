@@ -8,20 +8,25 @@
 #   ./install.sh --memory-only  (re)tente seulement l'installation de MemPalace, sans rien recopier
 #   ./install.sh --shell-env    ajoute PATH et MEMPALACE_ADAPTER_PYTHON à ~/.bashrc / ~/.zshrc (une seule fois)
 #   ./install.sh --with-matt    + skills complets de Matt Pocock
+#   ./install.sh --android      module Android (option) : agents android et mobile-tester, MCP mobile, toolchain Podman
+#                               (image à construire ensuite : oc-android build-image --accept-licenses). Mémorisé ;
+#   ./install.sh --no-android   retire le module Android
 #   (ne lance pas ce script avec sudo : tout irait dans /root au lieu de ton dossier personnel)
 #   OPENCODE_CONFIG_DIR=...     autre dossier de destination ; OBSCURA_BIN_DIR=... dossier des binaires
 set -Eeuo pipefail
 
-LITE=0; TOOLS=1; MATT=0; MEMONLY=0; ALLOWROOT=0; SHELLENV=0
+LITE=0; TOOLS=1; MATT=0; MEMONLY=0; ALLOWROOT=0; SHELLENV=0; ANDROID=0; NOANDROID=0
 for a in "$@"; do
   case "$a" in
     --lite) LITE=1; TOOLS=0 ;;
     --no-tools) TOOLS=0 ;;
     --memory-only) MEMONLY=1 ;;
     --allow-root) ALLOWROOT=1 ;;
+    --android) ANDROID=1 ;;
+    --no-android) NOANDROID=1 ;;
     --shell-env) SHELLENV=1 ;;
     --with-matt) MATT=1 ;;
-    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "Option inconnue : $a" >&2; exit 1 ;;
   esac
 done
@@ -70,6 +75,10 @@ pkg_hint() {
     dnf:node)      echo "sudo dnf install nodejs npm" ;;
     brew:node)     echo "brew install node" ;;
     apt:venv)      echo "sudo apt install python3-venv" ;;
+    pacman:podman) echo "sudo pacman -S --needed podman   (rootless : /etc/subuid et /etc/subgid doivent avoir une plage pour ton utilisateur)" ;;
+    apt:podman)    echo "sudo apt install podman" ;;
+    dnf:podman)    echo "sudo dnf install podman" ;;
+    brew:podman)   echo "brew install podman" ;;
     pacman:android) echo "sudo pacman -S --needed android-tools jdk17-openjdk   + SDK : paquet AUR android-sdk-cmdline-tools-latest (yay -S ...) ou Android Studio" ;;
     apt:android)    echo "sudo apt install adb openjdk-17-jdk   + SDK : outils en ligne de commande depuis https://developer.android.com/studio#command-tools (ou Android Studio)" ;;
     dnf:android)    echo "sudo dnf install android-tools java-17-openjdk-devel   + SDK : outils en ligne de commande depuis https://developer.android.com/studio#command-tools (ou Android Studio)" ;;
@@ -170,6 +179,42 @@ if [ "$MEMONLY" = 1 ]; then
   exit 0
 fi
 
+# --- Module Android (option) : agents, skill, MCP, toolchain Podman. Mémorisé par un repère dans la config. ---
+ANDROID_MARKER="$DEST/.opencode-prerequisites.android"
+ANDROID_SHIM_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/oc-android/sdk"
+if [ "$ANDROID" = 0 ] && [ "$NOANDROID" = 0 ] && [ -f "$ANDROID_MARKER" ]; then ANDROID=1; fi
+if [ "$LITE" = 1 ] && [ "$ANDROID" = 1 ]; then warn "Le profil léger n'inclut pas le module Android : ignoré."; ANDROID=0; fi
+
+# apply_block <fichier> <nom> <source> : (re)met un bloc balisé en fin de fichier, sans doublon
+apply_block() {
+  local f="$1" name="$2" src="$3" tmp
+  [ -f "$f" ] || return 0
+  tmp="$(mktemp)"
+  awk -v s="<!-- >>> $name >>> -->" -v e="<!-- <<< $name <<< -->" '$0==s{skip=1;next} $0==e{skip=0;next} skip!=1{print}' "$f" > "$tmp"
+  { cat "$tmp"; echo ""; echo "<!-- >>> $name >>> -->"; cat "$src"; echo "<!-- <<< $name <<< -->"; } > "$f"
+  rm -f "$tmp"
+}
+
+install_android_addon() {
+  local A="$HERE/addons/android"
+  need podman || warn "Podman introuvable : requis pour le module Android. → $(pkg_hint podman)"
+  mkdir -p "$DEST/agents" "$DEST/skills" "$DEST/android" "$ANDROID_SHIM_ROOT/platform-tools"
+  cp -a "$A/agents/." "$DEST/agents/"
+  cp -a "$A/skills/." "$DEST/skills/"
+  cp -a "$A/libexec/oc-android/." "$DEST/android/"
+  for f in "$A"/bin/*; do install -m 0755 "$f" "$BIN/$(basename "$f")"; done
+  install -m 0755 "$A/libexec/oc-android/adb-shim" "$ANDROID_SHIM_ROOT/platform-tools/adb"
+  apply_block "$DEST/AGENTS.md" android "$A/AGENTS.android.md"
+  apply_block "$DEST/agents/ceo.md" android "$A/ceo.android.md"
+  : > "$ANDROID_MARKER"
+  echo "✅ Module Android installé (agents android et mobile-tester, skill android-dev, oc-android, faux adb pour mobile-mcp)"
+}
+
+remove_android_addon() {
+  rm -f "$DEST/agents/android.md" "$DEST/agents/mobile-tester.md" "$BIN/oc-android" "$BIN/oc-mobile-mcp" "$ANDROID_MARKER"
+  rm -rf "$DEST/skills/android-dev" "$DEST/android" "$ANDROID_SHIM_ROOT"
+}
+
 need node || die "Node.js est requis (validation, profil léger, MCP). → $(pkg_hint node)"
 need opencode || warn "opencode introuvable. Installe-le : curl -fsSL https://opencode.ai/install | bash"
 
@@ -198,11 +243,18 @@ cp "$TMP/new.manifest" "$MANIFEST"
 for f in "$SRC"/bin/*; do install -m 0755 "$f" "$BIN/$(basename "$f")"; done
 install -m 0755 "$HERE/scripts/new-rust-project.sh" "$BIN/oc-new-rust"
 cp -a "$HERE/templates" "$DEST/templates"
-echo "✅ Config installée dans $DEST ; lanceurs (agent-wt, oc-new-rust, oc-models, oc-playwright-mcp, oc-terraform-mcp, oc-rea-mcp, oc-mobile-mcp) dans $BIN"
+echo "✅ Config installée dans $DEST ; lanceurs (agent-wt, oc-new-rust, oc-models, oc-playwright-mcp, oc-terraform-mcp, oc-rea-mcp) dans $BIN"
 
 # 3. Profil léger
 if [ "$LITE" = 1 ]; then
   node "$HERE/scripts/make-lite.mjs" "$DEST"
+fi
+
+# 2b. Module Android (option)
+if [ "$ANDROID" = 1 ]; then
+  install_android_addon
+else
+  remove_android_addon   # idempotent : nettoie aussi d'anciennes installations
 fi
 
 # 3a. Tes choix de modèles (oc-models set ...) survivent aux mises à jour : on les réapplique après la copie
@@ -232,15 +284,14 @@ if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"rea": {' "$DEST
   fi
 fi
 
-# 3d. MCP mobile (Android) : il a besoin d'adb ; sinon on le désactive proprement
+# 3d. MCP mobile : actif seulement avec le module Android (et Podman) ; sinon désactivé proprement
 if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"mobile": {' "$DEST/opencode.jsonc"; then
-  if "$BIN/oc-mobile-mcp" --check >/dev/null 2>&1; then
-    echo "✅ MCP mobile (mobile-mcp 1.0.15) activé : adb trouvé"
+  if [ "$ANDROID" = 1 ] && "$BIN/oc-mobile-mcp" --check >/dev/null 2>&1; then
+    echo "✅ MCP mobile (mobile-mcp 1.0.15) activé (adb de l'émulateur Podman)"
   else
-    sed -i.bak 's|"mobile": {|"mobile": {\n        "disabled": true, // adb introuvable : retire cette ligne après avoir installé le SDK Android|' "$DEST/opencode.jsonc" \
+    sed -i.bak 's|"mobile": {|"mobile": {\n        "disabled": true, // module Android non installé (./install.sh --android) ou Podman absent|' "$DEST/opencode.jsonc" \
       && rm -f "$DEST/opencode.jsonc.bak"
-    echo "ℹ️  MCP mobile désactivé (adb introuvable). Pour développer en Android : $(pkg_hint android)"
-    echo "    puis relance ./install.sh --no-tools (détails : README, section Android)."
+    if [ "$ANDROID" = 1 ]; then warn "MCP mobile désactivé : Podman introuvable. → $(pkg_hint podman)"; fi
   fi
 fi
 
@@ -352,6 +403,17 @@ fi
 
 # Repère de fin d'installation : le diagnostic ignore les lignes de journal antérieures
 : > "$DEST/.opencode-prerequisites.installed"
+
+if [ "$ANDROID" = 1 ]; then
+  cat <<MSG
+
+Module Android — dernières étapes :
+  1. Podman rootless : oc-android doctor
+  2. Construire l'image (plusieurs Go, 10 à 20 min ; tu acceptes les licences du SDK Android) :
+       oc-android build-image --accept-licenses
+  3. Émulateur (exige /dev/kvm ; groupe kvm) : depuis ton projet, oc-android emulator start --wait
+MSG
+fi
 
 cat <<'MSG'
 

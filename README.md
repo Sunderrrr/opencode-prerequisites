@@ -13,6 +13,7 @@ cd opencode-prerequisites
 ./install.sh --lite       # léger : 12 agents, MCP context7 + grep_app, aucun outil lourd
 ./install.sh --no-tools   # copie la config seulement
 ./install.sh --with-matt  # + skills complets de Matt Pocock (non testé)
+./install.sh --android    # + module Android (option, mémorisé) : agents, MCP mobile, toolchain Podman
 ```
 
 **Ne lance pas `install.sh` avec `sudo`** : tout serait installé dans `/root`. L'installateur refuse d'ailleurs de tourner via sudo. Il valide le kit avant de copier, sauvegarde l'existant dans `~/.config/opencode.bak-<date>`, et n'écrit aucune clé.
@@ -71,23 +72,32 @@ Agent **`reverse-engineer`** + MCP **`rea`** + skill **`reverse-engineer-anythin
 - **Node requis : ≥ 26.12.1** (ou 24.22.1 / 22.23.4). Si ta version est plus ancienne, l'installateur désactive le MCP (`"disabled": true`) et l'agent utilise la CLI `npx -y rea-agents@6.8.0 …` ; mets Node à jour (`mise use -g node@26.12.1`) puis relance `./install.sh --no-tools`. `oc-rea-mcp --check` teste ta version.
 - Les ~229 outils du MCP ne sont visibles que de cet agent (règle `rea_*` dans `opencode.jsonc`), pour ne pas alourdir les autres sessions. Ghidra, IDA et Hopper ne sont pas installés par le kit : REA utilise ceux qui existent déjà. N'utilise jamais `rea setup` : la configuration est gérée par le kit.
 
-## Applications Android
+## Applications Android (module en option, Podman)
 
-Agents **`android`** (Kotlin, Jetpack Compose, Gradle, SDK) et **`mobile-tester`** (vérifie l'appli sur émulateur ou téléphone, lecture seule), skill **`android-dev`** (commandes SDK, émulateur, adb, Gradle, logcat), et le MCP **`mobile`** ([mobile-mcp](https://github.com/mobile-next/mobile-mcp) 1.0.15 de mobile-next, Apache-2.0, ~10 000 étoiles : 34 outils pour lire l'écran par l'arbre d'accessibilité, taper, glisser, installer, lancer, lire logs et crashs). Les applications Android s'écrivent en **Kotlin + Compose, pas en Rust** ; les versions d'AGP, Kotlin et Compose sont vérifiées dans la doc par l'agent, jamais écrites de mémoire.
+**Option d'installation** : `./install.sh --android` (désactivée par défaut ; le choix est mémorisé aux mises à jour, `./install.sh --no-android` retire le module). Elle ajoute les agents **`android`** (Kotlin, Jetpack Compose, Gradle) et **`mobile-tester`** (vérifie l'appli sur l'émulateur, lecture seule), le skill **`android-dev`**, le MCP **`mobile`** ([mobile-mcp](https://github.com/mobile-next/mobile-mcp) 1.0.15, Apache-2.0, ~10 000 étoiles : 34 outils pour lire l'écran par l'arbre d'accessibilité, taper, glisser, installer, lancer, lire logs et crashs ; télémétrie coupée) et la commande **`oc-android`**. Rien n'est ajouté à ton CEO ni à `AGENTS.md` sans cette option. Les applications Android s'écrivent en **Kotlin + Compose, pas en Rust** ; les versions d'AGP, Kotlin et Compose sont vérifiées dans la doc par l'agent.
 
-**Ce que tu dois avoir sur la machine** (le kit ne l'installe pas : les licences du SDK Android doivent être acceptées par toi) :
+**Tout tourne dans Podman (rootless), rien n'est installé sur ta machine** : JDK 17, SDK Android, Gradle et émulateur vivent dans l'image `localhost/oc-android`.
 
-| | Arch / Omarchy | Debian / Ubuntu | Fedora |
-|---|---|---|---|
-| JDK 17+ | `jdk17-openjdk` | `openjdk-17-jdk` | `java-17-openjdk-devel` |
-| adb | `android-tools` | `adb` | `android-tools` |
-| SDK en ligne de commande (sdkmanager, émulateur, plates-formes) | AUR `android-sdk-cmdline-tools-latest` | [outils en ligne de commande](https://developer.android.com/studio#command-tools) | idem |
+```bash
+sudo pacman -S podman                       # (Debian/Ubuntu : apt install podman · Fedora : dnf install podman)
+./install.sh --android
+oc-android build-image --accept-licenses    # 10 à 20 min, plusieurs Go ; TU acceptes les licences du SDK Android
+cd ~/Projects/monapp
+oc-android gradle assembleDebug             # build / tests / lint dans le conteneur (cache Gradle conservé)
+oc-android emulator start --wait            # émulateur sans fenêtre (exige /dev/kvm)
+oc-android gradle installDebug              # ou : oc-android adb install -r app/build/outputs/apk/debug/app-debug.apk
+oc-android adb logcat -d -s AndroidRuntime:E
+oc-android emulator stop
+oc-android doctor                           # Podman rootless, image, KVM, émulateur
+```
 
-Ou installe simplement **Android Studio**, qui apporte SDK, émulateur et sdkmanager. Ensuite : `export ANDROID_HOME=$HOME/Android/Sdk`, `sdkmanager --licenses`, installe une plate-forme et une image système, et sous Linux ajoute-toi au groupe `kvm` (`sudo usermod -aG kvm $USER`) : sans accélération matérielle l'émulateur est inutilisable. `./doctor.sh` affiche l'état de tout cela (JDK, SDK, adb, émulateur, KVM, AVD, appareils).
+Comment c'est construit : l'image part d'Ubuntu 24.04, télécharge les outils Android et Gradle **depuis les sources officielles (dl.google.com, services.gradle.org) avec vérification SHA-1/SHA-256**, et refuse de se construire sans `--accept-licenses`. Ton **projet est monté dans le conteneur** (le dossier courant : lance les commandes depuis la racine du projet) ; l'émulateur le voit en lecture seule pour installer des APK. Un faux `adb` placé dans `~/.local/share/oc-android/sdk/platform-tools/` redirige les appels vers l'émulateur du conteneur, ce qui permet à mobile-mcp de fonctionner sans SDK sur la machine. Les outils `mobile_*` ne sont visibles que de `android` et `mobile-tester` (règle de permission).
 
-Le MCP `mobile` est **désactivé automatiquement si `adb` est introuvable** (relance `./install.sh --no-tools` après avoir installé le SDK) ; ses outils ne sont visibles que de `android` et `mobile-tester` (règle `mobile_*`), la télémétrie anonyme de mobile-mcp est coupée, et `oc-mobile-mcp --check` teste ta configuration.
+**Prérequis et limites** : Podman rootless (plages dans `/etc/subuid` et `/etc/subgid`) ; sous Linux, `/dev/kvm` accessible (virtualisation activée dans le BIOS, groupe `kvm`) : sans accélération matérielle l'émulateur est refusé, pas émulé en logiciel ; image système x86_64 (donc pas d'ARM) ; pour un téléphone physique ou iOS, installe `android-tools` ou utilise macOS et définis `ANDROID_HOME` pour que mobile-mcp utilise ce SDK-là. Le MCP `mobile` est désactivé automatiquement si le module ou Podman manque.
 
-**Alternatives examinées et écartées** : AndroidBuildMCP (build + émulateur + adb + UI, 53 outils) est très jeune (0 étoile, 8 commits) ; `gradle-mcp` de rnett (Apache-2.0) apporte surtout des diagnostics Gradle, demande JDK 21 et JBang, et tes agents ont déjà `./gradlew` et `adb` en ligne de commande ; Appium MCP, Maestro et Patrol ne se justifient que si tu les utilises déjà pour tes tests. Pour iOS, mobile-mcp sait piloter un simulateur mais il faut macOS et Xcode.
+**Ce qui est testé** : les commandes, montages et protections de `oc-android` avec un faux Podman, la découverte des versions officielles et le faux `adb` (`scripts/test-android.mjs`, en CI), le `Containerfile` avec hadolint. **Pas testé de bout en bout** : la construction réelle de l'image et le démarrage de l'émulateur dans Podman (ni Podman ni KVM dans l'environnement de développement du kit) ; en cas d'échec, `oc-android doctor` et `oc-android emulator logs` disent où chercher.
+
+**Alternatives examinées** : AndroidBuildMCP (0 étoile, 8 commits), `gradle-mcp` de rnett (JDK 21 + JBang pour peu de gain), Appium/Maestro/Patrol (utiles si tu les utilises déjà).
 
 ## Profils
 

@@ -44,5 +44,6 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
   ' "$rc" > "$tmp" && cat "$tmp" > "$rc" && echo "🧹 Bloc opencode-prerequisites retiré de $rc"
   rm -f "$tmp"
 done
-rm -f "$BIN/agent-wt" "$BIN/oc-new-rust" && echo "🧹 agent-wt et oc-new-rust retirés de $BIN"
+rm -f "$BIN/agent-wt" "$BIN/oc-new-rust" "$BIN/oc-models" "$BIN/oc-playwright-mcp" "$BIN/oc-terraform-mcp" "$BIN/oc-rea-mcp" "$BIN/oc-android" "$BIN/oc-mobile-mcp" && echo "🧹 lanceurs du kit retirés de $BIN"
+echo "Module Android : l'image Podman (podman rmi localhost/oc-android) et les données de l'émulateur (~/.local/share/oc-android) ne sont pas supprimées."
 echo "Non touchés : obscura, trivy, MemPalace (~/.mempalace) et les paquets pip/npm installés."

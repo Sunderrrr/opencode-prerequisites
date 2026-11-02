@@ -7,14 +7,13 @@
 
 ## Organisation
 - L'agent par défaut est `ceo` : il cadre, découpe, délègue et valide, sans écrire de code. Petite tâche = un seul spécialiste.
-- Spécialistes de domaine : `architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`, `reverse-engineer`, `android`, `mobile-tester`. Par langage/outil : `rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`. Contrôle : `review`, `code-simplifier`, `verify-app`. Git : `integrator`.
+- Spécialistes de domaine : `architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`, `reverse-engineer`. Par langage/outil : `rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`. Contrôle : `review`, `code-simplifier`, `verify-app`. Git : `integrator`.
 - Un sous-agent démarre sans historique : le brief du CEO donne objectif, contexte, fichiers, critère de réussite, interdits. Il n'interroge jamais l'utilisateur : il avance sur sa meilleure hypothèse et la note dans son rapport court (fait / preuves / reste / questions).
 - `security` est obligatoire pour auth, données personnelles, secrets, réseau et dépendances.
 - Agents d'analyse = lecture seule, sans sous-délégation ; agents d'action = bash autorisé.
 
 ## Langages
 - **Rust par défaut** pour tout programme, outil, service ou bibliothèque à développer, sauf si le projet existant est dans un autre langage ou si je demande autre chose. Script de quelques lignes : Bash ; au-delà : Rust ou Python.
-- **Android = Kotlin + Jetpack Compose** (agent `android`), pas Rust ; Rust seulement pour une bibliothèque native partagée demandée. Versions d'AGP/Kotlin/Compose : vérifiées dans la doc, jamais écrites de mémoire.
 - Qualité Rust : `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `cargo test` avant de conclure.
 
 ## Terminé = prouvé
