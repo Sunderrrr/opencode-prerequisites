@@ -95,18 +95,28 @@ for (const [c, why] of [["git", "worktrees (2.5+)"], ["gh", "/pr et recherche Gi
   has(c) ? ok(`${c} disponible`) : wa(`${c} introuvable (${why})`)
 }
 if (has("gh")) {
-  // `gh auth status` peut renvoyer un code d'erreur alors que gh fonctionne (jeton jugé incomplet, 2e compte, trousseau lent...) :
-  // on essaie donc aussi un vrai appel d'API, et on affiche la cause réelle si les deux échouent.
-  const g = run("gh", ["auth", "status"], 25000)
+  // gh est lancé sans entrée standard et sans interaction (un sous-processus ne peut pas répondre à un trousseau ou une invite).
+  // Si malgré cela il ne répond pas, on lit sa config (hosts.yml) : elle prouve qu'un compte est configuré.
+  const ghMs = Number(process.env.OC_DOCTOR_GH_TIMEOUT_MS || 10000)
+  const ghRun = (args) => spawnSync("gh", args, {
+    encoding: "utf8", timeout: ghMs, stdio: ["ignore", "pipe", "pipe"],
+    env: { ...env, GH_PROMPT_DISABLED: "1", GH_NO_UPDATE_NOTIFIER: "1", NO_COLOR: "1" },
+  })
+  const g = ghRun(["auth", "status"])
   if (g.status === 0) ok("gh connecté")
-  else {
-    const who = run("gh", ["api", "user", "--jq", ".login"], 25000)
+  else if (g.status === null) {
+    const cfgDir = process.env.GH_CONFIG_DIR || path.join(process.env.XDG_CONFIG_HOME || path.join(HOME, ".config"), "gh")
+    let user = ""
+    try { user = fs.readFileSync(path.join(cfgDir, "hosts.yml"), "utf8").match(/^\s+user:\s*(\S+)/m)?.[1] ?? "" } catch { /* pas de hosts.yml */ }
+    user
+      ? ok(`gh configuré pour ${user} (jeton non vérifié : gh ne répond pas lancé depuis un script — trousseau ou invite interactive ; \`gh auth status\` dans ton terminal fait foi)`)
+      : wa(`gh ne répond pas (${g.error?.code ?? g.signal ?? "timeout"}) et aucun compte trouvé dans ${cfgDir}/hosts.yml → gh auth login`)
+  } else {
+    const who = ghRun(["api", "user", "--jq", ".login"])
     const login = who.status === 0 ? (who.stdout ?? "").trim() : ""
-    if (login) ok(`gh connecté (${login}) — remarque : \`gh auth status\` renvoie le code ${g.status ?? g.signal} (voir sa sortie : gh auth status ; echo $?)`)
-    else {
-      const why = g.error ? `erreur de lancement : ${g.error.message}` : g.status === null ? `délai dépassé (${g.signal ?? "timeout"}) : trousseau verrouillé ?` : squash(g.stderr || g.stdout, 4)
-      wa(`gh non connecté (code ${g.status ?? "aucun"}) : ${why}`)
-    }
+    login
+      ? ok(`gh connecté (${login}) — remarque : \`gh auth status\` renvoie le code ${g.status} (voir sa sortie : gh auth status ; echo $?)`)
+      : wa(`gh non connecté (code ${g.status}) : ${squash(g.stderr || g.stdout, 4)}`)
   }
 }
 
