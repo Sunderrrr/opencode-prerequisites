@@ -71,6 +71,24 @@ Agent **`reverse-engineer`** + MCP **`rea`** + skill **`reverse-engineer-anythin
 - **Node requis : ≥ 26.12.1** (ou 24.22.1 / 22.23.4). Si ta version est plus ancienne, l'installateur désactive le MCP (`"disabled": true`) et l'agent utilise la CLI `npx -y rea-agents@6.8.0 …` ; mets Node à jour (`mise use -g node@26.12.1`) puis relance `./install.sh --no-tools`. `oc-rea-mcp --check` teste ta version.
 - Les ~229 outils du MCP ne sont visibles que de cet agent (règle `rea_*` dans `opencode.jsonc`), pour ne pas alourdir les autres sessions. Ghidra, IDA et Hopper ne sont pas installés par le kit : REA utilise ceux qui existent déjà. N'utilise jamais `rea setup` : la configuration est gérée par le kit.
 
+## Applications Android
+
+Agents **`android`** (Kotlin, Jetpack Compose, Gradle, SDK) et **`mobile-tester`** (vérifie l'appli sur émulateur ou téléphone, lecture seule), skill **`android-dev`** (commandes SDK, émulateur, adb, Gradle, logcat), et le MCP **`mobile`** ([mobile-mcp](https://github.com/mobile-next/mobile-mcp) 1.0.15 de mobile-next, Apache-2.0, ~10 000 étoiles : 34 outils pour lire l'écran par l'arbre d'accessibilité, taper, glisser, installer, lancer, lire logs et crashs). Les applications Android s'écrivent en **Kotlin + Compose, pas en Rust** ; les versions d'AGP, Kotlin et Compose sont vérifiées dans la doc par l'agent, jamais écrites de mémoire.
+
+**Ce que tu dois avoir sur la machine** (le kit ne l'installe pas : les licences du SDK Android doivent être acceptées par toi) :
+
+| | Arch / Omarchy | Debian / Ubuntu | Fedora |
+|---|---|---|---|
+| JDK 17+ | `jdk17-openjdk` | `openjdk-17-jdk` | `java-17-openjdk-devel` |
+| adb | `android-tools` | `adb` | `android-tools` |
+| SDK en ligne de commande (sdkmanager, émulateur, plates-formes) | AUR `android-sdk-cmdline-tools-latest` | [outils en ligne de commande](https://developer.android.com/studio#command-tools) | idem |
+
+Ou installe simplement **Android Studio**, qui apporte SDK, émulateur et sdkmanager. Ensuite : `export ANDROID_HOME=$HOME/Android/Sdk`, `sdkmanager --licenses`, installe une plate-forme et une image système, et sous Linux ajoute-toi au groupe `kvm` (`sudo usermod -aG kvm $USER`) : sans accélération matérielle l'émulateur est inutilisable. `./doctor.sh` affiche l'état de tout cela (JDK, SDK, adb, émulateur, KVM, AVD, appareils).
+
+Le MCP `mobile` est **désactivé automatiquement si `adb` est introuvable** (relance `./install.sh --no-tools` après avoir installé le SDK) ; ses outils ne sont visibles que de `android` et `mobile-tester` (règle `mobile_*`), la télémétrie anonyme de mobile-mcp est coupée, et `oc-mobile-mcp --check` teste ta configuration.
+
+**Alternatives examinées et écartées** : AndroidBuildMCP (build + émulateur + adb + UI, 53 outils) est très jeune (0 étoile, 8 commits) ; `gradle-mcp` de rnett (Apache-2.0) apporte surtout des diagnostics Gradle, demande JDK 21 et JBang, et tes agents ont déjà `./gradlew` et `adb` en ligne de commande ; Appium MCP, Maestro et Patrol ne se justifient que si tu les utilises déjà pour tes tests. Pour iOS, mobile-mcp sait piloter un simulateur mais il faut macOS et Xcode.
+
 ## Profils
 
 | | Complet | Léger (`--lite`) |

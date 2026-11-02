@@ -70,6 +70,10 @@ pkg_hint() {
     dnf:node)      echo "sudo dnf install nodejs npm" ;;
     brew:node)     echo "brew install node" ;;
     apt:venv)      echo "sudo apt install python3-venv" ;;
+    pacman:android) echo "sudo pacman -S --needed android-tools jdk17-openjdk   + SDK : paquet AUR android-sdk-cmdline-tools-latest (yay -S ...) ou Android Studio" ;;
+    apt:android)    echo "sudo apt install adb openjdk-17-jdk   + SDK : outils en ligne de commande depuis https://developer.android.com/studio#command-tools (ou Android Studio)" ;;
+    dnf:android)    echo "sudo dnf install android-tools java-17-openjdk-devel   + SDK : outils en ligne de commande depuis https://developer.android.com/studio#command-tools (ou Android Studio)" ;;
+    brew:android)   echo "brew install --cask android-platform-tools android-commandlinetools && brew install openjdk@17" ;;
     pacman:chromium) echo "sudo pacman -S --needed chromium" ;;
     apt:chromium)    echo "sudo apt install chromium   (ou laisse Playwright télécharger le sien)" ;;
     dnf:chromium)    echo "sudo dnf install chromium" ;;
@@ -194,7 +198,7 @@ cp "$TMP/new.manifest" "$MANIFEST"
 for f in "$SRC"/bin/*; do install -m 0755 "$f" "$BIN/$(basename "$f")"; done
 install -m 0755 "$HERE/scripts/new-rust-project.sh" "$BIN/oc-new-rust"
 cp -a "$HERE/templates" "$DEST/templates"
-echo "✅ Config installée dans $DEST ; lanceurs (agent-wt, oc-new-rust, oc-models, oc-playwright-mcp, oc-terraform-mcp, oc-rea-mcp) dans $BIN"
+echo "✅ Config installée dans $DEST ; lanceurs (agent-wt, oc-new-rust, oc-models, oc-playwright-mcp, oc-terraform-mcp, oc-rea-mcp, oc-mobile-mcp) dans $BIN"
 
 # 3. Profil léger
 if [ "$LITE" = 1 ]; then
@@ -225,6 +229,18 @@ if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"rea": {' "$DEST
       && rm -f "$DEST/opencode.jsonc.bak"
     echo "ℹ️  MCP rea désactivé : $(printf '%s' "$rea_msg" | head -n 1)"
     echo "    Mets Node à jour (mise use -g node@26.12.1) puis relance ./install.sh --no-tools : l'agent reverse-engineer utilisera la CLI en attendant."
+  fi
+fi
+
+# 3d. MCP mobile (Android) : il a besoin d'adb ; sinon on le désactive proprement
+if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"mobile": {' "$DEST/opencode.jsonc"; then
+  if "$BIN/oc-mobile-mcp" --check >/dev/null 2>&1; then
+    echo "✅ MCP mobile (mobile-mcp 1.0.15) activé : adb trouvé"
+  else
+    sed -i.bak 's|"mobile": {|"mobile": {\n        "disabled": true, // adb introuvable : retire cette ligne après avoir installé le SDK Android|' "$DEST/opencode.jsonc" \
+      && rm -f "$DEST/opencode.jsonc.bak"
+    echo "ℹ️  MCP mobile désactivé (adb introuvable). Pour développer en Android : $(pkg_hint android)"
+    echo "    puis relance ./install.sh --no-tools (détails : README, section Android)."
   fi
 fi
 

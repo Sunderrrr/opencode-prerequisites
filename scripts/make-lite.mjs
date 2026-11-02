@@ -22,7 +22,7 @@ for (const f of fs.readdirSync(agentsDir)) {
 const mentions = (text) => [...text.matchAll(/(?:^|[\s(`|/])@([a-z][a-z0-9-]+)/g)].map((m) => m[1])
 
 // Skills liés à des agents/MCP absents du profil léger
-for (const skill of ["reverse-engineer-anything"]) fs.rmSync(path.join(dest, "skills", skill), { recursive: true, force: true })
+for (const skill of ["reverse-engineer-anything", "android-dev"]) fs.rmSync(path.join(dest, "skills", skill), { recursive: true, force: true })
 
 // Commandes qui appellent un agent supprimé
 const cmdDir = path.join(dest, "commands")

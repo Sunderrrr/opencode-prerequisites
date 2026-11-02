@@ -35,6 +35,8 @@
     // Les ~229 outils du MCP rea ne sont visibles que de l'agent reverse-engineer (qui les autorise dans son fichier) :
     // les montrer à tous les agents alourdirait chaque session.
     "rea_*": "deny",
+    // Idem pour les ~34 outils du MCP mobile (agents android et mobile-tester seulement).
+    "mobile_*": "deny",
     "task": { "*": "allow" }
   },
 
@@ -86,6 +88,12 @@
       "rea": {
         "type": "local",
         "command": ["{env:HOME}/.local/bin/oc-rea-mcp"]
+      },
+      // Pilotage d'un émulateur / téléphone Android (mobile-mcp, Apache-2.0, version épinglée, télémétrie coupée).
+      // Réservé aux agents android et mobile-tester. Nécessite adb : désactivé automatiquement par install.sh sinon.
+      "mobile": {
+        "type": "local",
+        "command": ["{env:HOME}/.local/bin/oc-mobile-mcp"]
       },
       // Navigateur headless léger en Rust (binaire `obscura`, installé par install.sh). Pas de --stealth par défaut.
       "obscura": {
