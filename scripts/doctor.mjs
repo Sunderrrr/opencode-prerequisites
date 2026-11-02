@@ -180,7 +180,7 @@ if (fs.existsSync(pdir)) {
   const dirs = entries.filter((x) => fs.statSync(path.join(pdir, x)).isDirectory())
   const loose = entries.filter((x) => !dirs.includes(x) && /\.(js|ts|mjs)$/.test(x))
   ok(`plugins locaux (dossiers v2) : ${dirs.join(", ") || "aucun"}`)
-  if (loose.length) wa(`fichiers seuls dans plugins/ (non chargés en v2, ils doivent être dans un dossier plugins/<nom>/index.ts) : ${loose.join(", ")}`)
+  if (loose.length) console.log(`   · fichiers seuls dans plugins/ : ${loose.join(", ")} (chargés s'ils exportent par défaut une définition v2 ; le panneau Plugins d'OpenCode fait foi)`)
 }
 
 // Modèles
@@ -260,9 +260,17 @@ if (hasOc) {
     const files = fs.readdirSync(logDir).map((f) => ({ f, t: fs.statSync(path.join(logDir, f)).mtimeMs })).sort((a, b) => b.t - a.t)
     if (files[0]) {
       const buf = fs.readFileSync(path.join(logDir, files[0].f), "utf8").slice(-300000)
-      const hits = buf.split("\n").filter((l) => /plugin|mempalace|guard|notify/i.test(l) && /fail|error|cannot|unable|not found|denied/i.test(l)).slice(-6)
+      const manifest = path.join(DEST, ".opencode-prerequisites.manifest")
+      const since = fs.existsSync(manifest) ? fs.statSync(manifest).mtimeMs : 0
+      const lines = buf.split("\n").filter((l) => /plugin|mempalace|guard|notify/i.test(l) && /fail|error|cannot|unable|not found|denied/i.test(l))
+      const stamp = (l) => Date.parse(l.match(/timestamp=(\S+)/)?.[1] ?? "") || 0
+      const recent = lines.filter((l) => stamp(l) > since).slice(-6)
+      const old = lines.length - lines.filter((l) => stamp(l) > since).length
       console.log(`\nJournal OpenCode (${path.join(logDir, files[0].f)}) :`)
-      hits.length ? hits.forEach((l) => wa(`plugin : ${l.trim().replace(/^timestamp=\S+\s+/, "").slice(0, 420)}`)) : ok("aucune erreur de plugin dans le dernier journal")
+      if (recent.length) recent.forEach((l) => wa(`plugin : ${l.trim().replace(/^timestamp=\S+\s+/, "").slice(0, 420)}`))
+      else ok(`aucune erreur de plugin depuis la dernière installation du kit${old ? ` (${old} ancienne(s) ligne(s) ignorée(s), avant ${new Date(since).toLocaleString()})` : ""}`)
+      const lastWrite = files[0].t
+      if (lastWrite < since) console.log(`   (OpenCode n'a pas écrit dans son journal depuis l'installation : relance-le pour vérifier les plugins)`)
     }
   } else console.log("\n(journal OpenCode introuvable : `opencode debug paths` pour voir où il est)")
 }
