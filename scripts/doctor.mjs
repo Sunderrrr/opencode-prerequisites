@@ -181,6 +181,7 @@ if (fs.existsSync(memPluginDir) || [...(cfg?.plugins ?? []), ...(cfg?.plugin ?? 
   const py = envPy || (fs.existsSync(venvPy) ? venvPy : "python3")
   const t = run(py, ["-c", "import mempalace"], 15000)
   if (t.status !== 0) ko(`MemPalace non installé pour ${py} : lance ./install.sh --memory-only (ou retire plugins/mempalace)`)
+  else if (!envPy && fs.existsSync(venvPy) && /MEMPALACE_ADAPTER_PYTHON/.test(fs.existsSync(path.join(memPluginDir, "index.ts")) ? fs.readFileSync(path.join(memPluginDir, "index.ts"), "utf8") : "")) ok(`MemPalace importable (${py}) ; le plugin fixe lui-même MEMPALACE_ADAPTER_PYTHON, indépendamment du shell`)
   else if (!envPy && fs.existsSync(venvPy)) wa(`MemPalace est dans ${venvPy} mais MEMPALACE_ADAPTER_PYTHON n'est pas défini : ajoute à ton ~/.bashrc  export MEMPALACE_ADAPTER_PYTHON="${venvPy}"`)
   else ok(`MemPalace importable (${py})`)
   if (fs.existsSync(memPluginDir)) fs.existsSync(memEntry) ? ok("plugin MemPalace installé (npm, peer deps tolérées) et chargé comme plugin local") : ko(`plugins/mempalace pointe vers ${memEntry}, introuvable : lance ./install.sh --memory-only`)

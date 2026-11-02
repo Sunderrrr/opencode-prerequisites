@@ -70,6 +70,29 @@ async function load(name) {
   check("notify : fonction de nettoyage", typeof cleanup === "function"); cleanup()
 }
 
+// --- modèle du plugin MemPalace (fixe MEMPALACE_ADAPTER_PYTHON avant de charger le vrai plugin) ---
+{
+  const tpl = fs.readFileSync(path.join(ROOT, "config", "libexec", "mempalace-plugin.ts.tpl"), "utf8")
+  const dir = path.join(tmp, "mp"); fs.mkdirSync(dir, { recursive: true })
+  // faux « vrai plugin » : enregistre la valeur de la variable vue AU CHARGEMENT
+  fs.writeFileSync(path.join(dir, "entry.mjs"), 'export const seenAtLoad = process.env.MEMPALACE_ADAPTER_PYTHON\nexport default { id: "mempalace", setup() {} }\n')
+  const make = (name) => {
+    const f = path.join(dir, name)
+    fs.writeFileSync(f, tpl.replaceAll("__ROOT__", dir).replaceAll("__PYTHON__", "/venv/bin/python").replaceAll("__ENTRY__", pathToFileURL(path.join(dir, "entry.mjs")).href))
+    return f
+  }
+  delete process.env.MEMPALACE_ADAPTER_PYTHON
+  const mod = await import(pathToFileURL(make("wrap1.mjs")).href)
+  check("mempalace : le plugin local se charge et exporte le vrai plugin", mod.default?.id === "mempalace")
+  check("mempalace : fixe MEMPALACE_ADAPTER_PYTHON avant le chargement du vrai plugin", process.env.MEMPALACE_ADAPTER_PYTHON === "/venv/bin/python")
+  const entry = await import(pathToFileURL(path.join(dir, "entry.mjs")).href)
+  check("mempalace : la variable était déjà posée quand le vrai plugin s'est chargé", entry.seenAtLoad === "/venv/bin/python")
+  process.env.MEMPALACE_ADAPTER_PYTHON = "/mon/python"
+  await import(pathToFileURL(make("wrap2.mjs")).href)
+  check("mempalace : respecte une variable déjà définie par l'utilisateur", process.env.MEMPALACE_ADAPTER_PYTHON === "/mon/python")
+  delete process.env.MEMPALACE_ADAPTER_PYTHON
+}
+
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log(failed ? `\n❌ ${failed} test(s) en échec` : "\n✅ Plugins OK")
 process.exit(failed ? 1 : 0)

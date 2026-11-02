@@ -144,7 +144,9 @@ install_mempalace_plugin() {
   local entry="$MEMPLUGIN/node_modules/@rvboris/opencode-mempalace/dist/plugin/index.js"
   [ -f "$entry" ] || { warn "Plugin MemPalace introuvable après installation : $entry"; return 1; }
   mkdir -p "$DEST/plugins/mempalace"
-  printf '// Généré par install.sh : charge le plugin MemPalace installé dans %s\nexport { default } from "%s"\n' "$MEMPLUGIN" "$entry" > "$DEST/plugins/mempalace/index.ts"
+  # Le plugin fixe lui-même MEMPALACE_ADAPTER_PYTHON (modèle libexec/mempalace-plugin.ts.tpl) : indépendant du shell de lancement
+  sed -e "s|__ROOT__|$MEMPLUGIN|g" -e "s|__PYTHON__|$MEMVENV/bin/python|g" -e "s|__ENTRY__|$entry|g" \
+    "$HERE/config/libexec/mempalace-plugin.ts.tpl" > "$DEST/plugins/mempalace/index.ts"
   echo "✅ Plugin MemPalace chargé comme plugin local (plugins/mempalace)"
 }
 
