@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Lance le serveur MCP Semgrep officiel (SAST, LGPL-2.1/MIT, github.com/semgrep/semgrep) via uvx.
+#   oc-semgrep-mcp            serveur MCP (stdio), utilisé par OpenCode (agents pentest/security)
+#   oc-semgrep-mcp --check    vérifie seulement qu'un lanceur (uvx/pipx) est disponible (code 0/1)
+# Pas de compte ni de jeton requis en local (règles communautaires par défaut).
+set -Eeuo pipefail
+
+runner=""
+if command -v uvx >/dev/null 2>&1; then
+  runner=(uvx semgrep-mcp)
+elif command -v pipx >/dev/null 2>&1; then
+  runner=(pipx run semgrep-mcp)
+fi
+
+if [ -z "${runner:-}" ]; then
+  echo "semgrep-mcp demande uvx (ou pipx). Installe uv : curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+  exit 1
+fi
+
+[ "${1:-}" = "--check" ] && exit 0
+
+exec "${runner[@]}"

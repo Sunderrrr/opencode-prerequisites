@@ -37,6 +37,8 @@
     "rea_*": "deny",
     // Idem pour les ~34 outils du MCP mobile (module Android : agents android et mobile-tester seulement).
     "mobile_*": "deny",
+    // Idem pour le MCP semgrep (SAST) : réservé aux agents pentest et security.
+    "semgrep_*": "deny",
     "task": { "*": "allow" }
   },
 
@@ -75,6 +77,12 @@
       "trivy": {
         "type": "local",
         "command": ["trivy", "mcp"]
+      },
+      // SAST (semgrep-mcp officiel, github.com/semgrep/semgrep). Réservé aux agents pentest et security
+      // (voir "semgrep_*": "deny" ci-dessus). Nécessite uv (déjà installé pour MemPalace) ou pipx.
+      "semgrep": {
+        "type": "local",
+        "command": ["{env:HOME}/.local/bin/oc-semgrep-mcp"]
       },
       // --- Internet / GitHub ---
       // Recherche de code dans des millions de dépôts GitHub publics (Vercel). Pas de compte.

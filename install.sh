@@ -249,7 +249,7 @@ cp "$TMP/new.manifest" "$MANIFEST"
 for f in "$SRC"/bin/*; do install -m 0755 "$f" "$BIN/$(basename "$f")"; done
 install -m 0755 "$HERE/scripts/new-rust-project.sh" "$BIN/oc-new-rust"
 cp -a "$HERE/templates" "$DEST/templates"
-echo "✅ Config installée dans $DEST ; lanceurs (agent-wt, oc-new-rust, oc-models, oc-playwright-mcp, oc-terraform-mcp, oc-rea-mcp) dans $BIN"
+echo "✅ Config installée dans $DEST ; lanceurs (agent-wt, oc-new-rust, oc-models, oc-playwright-mcp, oc-terraform-mcp, oc-rea-mcp, oc-semgrep-mcp) dans $BIN"
 
 # 3. Profil léger
 if [ "$LITE" = 1 ]; then
@@ -298,6 +298,17 @@ if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"mobile": {' "$D
     sed -i.bak 's|"mobile": {|"mobile": {\n        "disabled": true, // module Android non installé (./install.sh --android) ou Podman absent|' "$DEST/opencode.jsonc" \
       && rm -f "$DEST/opencode.jsonc.bak"
     if [ "$ANDROID" = 1 ]; then warn "MCP mobile désactivé : Podman introuvable. → $(pkg_hint podman)"; fi
+  fi
+fi
+
+# 3e. MCP semgrep (SAST, agents pentest/security) : exige uv (uvx) ou pipx ; sinon désactivé proprement
+if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"semgrep": {' "$DEST/opencode.jsonc"; then
+  if "$BIN/oc-semgrep-mcp" --check >/dev/null 2>&1; then
+    echo "✅ MCP semgrep activé (uvx/pipx détecté)"
+  else
+    sed -i.bak 's|"semgrep": {|"semgrep": {\n        "disabled": true, // uv (uvx) et pipx absents : retire cette ligne apres avoir installe un des deux|' "$DEST/opencode.jsonc" \
+      && rm -f "$DEST/opencode.jsonc.bak"
+    echo "ℹ️  MCP semgrep désactivé : installe uv (curl -LsSf https://astral.sh/uv/install.sh | sh), déjà requis pour MemPalace."
   fi
 fi
 

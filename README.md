@@ -72,6 +72,19 @@ Agent **`reverse-engineer`** + MCP **`rea`** + skill **`reverse-engineer-anythin
 - **Node requis : ≥ 26.12.1** (ou 24.22.1 / 22.23.4). Si ta version est plus ancienne, l'installateur désactive le MCP (`"disabled": true`) et l'agent utilise la CLI `npx -y rea-agents@6.8.0 …` ; mets Node à jour (`mise use -g node@26.12.1`) puis relance `./install.sh --no-tools`. `oc-rea-mcp --check` teste ta version.
 - Les ~229 outils du MCP ne sont visibles que de cet agent (règle `rea_*` dans `opencode.jsonc`), pour ne pas alourdir les autres sessions. Ghidra, IDA et Hopper ne sont pas installés par le kit : REA utilise ceux qui existent déjà. N'utilise jamais `rea setup` : la configuration est gérée par le kit.
 
+## Test d'intrusion (pentest)
+
+Agent **`pentest`** (en plus de `security`/`review`, qui restent passifs et sans modification), basé sur les serveurs MCP et CLI les plus cités pour piloter des tests de sécurité depuis un agent IA :
+
+- **SAST** : MCP **`semgrep`** officiel ([semgrep/semgrep](https://github.com/semgrep/semgrep), serveur fusionné dans le dépôt principal), lancé via `uvx semgrep-mcp` (`config/bin/oc-semgrep-mcp`) — pas de jeton requis en local. Réservé aux agents `pentest` et `security` (règle `semgrep_*` dans `opencode.jsonc`, comme `rea_*`/`mobile_*`), désactivé automatiquement par l'installateur si `uv`/`pipx` est absent.
+- **Recon réseau** et **vulnérabilités web** : CLI `nmap` et `nuclei` (ProjectDiscovery, MIT) si elles sont installées — pas de MCP dédié ajouté : trop de projets concurrents et peu mûrs (`mcp-server-nmap`, `nmap-mcp`, `nmap-mcp-http`…) pour un gain réel sur une CLI déjà simple à scripter. L'agent les appelle directement en bash.
+- **DAST web** (optionnel) : si tu lances toi-même OWASP ZAP (Docker/Podman) et exposes un MCP comme [`pierre3/dotnet-zap-mcp`](https://github.com/pierre3/dotnet-zap-mcp) (45 outils, spider/scan/rapports) dans ta session, l'agent s'en sert. Pas intégré par défaut dans le kit (dépendance .NET en plus, pour un usage ponctuel).
+- **Injection ciblée** : `sqlmap`, seulement sur un paramètre précis et avec `--risk=1 --level=1` par défaut.
+
+**Périmètre non négociable** (comme pour `reverse-engineer`) : aucun test actif sans périmètre explicite — ton code/infra, un CTF/labo, ou une mission avec un scope écrit. Sans ça, l'agent refuse et se limite au SAST. Ni DoS, ni attaque de masse, ni brute force en production, ni exploitation au-delà d'une preuve de concept, ni altération de chaîne d'approvisionnement.
+
+**Alternatives examinées et écartées** : les serveurs MCP qui empaquettent plusieurs outils offensifs d'un coup (type « pentestMCP », > 20 outils bruts dont Nmap/Nuclei/ZAP/SQLMap) donnent à l'agent des primitives d'attaque trop larges pour un contrôle de permission fin ; le kit préfère des outils séparés, chacun gérable par sa propre règle de permission.
+
 ## Applications Android (module en option, Podman)
 
 **Option d'installation** : `./install.sh --android` (désactivée par défaut ; le choix est mémorisé aux mises à jour, `./install.sh --no-android` retire le module). Elle ajoute les agents **`android`** (Kotlin, Jetpack Compose, Gradle) et **`mobile-tester`** (vérifie l'appli sur l'émulateur, lecture seule), le skill **`android-dev`**, le MCP **`mobile`** ([mobile-mcp](https://github.com/mobile-next/mobile-mcp) 1.0.15, Apache-2.0, ~10 000 étoiles : 34 outils pour lire l'écran par l'arbre d'accessibilité, taper, glisser, installer, lancer, lire logs et crashs ; télémétrie coupée) et la commande **`oc-android`**. Rien n'est ajouté à ton CEO ni à `AGENTS.md` sans cette option. Les applications Android s'écrivent en **Kotlin + Compose, pas en Rust** ; les versions d'AGP, Kotlin et Compose sont vérifiées dans la doc par l'agent.
@@ -103,8 +116,8 @@ Comment c'est construit : l'image part d'Ubuntu 24.04, télécharge les outils A
 
 | | Complet | Léger (`--lite`) |
 |---|---|---|
-| Agents | 25 | 12 (`ceo`, `architect`, `rust`, `backend`, `frontend`, `qa`, `security`, `debugger`, `researcher`, `review`, `verify-app`, `integrator`) |
-| MCP | context7, grep_app, terraform, kubernetes, trivy, playwright, obscura | context7, grep_app |
+| Agents | 26 | 12 (`ceo`, `architect`, `rust`, `backend`, `frontend`, `qa`, `security`, `debugger`, `researcher`, `review`, `verify-app`, `integrator`) |
+| MCP | context7, grep_app, terraform, kubernetes, trivy, semgrep, playwright, obscura | context7, grep_app |
 | Mémoire | MemPalace (venv `~/.mempalace/venv`, ≈ 500 Mo) | — |
 
 Le profil léger est dérivé du complet par `scripts/make-lite.mjs` : il n'y a pas deux configs à maintenir.
@@ -113,7 +126,7 @@ Le profil léger est dérivé du complet par `scripts/make-lite.mjs` : il n'y a 
 
 - `config/opencode.jsonc` : modèle unique `opencode-go/deepseek-v4.1-flash` pour TOUS les agents (gros quota ; aucun agent n'a de modèle propre, pour en changer un : ajoute `model: opencode-go/<id>` dans son fichier `agents/<nom>.md`), permissions débridées, formatage auto, compactage.
 - `config/AGENTS.md` : règles globales (≈ 700 mots, lues à chaque session) : CEO, Rust par défaut, « terminé = prouvé », git multi-agents, sécurité internet, quota.
-- `config/agents/` : `ceo` (par défaut), domaine (`architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`), langages/outils (`rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`), contrôle (`review`, `code-simplifier`, `verify-app`), git (`integrator`).
+- `config/agents/` : `ceo` (par défaut), domaine (`architect`, `backend`, `frontend`, `database`, `devops`, `security`, `pentest`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`), langages/outils (`rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`), contrôle (`review`, `code-simplifier`, `verify-app`), git (`integrator`).
 - `config/skills/` : `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`.
 - `config/commands/` : `/check`, `/plan-first`, `/simplify`, `/verify`, `/learn`, `/ship`, `/pr`, `/usage`.
 - `config/plugins/` : `guard/` (bloque secrets et commandes destructrices) et `notify/` (notification quand une session attend), au **format plugin OpenCode v2** (un dossier, `export default Plugin.define({ id, setup })`) ; testés par `scripts/test-plugins.mjs`. Le compactage à 90 % est natif : `compaction.buffer: "10%"`.
