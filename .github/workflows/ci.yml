@@ -24,8 +24,11 @@ jobs:
         run: node scripts/test-models.mjs
       - name: Config conforme au schéma JSON officiel d'OpenCode (complet + léger)
         run: |
-          pip install --quiet jsonschema
-          python3 scripts/validate-schema.py
+          # jsonschema du dépôt peut être trop ancien (Debian 12 : 4.10.3, Rocky 9 : 3.2.0) :
+          # venv dédié avec >= 4.18, qui suit la référence distante du schéma (UA accepté).
+          python3 -m venv /tmp/schema-venv
+          /tmp/schema-venv/bin/pip install --quiet 'jsonschema>=4.18'
+          /tmp/schema-venv/bin/python scripts/validate-schema.py
       - name: "Installateur côté machine : bloc d'environnement, désinstallation, MemPalace, diagnostic OpenCode périmé"
         run: node scripts/test-install-env.mjs
       - name: "Module Android (faux podman : commandes, montages, protections, faux adb)"
@@ -81,7 +84,8 @@ jobs:
           cargo clippy --all-targets -- -D warnings
           cargo test --all-targets
 
-  # Distributions : Arch (base d'Omarchy), Debian, Fedora, RHEL (Rocky)
+  # Distributions : Arch (base d'Omarchy), Debian, Ubuntu, Fedora, RHEL (Rocky)
+  # Images épinglées par tag daté, jamais latest (tags vérifiés le 2026-11-03).
   distros:
     runs-on: ubuntu-latest
     strategy:
@@ -89,28 +93,62 @@ jobs:
       matrix:
         include:
           - name: Arch Linux (Omarchy)
-            image: archlinux:latest
+            image: archlinux:base-20261101.0.620205
+            python: python            # Arch ne fournit pas python3, seulement python
             setup: pacman -Syu --noconfirm nodejs npm git python tar gzip curl
-          - name: Debian 12
-            image: debian:12
-            setup: apt-get update && apt-get install -y nodejs npm git python3 curl ca-certificates tar gzip
-          - name: Debian 13
-            image: debian:13
-            setup: apt-get update && apt-get install -y nodejs npm git python3 curl ca-certificates tar gzip
-          - name: Fedora
-            image: fedora:latest
-            setup: dnf install -y nodejs npm git python3 tar gzip curl
+          - name: Debian 12 (bookworm)
+            image: debian:12.12
+            python: python3
+            setup: apt-get update && apt-get install -y nodejs npm git python3 python3-venv python3-pip curl ca-certificates tar gzip
+          - name: Debian 13 (trixie)
+            image: debian:13.1
+            python: python3
+            setup: apt-get update && apt-get install -y nodejs npm git python3 python3-venv python3-pip curl ca-certificates tar gzip
+          - name: Ubuntu 24.04
+            image: ubuntu:24.04
+            python: python3
+            setup: apt-get update && apt-get install -y nodejs npm git python3 python3-venv python3-pip curl ca-certificates tar gzip
+          - name: Ubuntu 26.04
+            image: ubuntu:26.04
+            python: python3
+            setup: apt-get update && apt-get install -y nodejs npm git python3 python3-venv python3-pip curl ca-certificates tar gzip
+          - name: Fedora 44
+            image: fedora:44
+            python: python3
+            setup: dnf install -y nodejs npm git python3 python3-pip tar gzip curl
           - name: RHEL (Rocky 9)
-            image: rockylinux:9
-            setup: dnf module enable -y nodejs:20 && dnf install -y nodejs npm git python3 tar gzip
+            image: quay.io/rockylinux/rockylinux:9.8
+            python: python3
+            # L'image fournit curl-minimal : demander curl casse la transaction dnf.
+            setup: dnf module enable -y nodejs:20 && dnf install -y --setopt=install_weak_deps=False nodejs npm git python3 tar gzip python3-pip
     name: ${{ matrix.name }}
     container: ${{ matrix.image }}
     steps:
       - name: Dépendances système
         run: ${{ matrix.setup }}
       - uses: actions/checkout@v7
+      - name: Syntaxe des scripts d'installation
+        run: bash -n install.sh uninstall.sh
       - name: Validation du kit
         run: node --version && node scripts/validate-kit.mjs
+      - name: Plugins locaux (faux contexte OpenCode v2)
+        run: node scripts/test-plugins.mjs
+      - name: oc-models (choix des modèles par agent, survie aux mises à jour)
+        run: node scripts/test-models.mjs
+      - name: Config conforme au schéma JSON officiel d'OpenCode (venv, jsonschema >= 4.18)
+        run: |
+          # jsonschema du dépôt est trop ancien (Debian 12 : 4.10.3, Rocky 9 : 3.2.0) et ne
+          # résout pas la référence distante du schéma (403 sur l'UA) : venv dédié.
+          ${{ matrix.python }} -m venv /tmp/schema-venv
+          /tmp/schema-venv/bin/pip install --quiet 'jsonschema>=4.18'
+          /tmp/schema-venv/bin/python scripts/validate-schema.py
+      - name: Installation avec le module Android (sans outils) et présence des fichiers
+        run: |
+          export OPENCODE_CONFIG_DIR=/tmp/oc-android OBSCURA_BIN_DIR=/tmp/oc-bin
+          ./install.sh --no-tools --android
+          test -f "$OPENCODE_CONFIG_DIR/agents/android.md"
+          test -f "$OPENCODE_CONFIG_DIR/agents/mobile-tester.md"
+          test -f "$OPENCODE_CONFIG_DIR/skills/android-dev/SKILL.md"
       - name: Installation à blanc (complète puis légère)
         run: |
           export OPENCODE_CONFIG_DIR=/tmp/oc-full OBSCURA_BIN_DIR=/tmp/oc-bin

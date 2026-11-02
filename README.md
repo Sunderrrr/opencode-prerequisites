@@ -1,6 +1,6 @@
 # opencode-prerequisites
 
-Mon kit d'init pour [OpenCode](https://opencode.ai) avec l'abonnement **OpenCode Go** : un CEO qui dirige 24 agents spécialisés, des skills, des commandes, des MCP, de la mémoire, une sécurité git multi-agents et un gabarit de projet Rust.
+Mon kit d'init pour [OpenCode](https://opencode.ai) avec l'abonnement **OpenCode Go** : un CEO qui dirige 26 agents spécialisés (28 avec le module Android), des skills, des commandes, des MCP, de la mémoire, une sécurité git multi-agents et un gabarit de projet Rust.
 
 > ⚠️ Les agents sont en **mode débridé** (aucune demande de permission). Travaille dans un dépôt git propre et commité. Seuls les blocages de `config/plugins/guard/` restent.
 
@@ -11,12 +11,14 @@ git clone https://github.com/Sunderrrr/opencode-prerequisites.git
 cd opencode-prerequisites
 ./install.sh              # complet : config + Playwright, Obscura, Trivy, MemPalace
 ./install.sh --lite       # léger : 12 agents, MCP context7 + grep_app, aucun outil lourd
-./install.sh --no-tools   # copie la config seulement
+./install.sh --no-tools   # config seule : rien n'est installé (ni outils, ni MemPalace)
 ./install.sh --with-matt  # + skills complets de Matt Pocock (non testé)
 ./install.sh --android    # + module Android (option, mémorisé) : agents, MCP mobile, toolchain Podman
 ```
 
 **Ne lance pas `install.sh` avec `sudo`** : tout serait installé dans `/root`. L'installateur refuse d'ailleurs de tourner via sudo. Il valide le kit avant de copier, sauvegarde l'existant dans `~/.config/opencode.bak-<date>`, et n'écrit aucune clé.
+
+`--no-tools` ne réinstalle aucun outil : les options mémorisées ne sont pas rejouées (`--no-tools --pentest` reste possible pour forcer), seul le module Android mémorisé est recopié (fichiers, sans téléchargement). Les MCP désactivés faute de prérequis (`kubernetes`, `rea`, `mobile`, `semgrep`) sont réactivés automatiquement au prochain `./install.sh` quand le prérequis revient : `scripts/lib/mcp-state.mjs` retire la ligne `"disabled"` du bloc, sans `sed` et sans perdre les commentaires. La vérification du MCP `semgrep` dépend du mode : avec `--no-tools`, `oc-semgrep-mcp --check-quick` constate seulement la présence de `uvx`/`pipx` (aucun téléchargement) ; le vrai `--check`, réservé à une installation normale, peut télécharger ~50 Mo dans le cache `uv` au premier lancement.
 
 Ensuite : `opencode` → `/connect` → **OpenCode Go** → colle ta clé. Dans la console OpenCode : *Settings › Privacy › Regions › Global* (requis pour les modèles DeepSeek). Puis :
 
@@ -77,7 +79,7 @@ Agent **`reverse-engineer`** + MCP **`rea`** + skill **`reverse-engineer-anythin
 Agent **`pentest`** (en plus de `security`/`review`, qui restent passifs et sans modification). **Objectif principal : sécuriser les apps que tu développes (vibecoding) avant de les exposer**, avec les mêmes outils en ligne de commande que les professionnels de l'AppSec — pas seulement des MCP : `./install.sh --pentest` les installe réellement sur la machine (option mémorisée, comme `--android` ; `./install.sh --no-pentest` oublie le choix sans supprimer les binaires déjà posés) :
 
 - **`gitleaks`** ([gitleaks/gitleaks](https://github.com/gitleaks/gitleaks), MIT) : secrets/clés oubliés dans le code ou l'historique git — binaire téléchargé depuis la dernière release GitHub et **vérifié par sha256** avant installation (même rigueur que Trivy).
-- **`semgrep`** (SAST, [semgrep/semgrep](https://github.com/semgrep/semgrep)) : installé en CLI via `uv tool install semgrep` (pas de sudo). Le MCP **`semgrep`** (serveur officiel, `uvx semgrep-mcp`) reste aussi disponible, réservé aux agents `pentest`/`security` (règle `semgrep_*` dans `opencode.jsonc`, comme `rea_*`/`mobile_*`).
+- **`semgrep`** (SAST, [semgrep/semgrep](https://github.com/semgrep/semgrep)) : installé en CLI via `uv tool install semgrep` (pas de sudo). Le MCP **`semgrep`** (serveur officiel, `uvx semgrep-mcp`) reste aussi disponible, réservé aux agents `pentest`/`security` (règle `semgrep_*` dans `opencode.jsonc`, comme `rea_*`/`mobile_*`). Le lanceur `oc-semgrep-mcp` épingle `semgrep-mcp==0.9.0`, `pydantic==2.11.10` et `setuptools==80.10.2`, et impose un Python **3.10–3.13** (`uv` en télécharge un si ton Python sort de cette plage) ; le premier lancement télécharge les paquets (~50 Mo, plus ~30 Mo de CPython géré si nécessaire), les suivants réutilisent le cache `uv`. `oc-semgrep-mcp --check` teste réellement la poignée de main MCP.
 - **`nuclei`** ([ProjectDiscovery](https://github.com/projectdiscovery/nuclei), MIT) : CVE et mauvaises configurations connues, par templates — même vérification sha256.
 - **`httpx`** ([ProjectDiscovery](https://github.com/projectdiscovery/httpx), MIT) : sonde HTTP (statut, titre, techno, en-têtes) sur une liste d'URL, avant de lancer `nuclei` dessus.
 - **`ffuf`** ([ffuf/ffuf](https://github.com/ffuf/ffuf), MIT) : découverte de contenu par force brute (répertoires, fichiers, paramètres, sous-domaines).
@@ -126,21 +128,22 @@ Comment c'est construit : l'image part d'Ubuntu 24.04, télécharge les outils A
 
 | | Complet | Léger (`--lite`) |
 |---|---|---|
-| Agents | 26 | 12 (`ceo`, `architect`, `rust`, `backend`, `frontend`, `qa`, `security`, `debugger`, `researcher`, `review`, `verify-app`, `integrator`) |
-| MCP | context7, grep_app, terraform, kubernetes, trivy, semgrep, playwright, obscura | context7, grep_app |
+| Agents | 27 (+2 avec `--android`) | 12 (`ceo`, `architect`, `rust`, `backend`, `frontend`, `qa`, `security`, `debugger`, `researcher`, `review`, `verify-app`, `integrator`) |
+| MCP | context7, grep_app, terraform, kubernetes, rea, trivy, semgrep, playwright, obscura, mobile (`--android`) | context7, grep_app |
 | Mémoire | MemPalace (venv `~/.mempalace/venv`, ≈ 500 Mo) | — |
 
-Le profil léger est dérivé du complet par `scripts/make-lite.mjs` : il n'y a pas deux configs à maintenir.
+Le profil léger est dérivé du complet par `scripts/make-lite.mjs` : il n'y a pas deux configs à maintenir. Il retire aussi `plugins/mempalace/` (sinon OpenCode chargerait la mémoire alors que son fichier de config a disparu) et les skills `reverse-engineer-anything` / `android-dev`.
 
 ## Contenu
 
 - `config/opencode.jsonc` : modèle unique `opencode-go/deepseek-v4.1-flash` pour TOUS les agents (gros quota ; aucun agent n'a de modèle propre, pour en changer un : ajoute `model: opencode-go/<id>` dans son fichier `agents/<nom>.md`), permissions débridées, formatage auto, compactage.
 - `config/AGENTS.md` : règles globales (≈ 700 mots, lues à chaque session) : CEO, Rust par défaut, « terminé = prouvé », git multi-agents, sécurité internet, quota.
-- `config/agents/` : `ceo` (par défaut), domaine (`architect`, `backend`, `frontend`, `database`, `devops`, `security`, `pentest`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`), langages/outils (`rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`), contrôle (`review`, `code-simplifier`, `verify-app`), git (`integrator`).
-- `config/skills/` : `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`.
+- `config/agents/` : `ceo` (par défaut), domaine (`architect`, `backend`, `frontend`, `database`, `devops`, `security`, `pentest`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`, `reverse-engineer`), langages/outils (`rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`), contrôle (`review`, `code-simplifier`, `verify-app`), git (`integrator`).
+- `config/skills/` : `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`, `reverse-engineer-anything`.
 - `config/commands/` : `/check`, `/plan-first`, `/simplify`, `/verify`, `/learn`, `/ship`, `/pr`, `/usage`.
 - `config/plugins/` : `guard/` (bloque secrets et commandes destructrices) et `notify/` (notification quand une session attend), au **format plugin OpenCode v2** (un dossier, `export default Plugin.define({ id, setup })`) ; testés par `scripts/test-plugins.mjs`. Le compactage à 90 % est natif : `compaction.buffer: "10%"`.
 - `config/bin/oc-models` : choix du modèle par agent ; `config/bin/agent-wt` : un worktree git par agent (`new`, `merge`, `remove`, `list`, `integration`, `sync`).
+- Versions MCP épinglées, pas de `@latest` implicite : `@playwright/mcp@0.0.84`, `rea-agents@6.8.0`, `kubernetes-mcp-server@0.1.1`, `@mobilenext/mobile-mcp@1.0.15`, `semgrep-mcp==0.9.0`, image `terraform-mcp-server:1.4.1`.
 - `templates/rust-project/` + `oc-new-rust <nom>` : projet Rust avec `AGENTS.md`, tests, CI GitHub Actions et `git init`.
 - `scripts/validate-kit.mjs` : validation (utilisée par l'installateur et la CI) ; `.github/workflows/ci.yml` : validation, installation à blanc, ShellCheck, gabarit Rust.
 

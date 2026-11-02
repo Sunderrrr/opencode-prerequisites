@@ -76,6 +76,20 @@ check("emulator start : point d'entrée de l'image", c.includes("--entrypoint /u
 check("emulator start --wait : attend sys.boot_completed", calls().includes("getprop sys.boot_completed") && /Android est prêt/.test(r.stdout))
 check("emulator start : écrit la liste des dossiers montés (pour le faux adb)", fs.readFileSync(path.join(tmp, "data", "oc-android", "mounts"), "utf8").trim().split("\n").includes(proj))
 r = oc(["emulator", "status"]); check("emulator status : en marche + appareil listé", /en marche/.test(r.stdout) && /emulator-5554/.test(r.stdout))
+
+// 3b. adb : dossier courant monté (même chemin) et utilisé comme working dir, pour les chemins relatifs d'APK
+reset(); fs.writeFileSync(state, "true")
+r = oc(["adb", "install", "-r", "app/build/outputs/apk/debug/app-debug.apk"])
+c = calls().split("\n").find((l) => l.startsWith("run ") && l.includes(" adb ")) ?? ""
+check("adb install : monte le projet et travaille dans $PWD", r.status === 0 && c.includes(`-v ${proj}:${proj}`) && c.includes(`-w ${proj}`) && c.includes(`localhost/oc-android:latest adb install -r app/build/outputs/apk/debug/app-debug.apk`), r.stderr + calls())
+check("adb : jamais en --privileged ni avec le socket de Podman", !/--privileged|podman\.sock|docker\.sock/.test(calls()))
+const horsProjet = path.join(tmp, "hors projet"); fs.mkdirSync(horsProjet, { recursive: true })
+const horsProjetReal = fs.realpathSync(horsProjet)
+reset(); fs.writeFileSync(state, "true")
+r = oc(["adb", "logcat", "-d"], {}, horsProjet)
+c = calls().split("\n").find((l) => l.startsWith("run ") && l.includes(" adb ")) ?? ""
+check("adb hors projet : logcat marche, dossier courant monté", r.status === 0 && c.includes(`-v ${horsProjetReal}:${horsProjetReal}`) && c.includes(`-w ${horsProjetReal}`) && c.includes("adb logcat -d"), r.stderr + calls())
+
 r = oc(["emulator", "stop"]); check("emulator stop : supprime le conteneur", r.status === 0 && /rm -f oc-android-emu/.test(calls()))
 
 // 4. construction de l'image

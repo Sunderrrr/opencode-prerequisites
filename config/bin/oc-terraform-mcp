@@ -3,12 +3,33 @@
 # Choisit le moteur qui répond vraiment (un Docker installé mais arrêté est ignoré au profit de Podman).
 set -Eeuo pipefail
 
+# macOS n'a pas « timeout » : coreutils (gtimeout) s'il est là, sinon on ne borne pas le test.
+# Sans borne, un démon Docker arrêté peut faire attendre le client : on essaie Podman d'abord.
+TO=""
+if command -v timeout >/dev/null 2>&1; then TO=timeout
+elif command -v gtimeout >/dev/null 2>&1; then TO=gtimeout
+fi
+
 rt=""; first=""
-for c in docker podman; do
-  command -v "$c" >/dev/null 2>&1 || continue
-  [ -n "$first" ] || first="$c"
-  if timeout 8 "$c" info >/dev/null 2>&1; then rt="$c"; break; fi
-done
+probe() {
+  if [ -n "$TO" ]; then "$TO" 8 "$1" info >/dev/null 2>&1
+  else "$1" info >/dev/null 2>&1
+  fi
+}
+choose() {
+  local c
+  for c in "$@"; do
+    command -v "$c" >/dev/null 2>&1 || continue
+    [ -n "$first" ] || first="$c"
+    if probe "$c"; then rt="$c"; return 0; fi
+  done
+  return 0
+}
+
+# Ordre historique (Docker d'abord) quand le test peut être borné ; Podman d'abord sinon.
+if [ -n "$TO" ]; then choose docker podman
+else choose podman docker
+fi
 rt="${rt:-$first}"
 [ -n "$rt" ] || { echo "Ni docker ni podman n'est installé (requis pour le MCP terraform)." >&2; exit 1; }
 

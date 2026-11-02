@@ -12,12 +12,18 @@ if [ -z "$exe" ]; then
   done
 fi
 
-args=()
-if [ -n "$exe" ]; then
-  args+=(--executable-path "$exe")
-  [ "${OC_PLAYWRIGHT_HEADED:-0}" = 1 ] || args+=(--headless)
-  # Navigateur lancé en root (conteneur) : le sandbox Chromium est impossible
-  [ "$(id -u)" -ne 0 ] || args+=(--no-sandbox)
+# Version épinglée (dernière stable vérifiée : 0.0.84) : pas de @latest surprise au démarrage.
+pkg="@playwright/mcp@0.0.84"
+
+# Sans navigateur système, args resterait vide : en bash 3.2 (macOS), "${args[@]}" avec set -u
+# échoue (« unbound variable »). On lance donc npx dans deux branches distinctes.
+if [ -z "$exe" ]; then
+  exec npx -y "$pkg" "$@"
 fi
 
-exec npx -y @playwright/mcp@latest "${args[@]}" "$@"
+args=(--executable-path "$exe")
+[ "${OC_PLAYWRIGHT_HEADED:-0}" = 1 ] || args+=(--headless)
+# Navigateur lancé en root (conteneur) : le sandbox Chromium est impossible
+[ "$(id -u)" -ne 0 ] || args+=(--no-sandbox)
+
+exec npx -y "$pkg" "${args[@]}" "$@"

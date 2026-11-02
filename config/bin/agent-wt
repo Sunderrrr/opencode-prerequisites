@@ -2,7 +2,7 @@
 # agent-wt : un worktree git isolé par tâche d'agent, pour éviter les conflits en travail parallèle.
 #   agent-wt new <tâche> [base]   crée .worktrees/<tâche> sur la branche agent/<tâche>
 #   agent-wt merge <tâche>        fusionne agent/<tâche> dans la branche courante du dépôt principal
-#   agent-wt remove <tâche>       supprime le worktree et la branche (après fusion)
+#   agent-wt remove <tâche> [--force]  supprime le worktree et la branche ; refuse les changements non commités sans --force
 #   agent-wt list                 liste les worktrees d'agents
 #   agent-wt integration <nom> [base]  crée la branche integration/<nom> depuis origin/<base> (défaut main) pour une PR unique
 #   agent-wt sync [base]          rebase la branche courante sur origin/<base> (code 2 + fichiers si conflit)
@@ -10,7 +10,8 @@ set -Eeuo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 # si on est dans un worktree, remonter au dépôt principal
-MAIN="$(cd "$ROOT" && git worktree list --porcelain | awk '/^worktree /{print $2; exit}')"
+# (sub() garde les chemins contenant des espaces : pas de découpage sur $2)
+MAIN="$(cd "$ROOT" && git worktree list --porcelain | awk '/^worktree /{sub(/^worktree /, ""); print; exit}')"
 WT_DIR="$MAIN/.worktrees"
 cmd="${1:-}"; task="${2:-}"
 
@@ -41,7 +42,21 @@ case "$cmd" in
     ;;
   remove)
     safe "$task"
-    git -C "$MAIN" worktree remove --force "$WT_DIR/$task"
+    force=0
+    case "${3:-}" in
+      --force) force=1 ;;
+      "") ;;
+      *) echo "usage : agent-wt remove <tâche> [--force]" >&2; exit 1 ;;
+    esac
+    if [ "$force" -eq 0 ] && [ -n "$(git -C "$WT_DIR/$task" status --porcelain 2>/dev/null || true)" ]; then
+      echo "❌ $task a des changements non commités dans $WT_DIR/$task : commite-les, ou relance avec --force pour les perdre." >&2
+      exit 1
+    fi
+    if [ "$force" -eq 1 ]; then
+      git -C "$MAIN" worktree remove --force "$WT_DIR/$task"
+    else
+      git -C "$MAIN" worktree remove "$WT_DIR/$task"
+    fi
     git -C "$MAIN" branch -d "agent/$task" 2>/dev/null || echo "Branche agent/$task conservée (non fusionnée ?)"
     ;;
   list)

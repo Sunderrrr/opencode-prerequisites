@@ -6,7 +6,17 @@ set -Eeuo pipefail
 DEST="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 BIN="${OBSCURA_BIN_DIR:-$HOME/.local/bin}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
-# Sauvegardes (le glob est trié ; les horodatages se trient dans l'ordre chronologique)
+
+# unique_path <chemin> : le chemin s'il est libre, sinon <chemin>-1, -2... (deux désinstallations
+# dans la même seconde ne doivent jamais s'imbriquer).
+unique_path() {
+  local base="$1" cand="$1" n=1
+  while [ -e "$cand" ] || [ -L "$cand" ]; do cand="$base-$n"; n=$((n + 1)); done
+  printf '%s\n' "$cand"
+}
+
+# Sauvegardes (le glob est trié ; les horodatages se trient dans l'ordre chronologique,
+# et le suffixe -N départage deux sauvegardes de la même seconde)
 last=""
 for b in "$DEST".bak-*; do
   [ -d "$b" ] && last="$b"
@@ -20,8 +30,9 @@ if [ "${1:-}" = "--list" ]; then
 fi
 
 if [ -d "$DEST" ]; then
-  mv "$DEST" "$DEST.removed-$STAMP"
-  echo "📦 Config actuelle déplacée : $DEST.removed-$STAMP"
+  removed="$(unique_path "$DEST.removed-$STAMP")"
+  mv "$DEST" "$removed"
+  echo "📦 Config actuelle déplacée : $removed"
 fi
 if [ -n "$last" ]; then
   cp -a "$last" "$DEST"

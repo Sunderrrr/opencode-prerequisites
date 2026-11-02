@@ -143,6 +143,7 @@ for (const [name, m] of Object.entries(mcpServers(cfg))) {
       if (fs.existsSync(reaBin) && run(reaBin, ["--check"], 20000).status === 0) console.log("     Node convient maintenant pour REA : relance ./install.sh --no-tools pour l'activer.")
       else console.log("     (REA exige Node >= 26.12.1, ou 24.22.1 / 22.23.4 : mise use -g node@26.12.1, puis ./install.sh --no-tools)")
     }
+    if (name === "semgrep") console.log("     (vérifie avec oc-semgrep-mcp --check ; s'il répond, relance ./install.sh pour l'activer)")
     continue
   }
   if (m.type === "remote") { ok(`${name} → ${m.url}`); continue }
@@ -176,6 +177,19 @@ for (const [name, m] of Object.entries(mcpServers(cfg))) {
             }
           })()
         : wa(`${name} : aucun navigateur (installe chromium avec ton gestionnaire de paquets, ou relance ./install.sh)`)
+    continue
+  }
+  if (bin.endsWith("oc-semgrep-mcp")) {
+    // Le lanceur démarre réellement le serveur et vérifie la poignée de main MCP initialize :
+    // une simple présence de uvx ne prouve rien (semgrep-mcp 0.9.0 casse avec pydantic >= 2.12).
+    // Marge au-delà des 180 s internes du lanceur : au premier lancement uv peut télécharger
+    // les paquets (~50 Mo) et un CPython géré (~30 Mo) ; le lanceur rend alors un message clair.
+    const ms = Number(process.env.OC_DOCTOR_SEMGREP_TIMEOUT_MS || 240000)
+    const r = run(bin, ["--check"], ms)
+    const detail = squash((r.stderr || r.stdout || "").trim(), 10)
+    r.status === 0
+      ? ok(`MCP ${name} : ${(r.stdout ?? "").trim() || "serveur MCP opérationnel"}`)
+      : ko(`MCP ${name} : le serveur ne démarre pas (--check ${r.status === null ? `interrompu après ${Math.round(ms / 1000)}s` : `code ${r.status}`})${detail ? ` :\n${detail}` : ""}`)
     continue
   }
   ok(`${name} : ${bin} disponible`)

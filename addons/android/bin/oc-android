@@ -5,7 +5,7 @@
 #   oc-android exec <commande…>                           commande quelconque dans le conteneur (sdkmanager, avdmanager…)
 #   oc-android emulator start [--wait] [--mount DIR]…     démarre l'émulateur (sans fenêtre, nécessite /dev/kvm)
 #   oc-android emulator wait|stop|status                  attendre le démarrage / arrêter / état
-#   oc-android adb <args…>                                adb de l'émulateur (même chose que le faux adb de mobile-mcp)
+#   oc-android adb <args…>                                adb de l'émulateur (dossier courant monté, comme le faux adb de mobile-mcp)
 #   oc-android doctor                                     état de Podman, de l'image, de KVM et de l'émulateur
 # Le dossier courant est monté dans le conteneur : lance les commandes depuis la racine de ton projet.
 set -Eeuo pipefail
@@ -82,9 +82,16 @@ cmd_gradle() {
 cmd_exec() { [ $# -gt 0 ] || die "usage : oc-android exec <commande…>"; run_tool "$@"; }
 
 cmd_adb() {
-  local flags=(-i); if [ -t 0 ] && [ -t 1 ]; then flags=(-it); fi
   running || die "Émulateur arrêté : oc-android emulator start"
-  exec "$PODMAN" exec "${flags[@]}" "$EMU" adb "$@"
+  need_image; ensure_net
+  # Le dossier courant est monté au même chemin absolu (sauf /, qui écraserait la racine du conteneur) :
+  # les chemins relatifs des APK marchent et « adb pull » peut écrire sur l'hôte.
+  local mounts=()
+  [ "$PWD" = / ] || mounts=(-v "$PWD:$PWD")
+  # shellcheck disable=SC2046
+  exec "$PODMAN" run --rm $(tty_flags) --security-opt label=disable --network "$NET" \
+    -e "ADB_SERVER_SOCKET=tcp:${EMU}:5037" \
+    "${mounts[@]+"${mounts[@]}"}" -w "$PWD" "$IMAGE" adb "$@"
 }
 
 emu_start() {

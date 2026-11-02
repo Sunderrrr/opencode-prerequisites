@@ -51,5 +51,8 @@ cfg.mcp = { ...(cfg.mcp?.timeout ? { timeout: cfg.mcp.timeout } : {}), servers: 
 delete cfg.plugin
 delete cfg.plugins
 fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + "\n")
+// Plugin local MemPalace : OpenCode charge plugins/*/ même sans entrée dans opencode.jsonc. Le retirer ici,
+// sinon le profil léger garde la mémoire alors que mempalace.jsonc a été supprimé.
+fs.rmSync(path.join(dest, "plugins", "mempalace"), { recursive: true, force: true })
 for (const f of ["mempalace.jsonc", "k8s-mcp.toml"]) fs.rmSync(path.join(dest, f), { force: true })
 console.log(`Profil léger : ${keep.size} agents, MCP ${Object.keys(keepMcp).join(", ")}`)

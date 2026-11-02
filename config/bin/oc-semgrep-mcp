@@ -1,22 +1,217 @@
 #!/usr/bin/env bash
 # Lance le serveur MCP Semgrep officiel (SAST, LGPL-2.1/MIT, github.com/semgrep/semgrep) via uvx.
-#   oc-semgrep-mcp            serveur MCP (stdio), utilisé par OpenCode (agents pentest/security)
-#   oc-semgrep-mcp --check    vérifie seulement qu'un lanceur (uvx/pipx) est disponible (code 0/1)
+#   oc-semgrep-mcp                serveur MCP (stdio), utilisé par OpenCode (agents pentest/security)
+#   oc-semgrep-mcp --check        démarre vraiment le serveur, vérifie la poignée de main MCP "initialize"
+#                                 (code 0/1) ; tue le processus à la fin et affiche un extrait de stderr en cas d'échec
+#   oc-semgrep-mcp --check-quick  vérifie seulement que uvx (ou pipx) est dans le PATH : aucun processus
+#                                 lancé, aucun accès réseau, aucun fichier écrit (code 0/1). Sert à
+#                                 ./install.sh --no-tools, qui ne doit rien télécharger.
 # Pas de compte ni de jeton requis en local (règles communautaires par défaut).
+#
+# Versions épinglées (pas de @latest implicite) :
+#   semgrep-mcp 0.9.0 (dernière sur PyPI) publie mcp==1.12.2 et semgrep==1.135.0.
+#   - mcp 1.12.2 importe pydantic._internal._typing_extra.eval_type_backport, retiré de pydantic 2.12+ :
+#     sans la contrainte, uv résout pydantic 2.14.x et le serveur meurt sur ImportError.
+#   - semgrep 1.135.0 importe opentelemetry.instrumentation, qui importe pkg_resources : setuptools 82+
+#     ne fournit plus pkg_resources (81 seulement un avertissement de dépréciation). Sans lui,
+#     `semgrep --version` échoue dans l'environnement uvx et le serveur MCP meurt au démarrage
+#     (« Semgrep is not installed or not in your PATH »).
+#
+# Interpréteur Python : pydantic 2.11.10 dépend de pydantic-core 2.33.2, qui n'a pas de wheel
+# pour Python 3.14/3.15. Avec le Python système par défaut, uv tente alors une compilation
+# maturin/Cargo et échoue (« Cargo metadata failed … no default toolchain ») faute de toolchain
+# Rust. On impose donc un interpréteur 3.10–3.13 : uv utilise un Python système conforme s'il
+# existe, sinon il télécharge un CPython géré (~30 Mo la première fois).
+#
+# Variables (surcharge possible sans modifier ce fichier) :
+#   OC_SEMGREP_MCP_VERSION        version de semgrep-mcp                 (défaut : 0.9.0)
+#   OC_SEMGREP_PYDANTIC_VERSION   version de pydantic                    (défaut : 2.11.10)
+#   OC_SEMGREP_SETUPTOOLS_VERSION version de setuptools                  (défaut : 80.10.2)
+#   OC_SEMGREP_PYTHON             interpréteur pour uvx/pipx             (défaut : '>=3.10,<3.14')
+#                                 ex. 3.12, python3.12, /opt/py/bin/python3.12
+#   OC_SEMGREP_CHECK_TIMEOUT      délai max de --check, en secondes      (défaut : 180)
 set -Eeuo pipefail
 
-runner=""
-if command -v uvx >/dev/null 2>&1; then
-  runner=(uvx semgrep-mcp)
-elif command -v pipx >/dev/null 2>&1; then
-  runner=(pipx run semgrep-mcp)
+MCP_VERSION="${OC_SEMGREP_MCP_VERSION:-0.9.0}"
+PYDANTIC_VERSION="${OC_SEMGREP_PYDANTIC_VERSION:-2.11.10}"
+SETUPTOOLS_VERSION="${OC_SEMGREP_SETUPTOOLS_VERSION:-80.10.2}"
+CHECK_TIMEOUT="${OC_SEMGREP_CHECK_TIMEOUT:-180}"
+
+DEFAULT_PYTHON=">=3.10,<3.14"
+PYTHON_SPEC="${OC_SEMGREP_PYTHON:-$DEFAULT_PYTHON}"
+
+# --check-quick : présence d'un lanceur uniquement, AVANT toute construction de commande (la branche pipx
+# ci-dessous écrit un fichier de contraintes et lance « pipx run --help »). command -v et echo sont des
+# builtins : aucun sous-processus, aucun accès réseau, aucun fichier — c'est ce qu'exige ./install.sh --no-tools.
+if [ "${1:-}" = "--check-quick" ]; then
+  if command -v uvx >/dev/null 2>&1; then
+    echo "semgrep-mcp ${MCP_VERSION} : uvx détecté — lanceur disponible (démarrage non testé ; --check pour la poignée de main MCP)"
+    exit 0
+  fi
+  if command -v pipx >/dev/null 2>&1; then
+    echo "semgrep-mcp ${MCP_VERSION} : pipx détecté (uvx absent) — lanceur disponible (démarrage non testé ; --check pour la poignée de main MCP)"
+    exit 0
+  fi
+  echo "semgrep-mcp ${MCP_VERSION} : ni uvx ni pipx dans le PATH." >&2
+  echo "  Installe uv (recommandé) : curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+  echo "  ou pipx : https://pipx.pypa.io — puis relance cette vérification." >&2
+  exit 1
 fi
 
-if [ -z "${runner:-}" ]; then
+constraints=""
+runner=()
+runner_kind=""
+pipx_python=""
+if command -v uvx >/dev/null 2>&1; then
+  runner_kind=uv
+  # --python : uv prend un interpréteur système conforme ou en télécharge un (CPython géré).
+  runner=(uvx --python "$PYTHON_SPEC"
+              --from "semgrep-mcp==${MCP_VERSION}"
+              --with "pydantic==${PYDANTIC_VERSION}"
+              --with "setuptools==${SETUPTOOLS_VERSION}"
+              semgrep-mcp)
+elif command -v pipx >/dev/null 2>&1; then
+  runner_kind=pipx
+  # pipx n'a pas d'équivalent de --with : on contraint les dépendances de son venv via PIP_CONSTRAINT.
+  constraints="${XDG_CACHE_HOME:-$HOME/.cache}/oc-semgrep-mcp/pipx-constraints.txt"
+  mkdir -p "$(dirname "$constraints")"
+  printf 'pydantic==%s\nsetuptools==%s\n' "$PYDANTIC_VERSION" "$SETUPTOOLS_VERSION" > "$constraints"
+  export PIP_CONSTRAINT="$constraints"
+
+  # pipx --python n'accepte pas de spec de version : on lui donne un interpréteur présent,
+  # sinon (pipx récent) on lui fait télécharger un CPython autonome compatible wheels.
+  pipx_python="${OC_SEMGREP_PYTHON:-}"
+  if [ -z "$pipx_python" ]; then
+    for cand in python3.13 python3.12 python3.11 python3.10; do
+      if command -v "$cand" >/dev/null 2>&1; then pipx_python="$cand"; break; fi
+    done
+  fi
+  fetch=()
+  if [ -z "$pipx_python" ]; then
+    if pipx run --help 2>/dev/null | grep -q -- '--fetch-missing-python'; then
+      pipx_python=3.12
+      fetch=(--fetch-missing-python)
+    else
+      echo "semgrep-mcp : aucun Python 3.10–3.13 sur cette machine et ce pipx ne sait pas en télécharger." >&2
+      echo "  Installe uv (recommandé) : curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+      echo "  ou un Python compatible (Debian/Ubuntu : sudo apt install python3.12 ; Arch : python312 depuis AUR)." >&2
+      exit 1
+    fi
+  fi
+  runner=(pipx run --python "$pipx_python" ${fetch[@]+"${fetch[@]}"}
+              --spec "semgrep-mcp==${MCP_VERSION}" semgrep-mcp)
+else
   echo "semgrep-mcp demande uvx (ou pipx). Installe uv : curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
   exit 1
 fi
 
-[ "${1:-}" = "--check" ] && exit 0
+# Nettoyage du dossier temporaire de --check (variable globale : le trap ne doit pas figer
+# le "$dir" local de check(), sinon shellcheck SC2064 et fuite si le chemin change).
+check_dir=""
+cleanup() { [ -z "$check_dir" ] || rm -rf "$check_dir"; }
+trap cleanup EXIT
 
-exec "${runner[@]}"
+# Dernières lignes utiles de stderr (coupe les barres de progression uv, très bruitées).
+stderr_excerpt() {
+  tr '\r' '\n' < "$1" 2>/dev/null \
+    | grep -v -E '^[[:space:]]*$' \
+    | grep -v -E '(Downloading|Downloaded|Prepared|Installed|Resolved|Audited|Building|Built|Updating|Creating virtual environment)' \
+    | tail -n 12 \
+    | sed 's/^/    /' || true
+}
+
+# Interpréteur réellement utilisé (best-effort, ne télécharge rien) : utile au support.
+python_used() {
+  local p v
+  [ "$runner_kind" = uv ] || return 0
+  command -v uv >/dev/null 2>&1 || return 0
+  p="$(uv python find --no-python-downloads "$PYTHON_SPEC" 2>/dev/null || true)"
+  [ -n "$p" ] || return 0
+  v="$("$p" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])' 2>/dev/null || true)"
+  printf '%s' "$v"
+}
+
+# "name version" depuis la réponse initialize (JSON-RPC sur stdout).
+server_info() {
+  local info name ver
+  info="$(grep -o '"serverInfo"[^}]*}' "$1" 2>/dev/null | head -n 1 || true)"
+  [ -n "$info" ] || return 0
+  name="$(printf '%s' "$info" | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+  ver="$(printf '%s' "$info" | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+  if [ -n "$name" ] && [ -n "$ver" ]; then printf '%s %s' "$name" "$ver"
+  elif [ -n "$name" ]; then printf '%s' "$name"
+  fi
+}
+
+check() {
+  local dir rc pid end out err info py msg
+  dir="$(mktemp -d "${TMPDIR:-/tmp}/oc-semgrep-mcp.XXXXXX")"
+  check_dir="$dir"
+  out="$dir/out" err="$dir/err"
+
+  printf '%s\n' \
+    '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"oc-semgrep-mcp-check","version":"1"}}}' \
+    > "$dir/request.jsonl"
+
+  # Borne le temps : timeout(1) si présent, sinon équivalent portable (boucle + kill).
+  if command -v timeout >/dev/null 2>&1; then
+    rc=0
+    timeout --kill-after=5 "$CHECK_TIMEOUT" "${runner[@]}" \
+      < "$dir/request.jsonl" > "$out" 2> "$err" || rc=$?
+  else
+    "${runner[@]}" < "$dir/request.jsonl" > "$out" 2> "$err" &
+    pid=$!
+    end=$((SECONDS + CHECK_TIMEOUT))
+    while kill -0 "$pid" 2>/dev/null && [ "$SECONDS" -lt "$end" ]; do sleep 0.2; done
+    if kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      rc=124
+    else
+      rc=0
+      wait "$pid" 2>/dev/null || rc=$?
+    fi
+  fi
+
+  # Succès = réponse JSON-RPC à initialize (serverInfo), serveur sorti proprement sur EOF de stdin.
+  if [ "$rc" -eq 0 ] && grep -q '"serverInfo"' "$out" 2>/dev/null; then
+    info="$(server_info "$out")"
+    py="$(python_used)"
+    msg="semgrep-mcp ${MCP_VERSION} : poignée de main MCP initialize OK"
+    [ -z "$info" ] || msg="$msg — serverInfo ${info}"
+    [ -z "$py" ] || msg="$msg — Python ${py}"
+    echo "$msg"
+    return 0
+  fi
+
+  {
+    echo "semgrep-mcp ${MCP_VERSION} : aucune réponse MCP initialize valide (code ${rc})."
+    case "$rc" in
+      124|137)
+        echo "  Délai de ${CHECK_TIMEOUT}s dépassé : le premier lancement télécharge les paquets (~50 Mo) et, au besoin, un CPython géré (~30 Mo)."
+        echo "  Réessaie (le cache uv est réutilisé) ou augmente OC_SEMGREP_CHECK_TIMEOUT."
+        ;;
+    esac
+    if grep -qiE 'maturin|Cargo metadata|no default toolchain|rustup' "$err" 2>/dev/null; then
+      echo "  Une dépendance a dû être compilée : le Python retenu (${PYTHON_SPEC}) n'a pas de wheel."
+      echo "  Force un interpréteur géré : OC_SEMGREP_PYTHON=3.12 $(basename "$0") --check"
+      echo "  (équivalent : uv python install 3.12 ; uv le télécharge automatiquement)."
+    fi
+    if grep -q '"error"' "$out" 2>/dev/null; then
+      echo "  Réponse JSON-RPC d'erreur :"
+      tail -n 2 "$out" | sed 's/^/    /'
+    fi
+    if [ -s "$err" ]; then
+      echo "  Dernières lignes de stderr :"
+      stderr_excerpt "$err"
+    fi
+  } >&2
+  return 1
+}
+
+if [ "${1:-}" = "--check" ]; then
+  if check; then exit 0; else exit 1; fi
+fi
+
+# Lancement normal : exec propre, aucune sortie parasite sur stdout (protocole MCP).
+exec "${runner[@]}" "$@"
