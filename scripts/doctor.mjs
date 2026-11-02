@@ -127,7 +127,15 @@ if (has("gh")) {
 // MCP activés : vérifie leurs prérequis
 console.log("\nMCP activés :")
 for (const [name, m] of Object.entries(mcpServers(cfg))) {
-  if (m.enabled === false || m.disabled === true) { console.log(`   · ${name} (désactivé)`); continue }
+  if (m.enabled === false || m.disabled === true) {
+    console.log(`   · ${name} (désactivé)`)
+    if (name === "rea") {
+      const reaBin = path.join(HOME, ".local", "bin", "oc-rea-mcp")
+      if (fs.existsSync(reaBin) && run(reaBin, ["--check"], 20000).status === 0) console.log("     Node convient maintenant pour REA : relance ./install.sh --no-tools pour l'activer.")
+      else console.log("     (REA exige Node >= 26.12.1, ou 24.22.1 / 22.23.4 : mise use -g node@26.12.1, puis ./install.sh --no-tools)")
+    }
+    continue
+  }
   if (m.type === "remote") { ok(`${name} → ${m.url}`); continue }
   const expand = (x) => String(x).replace(/\{env:(\w+)\}/g, (_, k) => process.env[k] ?? "")
   const bin = expand(m.command?.[0] ?? "")

@@ -7,7 +7,7 @@
 
 ## Organisation
 - L'agent par défaut est `ceo` : il cadre, découpe, délègue et valide, sans écrire de code. Petite tâche = un seul spécialiste.
-- Spécialistes de domaine : `architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`. Par langage/outil : `rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`. Contrôle : `review`, `code-simplifier`, `verify-app`. Git : `integrator`.
+- Spécialistes de domaine : `architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`, `reverse-engineer`. Par langage/outil : `rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`. Contrôle : `review`, `code-simplifier`, `verify-app`. Git : `integrator`.
 - Un sous-agent démarre sans historique : le brief du CEO donne objectif, contexte, fichiers, critère de réussite, interdits. Il n'interroge jamais l'utilisateur : il avance sur sa meilleure hypothèse et la note dans son rapport court (fait / preuves / reste / questions).
 - `security` est obligatoire pour auth, données personnelles, secrets, réseau et dépendances.
 - Agents d'analyse = lecture seule, sans sous-délégation ; agents d'action = bash autorisé.
@@ -29,6 +29,7 @@
 
 ## Outils
 - Doc de librairie : `context7` avant d'écrire du code. Exemples de code réels : `grep_app`. Internet : `websearch`/`webfetch` ou `@web-researcher`. GitHub : `gh search`, `gh repo view`, `gh api`.
+- Rétro-ingénierie : `@reverse-engineer` (skill `reverse-engineer-anything`, MCP `rea`), uniquement dans un cadre légal : ses propres logiciels, CTF, malware en analyse défensive, interopérabilité, recherche autorisée. Jamais pour contourner licence, DRM ou anti-triche.
 - IaC/infra : MCP `terraform` (docs du registre), `kubernetes` (lecture seule), `trivy` (scan images, IaC, secrets).
 - Navigateur : `playwright` (tests de page) ou `obscura` (lecture/scraping léger), jamais les deux ensemble. Ne scrape que ce que je demande, dans le respect des conditions d'utilisation.
 - Gros travail de lecture : délègue à `@explore`/`@researcher`. Charge un skill quand sa description correspond.

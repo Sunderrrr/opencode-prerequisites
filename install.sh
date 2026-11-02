@@ -192,7 +192,7 @@ cp "$TMP/new.manifest" "$MANIFEST"
 for f in "$SRC"/bin/*; do install -m 0755 "$f" "$BIN/$(basename "$f")"; done
 install -m 0755 "$HERE/scripts/new-rust-project.sh" "$BIN/oc-new-rust"
 cp -a "$HERE/templates" "$DEST/templates"
-echo "✅ Config installée dans $DEST ; lanceurs (agent-wt, oc-new-rust, oc-models, oc-playwright-mcp, oc-terraform-mcp) dans $BIN"
+echo "✅ Config installée dans $DEST ; lanceurs (agent-wt, oc-new-rust, oc-models, oc-playwright-mcp, oc-terraform-mcp, oc-rea-mcp) dans $BIN"
 
 # 3. Profil léger
 if [ "$LITE" = 1 ]; then
@@ -211,6 +211,18 @@ if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ]; then
     sed -i.bak 's|"kubernetes": {|"kubernetes": {\n        "disabled": true, // aucun contexte kubectl : retire cette ligne quand tu auras un cluster|' "$DEST/opencode.jsonc" \
       && rm -f "$DEST/opencode.jsonc.bak"
     echo "ℹ️  MCP kubernetes désactivé (aucun contexte kubectl dans ${kc%%:*}) : retire la ligne \"disabled\" de opencode.jsonc quand tu auras un cluster."
+  fi
+fi
+
+# 3c. REA (rétro-ingénierie) : le serveur exige Node >= 26.12.1 (ou 24.22.1 / 22.23.4) ; sinon on le désactive proprement
+if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"rea": {' "$DEST/opencode.jsonc"; then
+  if rea_msg="$("$BIN/oc-rea-mcp" --check 2>&1)"; then
+    echo "✅ MCP rea (REA 6.8.0) activé : Node ${OC_REA_NODE_VERSION:-$(node -p 'process.versions.node')} convient"
+  else
+    sed -i.bak 's|"rea": {|"rea": {\n        "disabled": true, // Node trop ancien pour REA : retire cette ligne après avoir mis Node à jour|' "$DEST/opencode.jsonc" \
+      && rm -f "$DEST/opencode.jsonc.bak"
+    echo "ℹ️  MCP rea désactivé : $(printf '%s' "$rea_msg" | head -n 1)"
+    echo "    Mets Node à jour (mise use -g node@26.12.1) puis relance ./install.sh --no-tools : l'agent reverse-engineer utilisera la CLI en attendant."
   fi
 fi
 

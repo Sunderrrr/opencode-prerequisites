@@ -62,6 +62,15 @@ oc-models available                     # liste des modèles OpenCode Go (en lig
 
 Tes choix sont enregistrés dans `~/.config/opencode/oc-models.json` et **ré-appliqués à chaque `./install.sh`** : une mise à jour du kit ne les écrase pas. Redémarre OpenCode après un changement. Si OpenCode affiche encore l'ancien modèle, tape `/models` : il peut mémoriser ton dernier choix manuel.
 
+## Rétro-ingénierie (REA)
+
+Agent **`reverse-engineer`** + MCP **`rea`** + skill **`reverse-engineer-anything`**, basés sur [REA (Reverse Engineer Anything)](https://github.com/morluto/rea) (MIT, paquet npm `rea-agents` épinglé en 6.8.0). Il analyse des binaires natifs (Ghidra, IDA, Hopper), des applications JavaScript/Electron, du .NET, des APK Android, du firmware et des captures réseau, en séparant observations, dérivations, inférences et inconnues.
+
+- **Aucun agent de ce type n'existait** dans les collections consultées (VoltAgent : rien sur la rétro-ingénierie ni le malware). REA ne fournit qu'un skill, repris tel quel dans `config/skills/reverse-engineer-anything/` (licence MIT conservée, voir `UPSTREAM.md`) ; l'agent est celui du kit.
+- **Cadre légal**, repris du [DISCLAIMER de REA](https://github.com/morluto/rea/blob/main/DISCLAIMER.md) et écrit dans l'agent : ses propres logiciels, CTF, malware en analyse défensive, interopérabilité, recherche autorisée. Il **refuse** de contourner licences, DRM ou anti-triche, de faire des cheats, de contourner l'authentification d'un système non autorisé, de copier du code protégé, ou de créer du malware/des exploits contre des tiers. Les échantillons inconnus ne sont jamais exécutés sur ta machine.
+- **Node requis : ≥ 26.12.1** (ou 24.22.1 / 22.23.4). Si ta version est plus ancienne, l'installateur désactive le MCP (`"disabled": true`) et l'agent utilise la CLI `npx -y rea-agents@6.8.0 …` ; mets Node à jour (`mise use -g node@26.12.1`) puis relance `./install.sh --no-tools`. `oc-rea-mcp --check` teste ta version.
+- Les ~229 outils du MCP ne sont visibles que de cet agent (règle `rea_*` dans `opencode.jsonc`), pour ne pas alourdir les autres sessions. Ghidra, IDA et Hopper ne sont pas installés par le kit : REA utilise ceux qui existent déjà. N'utilise jamais `rea setup` : la configuration est gérée par le kit.
+
 ## Profils
 
 | | Complet | Léger (`--lite`) |

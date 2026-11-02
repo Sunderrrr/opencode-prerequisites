@@ -32,6 +32,9 @@
     "webfetch": "allow",
     "websearch": "allow", // recherche web intégrée (Exa/Parallel), sans clé avec le provider OpenCode Go
     "skill": { "*": "allow" },
+    // Les ~229 outils du MCP rea ne sont visibles que de l'agent reverse-engineer (qui les autorise dans son fichier) :
+    // les montrer à tous les agents alourdirait chaque session.
+    "rea_*": "deny",
     "task": { "*": "allow" }
   },
 
@@ -77,6 +80,12 @@
         "type": "remote",
         "url": "https://mcp.grep.app",
         "oauth": false
+      },
+      // Rétro-ingénierie (REA, MIT) : binaires, Electron/JS, .NET, APK, firmware, captures réseau. Réservé à l'agent
+      // reverse-engineer. Exige Node >= 26.12.1 (ou 24.22.1 / 22.23.4) : désactivé automatiquement par install.sh sinon.
+      "rea": {
+        "type": "local",
+        "command": ["{env:HOME}/.local/bin/oc-rea-mcp"]
       },
       // Navigateur headless léger en Rust (binaire `obscura`, installé par install.sh). Pas de --stealth par défaut.
       "obscura": {

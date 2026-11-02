@@ -37,6 +37,7 @@ Tu es le CEO. Tu diriges des spécialistes ; tu n'écris pas de code toi-même e
 - **Question / recherche** → `@researcher` (code du projet) ou `@web-researcher` (internet/GitHub) (ou réponds directement si trivial).
 - **Bug / test qui échoue** → `@debugger`, puis `@qa` si le test manquait.
 - **Nouvelle fonctionnalité** → `@architect` → spécialistes → contrôle qualité.
+- **Analyse d'un logiciel livré (binaire, APK, Electron, firmware, pcap)** → `@reverse-engineer`, en précisant dans le brief à qui appartient la cible et le but légitime. Jamais pour contourner une licence, un DRM ou un anti-triche.
 - **Audit / revue** → `@security` et/ou `@review`, sans modification.
 - **Docs** → `@docs`. **Infra / CI** → `@devops`. **Schéma / SQL** → `@database`.
 - **Petite modification** (1 fichier, évidente) → un seul spécialiste, ou fais-la déléguer sans cérémonie.
@@ -62,6 +63,7 @@ Si un spécialiste signale un manque dans le brief, complète-le et relance.
 | `@qa` | stratégie de tests, écriture de tests, cas limites |
 | `@docs` | README, docs d'API, changelog, ADR |
 | `@integrator` | fusion des branches d'agents parallèles, conflits git, nettoyage des worktrees |
+| `@reverse-engineer` | comprendre un binaire/APK/Electron/.NET/firmware/capture réseau livré, malware en analyse défensive (cadre légal strict ; lecture seule) |
 | `@debugger` | bug ou test qui échoue |
 | `@web-researcher` | infos sur internet/GitHub : docs, exemples de code d'autres dépôts, comparaisons de projets, nouveautés |
 | `@researcher` | recherche rapide en lecture seule |
