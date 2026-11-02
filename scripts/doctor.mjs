@@ -15,7 +15,16 @@ const ok = (m) => console.log(`✅ ${m}`)
 const ko = (m) => { bad++; console.log(`❌ ${m}`) }
 const wa = (m) => { warned++; console.log(`⚠️  ${m}`) }
 const run = (cmd, args, t = 20000) => spawnSync(cmd, args, { encoding: "utf8", timeout: t, env })
-const has = (c) => { const r = run(process.platform === "win32" ? "where" : "which", [c], 5000); return r.status === 0 }
+// Cherche un exécutable dans le PATH SANS appeler « which » (absent des images minimales Arch, Fedora, Rocky)
+const has = (c) => {
+  const exts = process.platform === "win32" ? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT").split(";") : [""]
+  for (const dir of (env.PATH ?? "").split(path.delimiter).filter(Boolean)) {
+    for (const ext of exts) {
+      try { fs.accessSync(path.join(dir, c + ext), fs.constants.X_OK); return true } catch { /* essai suivant */ }
+    }
+  }
+  return false
+}
 
 // Sortie lisible : fusionne les lignes identiques consécutives (ex. boucles de shim) et tronque.
 const squash = (txt, max = 12) => {

@@ -63,7 +63,13 @@ write(path.join(cfg3, "agents/ceo.md"), "---\ndescription: x\nmode: primary\n---
 write(path.join(cfg3, ".opencode-prerequisites.installed"), "")
 write(path.join(fbin, "opencode"), '#!/bin/sh\ncase "$*" in "--version") echo 2.2.5;; "debug config") echo \'{"default_agent":"ceo"}\';; "mcp list") echo "  ✓ x  connected";; "debug agents") echo ceo;; esac\n', 0o755)
 write(path.join(fbin, "ps"), "#!/bin/sh\nprintf '  4242 Sun Nov  1 15:36:12 2020 /home/u/.local/share/mise/installs/opencode/latest/node_modules/.bin/opencode serve\\n  5151 Mon Nov  2 23:59:59 2099 opencode\\n   777 Sun Nov  1 15:00:00 2020 /usr/bin/vim notes-opencode.txt\\n'\n", 0o755)
-r = sh(process.execPath, [path.join(ROOT, "scripts/doctor.mjs")], { HOME: h3, OPENCODE_CONFIG_DIR: cfg3, PATH: `${fbin}:${process.env.PATH}` })
+// PATH SANS la commande « which » : les images minimales Arch, Fedora et Rocky n'en ont pas, et le diagnostic ne doit pas en dépendre
+const noWhich = path.join(tmp, "nowhich"); fs.mkdirSync(noWhich)
+for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
+  let names = []; try { names = fs.readdirSync(dir) } catch { continue }
+  for (const n of names) if (n !== "which" && !fs.existsSync(path.join(noWhich, n))) { try { fs.symlinkSync(path.join(dir, n), path.join(noWhich, n)) } catch { /* ignoré */ } }
+}
+r = sh(process.execPath, [path.join(ROOT, "scripts/doctor.mjs")], { HOME: h3, OPENCODE_CONFIG_DIR: cfg3, PATH: `${fbin}:${noWhich}` })
 const out = r.stdout
 check("doctor : signale l'OpenCode lancé avant l'installation", /PID 4242/.test(out) && /service restart/.test(out), out.split("\n").filter((l) => /PID|tourne/.test(l)).join(" | "))
 check("doctor : ignore un OpenCode plus récent que l'installation et les autres processus", !/PID 5151/.test(out) && !/PID 777/.test(out))
