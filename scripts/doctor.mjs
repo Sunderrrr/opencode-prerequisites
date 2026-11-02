@@ -260,8 +260,9 @@ if (hasOc) {
     const files = fs.readdirSync(logDir).map((f) => ({ f, t: fs.statSync(path.join(logDir, f)).mtimeMs })).sort((a, b) => b.t - a.t)
     if (files[0]) {
       const buf = fs.readFileSync(path.join(logDir, files[0].f), "utf8").slice(-300000)
-      const manifest = path.join(DEST, ".opencode-prerequisites.manifest")
-      const since = fs.existsSync(manifest) ? fs.statSync(manifest).mtimeMs : 0
+      // Repère = fin de la dernière installation (le fichier .installed est écrit en dernier ; sinon la liste des fichiers)
+      const stamps = [".opencode-prerequisites.installed", ".opencode-prerequisites.manifest"].map((f) => path.join(DEST, f)).filter(fs.existsSync).map((f) => fs.statSync(f).mtimeMs)
+      const since = stamps.length ? Math.max(...stamps) : 0
       const lines = buf.split("\n").filter((l) => /plugin|mempalace|guard|notify/i.test(l) && /fail|error|cannot|unable|not found|denied/i.test(l))
       const stamp = (l) => Date.parse(l.match(/timestamp=(\S+)/)?.[1] ?? "") || 0
       const recent = lines.filter((l) => stamp(l) > since).slice(-6)

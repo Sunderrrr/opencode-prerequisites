@@ -160,6 +160,7 @@ if [ "$MEMONLY" = 1 ]; then
   if ! { setup_mempalace && install_mempalace_plugin; }; then
     die "MemPalace n'a pas pu être installé."
   fi
+  : > "$DEST/.opencode-prerequisites.installed"
   exit 0
 fi
 
@@ -301,6 +302,9 @@ fi
 if [ "$MATT" = 1 ]; then
   npx -y skills@latest add mattpocock/skills -a opencode || warn "Échec : voir le README du dépôt mattpocock/skills."
 fi
+
+# Repère de fin d'installation : le diagnostic ignore les lignes de journal antérieures
+: > "$DEST/.opencode-prerequisites.installed"
 
 cat <<'MSG'
 
