@@ -26,6 +26,8 @@ jobs:
         run: |
           pip install --quiet jsonschema
           python3 scripts/validate-schema.py
+      - name: "Installateur côté machine : bloc d'environnement, désinstallation, MemPalace, diagnostic OpenCode périmé"
+        run: node scripts/test-install-env.mjs
       - name: "Module Android (faux podman : commandes, montages, protections, faux adb)"
         run: node scripts/test-android.mjs
       - name: Containerfile Android (hadolint, erreurs seulement)
@@ -119,6 +121,8 @@ jobs:
           check() { OC_REA_NODE_VERSION="$1" ./config/bin/oc-rea-mcp --check >/dev/null 2>&1; }
           for v in 26.12.1 26.13.0 27.0.0 24.22.1 24.30.0 22.23.4; do check "$v" || { echo "attendu OK : $v"; exit 1; }; done
           for v in 26.7.0 26.12.0 25.9.0 24.22.0 22.23.3 20.19.0 18.0.0; do check "$v" && { echo "attendu KO : $v"; exit 1; } || true; done
+      - name: Installateur côté machine (awk et sed de la distribution)
+        run: node scripts/test-install-env.mjs
       - name: Module Android (tests avec faux podman, sans Docker)
         run: node scripts/test-android.mjs
       - name: Lanceurs MCP (choix du navigateur et du moteur de conteneurs)

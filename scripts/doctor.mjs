@@ -283,6 +283,28 @@ if (hasOc) {
   }
 }
 
+// Processus OpenCode lancés AVANT la dernière installation : un serveur déjà démarré garde son ancien environnement et ses
+// anciens plugins (il ne les relit pas), même si les fichiers sont à jour. C'est la cause la plus fréquente de « ça ne marche toujours pas ».
+if (hasOc && process.platform !== "win32") {
+  const stampFiles = [".opencode-prerequisites.installed", ".opencode-prerequisites.manifest"].map((f) => path.join(DEST, f)).filter(fs.existsSync)
+  const since = stampFiles.length ? Math.max(...stampFiles.map((f) => fs.statSync(f).mtimeMs)) : 0
+  if (since) {
+    const stale = []
+    for (const l of (run("ps", ["-eo", "pid=,lstart=,args="], 10000).stdout ?? "").split("\n")) {
+      const m = l.match(/^\s*(\d+)\s+(\w{3}\s+\w{3}\s+\d+\s+[\d:]{8}\s+\d{4})\s+(.*)$/)
+      if (!m) continue
+      const [, pid, lstart, args] = m
+      if (Number(pid) === process.pid || /doctor\.mjs|ps -eo/.test(args)) continue
+      const isOpencode = path.basename(args.split(/\s+/)[0]) === "opencode" || /node_modules\/\.bin\/opencode(\s|$)/.test(args)
+      const started = Date.parse(lstart)
+      if (isOpencode && started && started < since) stale.push(`PID ${pid} (lancé le ${lstart.replace(/\s+/g, " ")})`)
+    }
+    if (stale.length) {
+      wa(`OpenCode tourne depuis avant la dernière installation du kit : ${stale.join(", ")}. Il ne relit NI les plugins NI l'environnement : redémarre-le (d'après ton retour : opencode service restart ; sinon ferme toutes les fenêtres OpenCode et relance).`)
+    }
+  }
+}
+
 // Journal d'OpenCode : raisons d'échec des plugins (le panneau Plugins n'affiche que « failed »)
 if (hasOc) {
   const dp = runOc(["debug", "paths"], 15000)

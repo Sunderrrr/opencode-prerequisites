@@ -130,18 +130,24 @@ setup_mempalace() {
     if [ "$made" = 0 ]; then
       local UV
       UV="$(get_uv)" || { warn "uv indisponible : installe-le (https://docs.astral.sh/uv/) puis relance ./install.sh --memory-only"; return 1; }
-      "$UV" venv --seed --python 3.12 "$MEMVENV" || return 1
+      # Le Python géré par uv est rangé AVEC le venv (~/.mempalace/python), pas dans le dossier par défaut d'uv :
+      # un « uv python prune » ne peut plus casser le venv.
+      UV_PYTHON_INSTALL_DIR="$HOME/.mempalace/python" "$UV" venv --seed --managed-python --python 3.12 "$MEMVENV" || return 1
     fi
   fi
   "$MEMVENV/bin/python" -m pip install -q --upgrade mempalace || return 1
-  if [ ! -f "$HOME/.mempalace/palace/mempalace.yaml" ]; then
-    # init attend un dossier existant et pose des questions : on le rend non interactif
-    mkdir -p "$HOME/.mempalace/palace"
-    "$MEMVENV/bin/mempalace" init "$HOME/.mempalace/palace" --yes --no-llm </dev/null >/dev/null 2>&1 \
-      || warn "Initialise à la main : $MEMVENV/bin/mempalace init ~/.mempalace/palace --yes --no-llm"
+
+  # Le palais se crée tout seul à la première sauvegarde, là où MemPalace le cherche (~/.config/mempalace/palace).
+  # Ancienne version de ce script : « mempalace init » sur ~/.mempalace/palace y laissait un mempalace.yaml orphelin.
+  local orphan="$HOME/.mempalace/palace"
+  if [ -f "$orphan/mempalace.yaml" ] && [ "$(find "$orphan" -mindepth 1 | wc -l)" -eq 1 ]; then
+    rm -rf "$orphan" && echo "🧹 Fichier orphelin retiré : $orphan (MemPalace utilise ~/.config/mempalace)"
   fi
-  echo "✅ MemPalace installé dans $MEMVENV"
-  echo "   ➜ Ajoute à ton ~/.bashrc (ou ~/.zshrc) :  export MEMPALACE_ADAPTER_PYTHON=\"$MEMVENV/bin/python\""
+
+  # Repli pour le plugin : il sait retrouver le bon Python à partir du « shebang » de la commande mempalace du PATH
+  mkdir -p "$BIN"
+  if [ ! -e "$BIN/mempalace" ] || [ -L "$BIN/mempalace" ]; then ln -sf "$MEMVENV/bin/mempalace" "$BIN/mempalace"; fi
+  echo "✅ MemPalace installé dans $MEMVENV (le plugin fixe lui-même MEMPALACE_ADAPTER_PYTHON ; commande : $BIN/mempalace)"
 }
 
 # Plugin MemPalace : installé ici avec --legacy-peer-deps (le paquet déclare des peerDependencies
@@ -369,31 +375,52 @@ need gh || warn "gh (GitHub CLI) introuvable : requis pour /pr et la recherche G
 case ":$PATH:" in *":$BIN:"*) ;; *) warn "Ajoute $BIN à ton PATH : export PATH=\"$BIN:\$PATH\"" ;; esac
 
 # Variables d'environnement dans le shell (opt-in). Bloc balisé, remplacé à chaque exécution (pas de doublon).
-# IMPORTANT : ~/.local/bin est ajouté EN FIN de PATH, jamais en tête (en tête, il peut faire boucler les shims mise/asdf).
+# - ~/.local/bin est ajouté EN FIN de PATH, jamais en tête (en tête, il peut faire boucler les shims mise/asdf).
+# - Le bloc est écrit TOUT EN HAUT de ~/.bashrc (avant le « return » des shells non interactifs) et dans ~/.zshenv pour zsh
+#   (lu par tous les zsh, contrairement à ~/.zshrc) : il est ainsi visible des commandes lancées sans terminal.
+# - Un service lancé par systemd ne lit aucun de ces fichiers : le plugin MemPalace fixe donc lui-même son Python.
+strip_env_block() {  # fichier → stdout, sans notre bloc (balisé, ou ancien format sans balises)
+  awk '
+    /^# >>> opencode-prerequisites >>>$/ { skip=1; next }
+    /^# <<< opencode-prerequisites <<<$/ { skip=0; afterend=1; next }
+    skip==1 { next }
+    afterend==1 && /^$/ { afterend=0; next }   # la ligne vide que le bloc ajoute après lui
+    /^# opencode-prerequisites$/ { old=1; next }
+    old==1 && /^export (PATH|MEMPALACE_ADAPTER_PYTHON)=/ { next }
+    { old=0; afterend=0; print }
+  ' "$1"
+}
+write_env_block() {  # fichier
+  local rc="$1" first head_line=""
+  if [ -e "$rc" ] && [ ! -e "$rc.bak-opencode-prerequisites" ]; then cp -p "$rc" "$rc.bak-opencode-prerequisites"; fi
+  if [ -f "$rc" ]; then strip_env_block "$rc" > "$TMP/rc.rest"; else : > "$TMP/rc.rest"; fi
+  first="$(head -n 1 "$TMP/rc.rest")"
+  case "$first" in
+    "#!"*) head_line="$first"; tail -n +2 "$TMP/rc.rest" > "$TMP/rc.tail" ;;   # un éventuel shebang reste en première ligne
+    *) cp "$TMP/rc.rest" "$TMP/rc.tail" ;;
+  esac
+  {
+    if [ -n "$head_line" ]; then echo "$head_line"; fi
+    echo "# >>> opencode-prerequisites >>>"
+    echo "case \":\$PATH:\" in *\":$BIN:\"*) ;; *) export PATH=\"\$PATH:$BIN\" ;; esac"
+    if [ -x "$MEMVENV/bin/python" ]; then echo "export MEMPALACE_ADAPTER_PYTHON=\"$MEMVENV/bin/python\""; fi
+    echo "# <<< opencode-prerequisites <<<"
+    echo ""
+    cat "$TMP/rc.tail"
+  } > "$TMP/rc.out"
+  cat "$TMP/rc.out" > "$rc"   # cat > : conserve les droits et les liens symboliques (dotfiles)
+  echo "✅ Bloc PATH (en fin) + MEMPALACE_ADAPTER_PYTHON écrit en haut de $rc"
+}
 if [ "$SHELLENV" = 1 ]; then
-  for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
-    [ -f "$rc" ] || continue
-    [ -e "$rc.bak-opencode-prerequisites" ] || cp -p "$rc" "$rc.bak-opencode-prerequisites"
-    # retire l'ancien bloc (balisé, ou ancien format sans balises) puis écrit le nouveau
-    awk '
-      /^# >>> opencode-prerequisites >>>$/ { skip=1; next }
-      /^# <<< opencode-prerequisites <<<$/ { skip=0; next }
-      skip==1 { next }
-      /^# opencode-prerequisites$/ { old=1; next }
-      old==1 && /^export (PATH|MEMPALACE_ADAPTER_PYTHON)=/ { next }
-      { old=0; print }
-    ' "$rc" > "$TMP/rc.new"
-    {
-      cat "$TMP/rc.new"
-      echo ""
-      echo "# >>> opencode-prerequisites >>>"
-      echo "case \":\$PATH:\" in *\":$BIN:\"*) ;; *) export PATH=\"\$PATH:$BIN\" ;; esac"
-      [ -x "$MEMVENV/bin/python" ] && echo "export MEMPALACE_ADAPTER_PYTHON=\"$MEMVENV/bin/python\""
-      echo "# <<< opencode-prerequisites <<<"
-    } > "$TMP/rc.final"
-    cat "$TMP/rc.final" > "$rc"   # cat > : conserve les droits et les liens symboliques (dotfiles)
-    echo "✅ PATH (en fin) et MEMPALACE_ADAPTER_PYTHON écrits dans $rc (ouvre un nouveau terminal ; sauvegarde : $rc.bak-opencode-prerequisites)"
-  done
+  if [ -f "$HOME/.bashrc" ]; then write_env_block "$HOME/.bashrc"; fi
+  if [ -f "$HOME/.zshrc" ] || [ -f "$HOME/.zshenv" ]; then
+    write_env_block "$HOME/.zshenv"
+    # nettoie d'anciens blocs laissés dans ~/.zshrc (non lu hors terminal interactif)
+    if [ -f "$HOME/.zshrc" ] && grep -q 'opencode-prerequisites' "$HOME/.zshrc"; then
+      strip_env_block "$HOME/.zshrc" > "$TMP/zshrc.clean" && cat "$TMP/zshrc.clean" > "$HOME/.zshrc"
+    fi
+  fi
+  echo "   (ouvre un nouveau terminal ; sauvegardes : <fichier>.bak-opencode-prerequisites)"
 fi
 
 # 5. Skills de Matt Pocock (optionnel)
@@ -416,6 +443,9 @@ MSG
 fi
 
 cat <<'MSG'
+
+Si OpenCode tourne déjà (y compris son service en arrière-plan), REDÉMARRE-LE : un serveur déjà lancé ne relit
+ni les plugins ni l'environnement (d'après ton retour : opencode service restart ; sinon ferme toutes les fenêtres OpenCode).
 
 Étapes suivantes :
   1. Lance `opencode`, puis /connect → OpenCode Go → colle ta clé (console OpenCode).
