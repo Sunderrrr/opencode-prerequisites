@@ -163,7 +163,7 @@ mkdir -p "$BIN"
 # sans toucher à tes propres fichiers : on se base sur la liste des fichiers déjà installés par le kit.
 MANIFEST="$DEST/.opencode-prerequisites.manifest"
 ( cd "$SRC" && find . -type f ! -path './bin/*' | sed 's|^\./||' | sort ) > "$TMP/new.manifest"
-{ [ -f "$MANIFEST" ] && cat "$MANIFEST"; echo "plugins/auto-compact.js"; } | sort -u > "$TMP/old.manifest"
+{ [ -f "$MANIFEST" ] && cat "$MANIFEST"; printf "%s\n" "plugins/auto-compact.js" "plugins/guard.js" "plugins/notify.js"; } | sort -u > "$TMP/old.manifest"
 comm -23 "$TMP/old.manifest" "$TMP/new.manifest" | while IFS= read -r f; do
   case "$f" in ""|*..*|/*) continue ;; esac
   if [ -e "$DEST/$f" ]; then rm -f "$DEST/$f" && echo "🧹 Retiré (n'existe plus dans le kit) : $f"; fi

@@ -2,7 +2,7 @@
 
 Mon kit d'init pour [OpenCode](https://opencode.ai) avec l'abonnement **OpenCode Go** : un CEO qui dirige 24 agents spécialisés, des skills, des commandes, des MCP, de la mémoire, une sécurité git multi-agents et un gabarit de projet Rust.
 
-> ⚠️ Les agents sont en **mode débridé** (aucune demande de permission). Travaille dans un dépôt git propre et commité. Seuls les blocages de `config/plugins/guard.js` restent.
+> ⚠️ Les agents sont en **mode débridé** (aucune demande de permission). Travaille dans un dépôt git propre et commité. Seuls les blocages de `config/plugins/guard/` restent.
 
 ## Installation
 
@@ -62,7 +62,7 @@ Le profil léger est dérivé du complet par `scripts/make-lite.mjs` : il n'y a 
 - `config/agents/` : `ceo` (par défaut), domaine (`architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`), langages/outils (`rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`), contrôle (`review`, `code-simplifier`, `verify-app`), git (`integrator`).
 - `config/skills/` : `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`.
 - `config/commands/` : `/check`, `/plan-first`, `/simplify`, `/verify`, `/learn`, `/ship`, `/pr`, `/usage`.
-- `config/plugins/` : `guard.js` (bloque secrets et commandes destructrices), `notify.js` (notification quand une session attend). Le compactage à 90 % est natif : `compaction.buffer: "10%"`.
+- `config/plugins/` : `guard/` (bloque secrets et commandes destructrices) et `notify/` (notification quand une session attend), au **format plugin OpenCode v2** (un dossier, `export default Plugin.define({ id, setup })`) ; testés par `scripts/test-plugins.mjs`. Le compactage à 90 % est natif : `compaction.buffer: "10%"`.
 - `config/bin/agent-wt` : un worktree git par agent (`new`, `merge`, `remove`, `list`, `integration`, `sync`).
 - `templates/rust-project/` + `oc-new-rust <nom>` : projet Rust avec `AGENTS.md`, tests, CI GitHub Actions et `git init`.
 - `scripts/validate-kit.mjs` : validation (utilisée par l'installateur et la CI) ; `.github/workflows/ci.yml` : validation, installation à blanc, ShellCheck, gabarit Rust.
@@ -81,7 +81,7 @@ Le profil léger est dérivé du complet par `scripts/make-lite.mjs` : il n'y a 
 
 ## Ce qui n'est pas vérifié
 
-Le kit est validé par script (`validate-kit.mjs`) et par le **schéma JSON officiel d'OpenCode** (`scripts/validate-schema.py`, aussi en CI) ; `agent-wt`, `make-lite`, `new-rust-project.sh`, `doctor` et l'installation ont été testés. Ce qui reste à confirmer à l'usage : les arguments des MCP `terraform`/`kubernetes`, les noms d'événements de `guard.js`, la syntaxe `!`cmd`` de `/usage`, et le sens exact de `compaction.buffer` (déduit du schéma, non documenté) — vérifie avec `./doctor.sh` puis `opencode mcp list`.
+Le kit est validé par script (`validate-kit.mjs`) et par le **schéma JSON officiel d'OpenCode** (`scripts/validate-schema.py`, aussi en CI) ; `agent-wt`, `make-lite`, `new-rust-project.sh`, `doctor` et l'installation ont été testés. Ce qui reste à confirmer à l'usage : les arguments des MCP `terraform`/`kubernetes`, la syntaxe `!`cmd`` de `/usage`, et le sens exact de `compaction.buffer` (déduit du schéma, non documenté) — vérifie avec `./doctor.sh` puis `opencode mcp list`.
 
 ## Inspirations
 

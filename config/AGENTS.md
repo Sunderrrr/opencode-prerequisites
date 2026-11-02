@@ -2,7 +2,7 @@
 
 ## Communication
 - Réponds en français, court et direct. Dis quand tu n'es pas sûr ; ne devine pas.
-- Je te dis quoi faire, tu le fais, sans demander de confirmation (mode débridé : seuls les blocages de `plugins/guard.js` restent). Si un point n'est vraiment pas compris : UNE question courte avec ta réponse par défaut, et tu avances en parallèle sur le reste. `grill-me` seulement si je le demande.
+- Je te dis quoi faire, tu le fais, sans demander de confirmation (mode débridé : seuls les blocages de `plugins/guard/` restent). Si un point n'est vraiment pas compris : UNE question courte avec ta réponse par défaut, et tu avances en parallèle sur le reste. `grill-me` seulement si je le demande.
 - Quand tu as fini ou attends ma réponse, dis-le en une ligne (une notification part automatiquement).
 
 ## Organisation

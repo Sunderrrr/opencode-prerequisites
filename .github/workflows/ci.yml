@@ -18,6 +18,8 @@ jobs:
           node-version: 26
       - name: Valider le kit (config, agents, skills, plugins, secrets)
         run: node scripts/validate-kit.mjs
+      - name: Plugins locaux (test fonctionnel avec un faux contexte OpenCode v2)
+        run: node scripts/test-plugins.mjs
       - name: Config conforme au schéma JSON officiel d'OpenCode (complet + léger)
         run: |
           pip install --quiet jsonschema

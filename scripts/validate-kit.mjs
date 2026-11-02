@@ -75,12 +75,20 @@ for (const f of ls(path.join(C, "commands")).filter((x) => x.endsWith(".md"))) {
   if (!fm?.description) err(`commands/${f} : description manquante`)
 }
 
-// 5. Plugins (syntaxe)
-for (const f of ls(path.join(C, "plugins")).filter((x) => x.endsWith(".js"))) {
-  // Les plugins sont des modules ES : on les vérifie comme .mjs (Node < 22 lit un .js en CommonJS et rejette « export »)
-  const tmp = path.join(os.tmpdir(), `oc-plugin-${process.pid}-${f.replace(/\.js$/, "")}.mjs`)
+// 5. Plugins locaux OpenCode v2 : un DOSSIER par plugin, export par défaut Plugin.define({ id, setup })
+for (const f of ls(path.join(C, "plugins"))) {
+  const full = path.join(C, "plugins", f)
+  if (!fs.statSync(full).isDirectory()) { err(`plugins/${f} : en v2 un plugin local doit être un dossier (plugins/<nom>/index.ts), pas un fichier`); continue }
+  const entry = ["index.ts", "index.js", "index.mjs"].map((x) => path.join(full, x)).find(fs.existsSync)
+  if (!entry) { err(`plugins/${f} : index.ts manquant`); continue }
+  const src = read(entry)
+  if (!/export\s+default\s+Plugin\.define\(/.test(src)) err(`plugins/${f} : "export default Plugin.define({ id, setup })" attendu (format v2)`)
+  if (!/\bid:\s*["'][^"']+["']/.test(src)) err(`plugins/${f} : id stable manquant`)
+  if (/export\s+const\s+\w+\s*=\s*async\s*\(/.test(src)) err(`plugins/${f} : format v1 détecté (export nommé async) : ne tourne pas en v2`)
+  // Syntaxe : le source reste du JS valide (pas d'annotations de types), vérifié comme module .mjs
+  const tmp = path.join(os.tmpdir(), `oc-plugin-${process.pid}-${f}.mjs`)
   try {
-    fs.writeFileSync(tmp, read(path.join(C, "plugins", f)))
+    fs.writeFileSync(tmp, src)
     execFileSync(process.execPath, ["--check", tmp], { stdio: "pipe" })
   } catch (e) { err(`plugins/${f} : erreur de syntaxe\n${e.stderr}`) }
   finally { fs.rmSync(tmp, { force: true }) }

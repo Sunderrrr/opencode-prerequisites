@@ -171,7 +171,13 @@ if ([...(cfg?.plugins ?? []), ...(cfg?.plugin ?? [])].some((p) => String(Array.i
   else ok(`MemPalace importable (${py})`)
 }
 const pdir = path.join(DEST, "plugins")
-if (fs.existsSync(pdir)) ok(`plugins locaux : ${fs.readdirSync(pdir).join(", ")}`)
+if (fs.existsSync(pdir)) {
+  const entries = fs.readdirSync(pdir)
+  const dirs = entries.filter((x) => fs.statSync(path.join(pdir, x)).isDirectory())
+  const loose = entries.filter((x) => !dirs.includes(x) && /\.(js|ts|mjs)$/.test(x))
+  ok(`plugins locaux (dossiers v2) : ${dirs.join(", ") || "aucun"}`)
+  if (loose.length) wa(`fichiers seuls dans plugins/ (non chargés en v2, ils doivent être dans un dossier plugins/<nom>/index.ts) : ${loose.join(", ")}`)
+}
 
 // Modèles
 const wanted = new Set()
@@ -240,6 +246,21 @@ if (hasOc) {
       : txt.includes(cfg.default_agent) ? ok(`agent ${cfg.default_agent} connu d'OpenCode`)
       : ko(`agent ${cfg.default_agent} absent de la liste d'OpenCode (debug agents). Vérifie ${path.join(DEST, "agents")}`)
   }
+}
+
+// Journal d'OpenCode : raisons d'échec des plugins (le panneau Plugins n'affiche que « failed »)
+if (hasOc) {
+  const dp = runOc(["debug", "paths"], 15000)
+  const logDir = ((dp.stdout ?? "") + (dp.stderr ?? "")).split("\n").map((l) => l.match(/(\/[^\s"']*\/log[^\s"']*)/)?.[1]).find((p) => p && fs.existsSync(p) && fs.statSync(p).isDirectory())
+  if (logDir) {
+    const files = fs.readdirSync(logDir).map((f) => ({ f, t: fs.statSync(path.join(logDir, f)).mtimeMs })).sort((a, b) => b.t - a.t)
+    if (files[0]) {
+      const buf = fs.readFileSync(path.join(logDir, files[0].f), "utf8").slice(-300000)
+      const hits = buf.split("\n").filter((l) => /plugin|mempalace|guard|notify/i.test(l) && /fail|error|cannot|unable|not found|denied/i.test(l)).slice(-6)
+      console.log(`\nJournal OpenCode (${path.join(logDir, files[0].f)}) :`)
+      hits.length ? hits.forEach((l) => wa(`plugin : ${l.trim().slice(0, 220)}`)) : ok("aucune erreur de plugin dans le dernier journal")
+    }
+  } else console.log("\n(journal OpenCode introuvable : `opencode debug paths` pour voir où il est)")
 }
 
 console.log(`\n${bad ? "❌" : "✅"} ${bad} erreur(s), ${warned} avertissement(s)`)

@@ -25,7 +25,7 @@
   "plugins": ["@rvboris/opencode-mempalace"],
 
   // Mode débridé : tout est autorisé sans demande. Seules les catastrophes évidentes
-  // (rm -rf /, secrets, push --force...) restent bloquées par plugins/guard.js.
+  // (rm -rf /, secrets, push --force...) restent bloquées par plugins/guard/.
   "permission": {
     "edit": "allow",
     "bash": { "*": "allow", "rm -rf /*": "deny", "rm -rf ~*": "deny" },
