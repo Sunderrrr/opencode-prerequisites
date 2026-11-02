@@ -104,6 +104,14 @@ pkg_hint() {
     pacman:unzip)  echo "sudo pacman -S --needed unzip" ;;
     apt:unzip)     echo "sudo apt install unzip" ;;
     dnf:unzip)     echo "sudo dnf install unzip" ;;
+    pacman:perl)   echo "sudo pacman -S --needed perl" ;;
+    apt:perl)      echo "sudo apt install perl" ;;
+    dnf:perl)      echo "sudo dnf install perl" ;;
+    brew:perl)     echo "brew install perl" ;;
+    pacman:git)    echo "sudo pacman -S --needed git" ;;
+    apt:git)       echo "sudo apt install git" ;;
+    dnf:git)       echo "sudo dnf install git" ;;
+    brew:git)      echo "brew install git" ;;
     *) echo "voir la documentation de ${t} pour ${DISTRO}" ;;
   esac
 }
@@ -288,11 +296,42 @@ install_binary_release() {
   echo "✅ $name $VERSION installé dans $BIN (sha256 vérifié sur la release GitHub)"
 }
 
+# latest_git_tag <owner/repo> : dernier tag (triés par version, sans toucher à l'API GitHub : juste git ls-remote)
+latest_git_tag() {
+  git ls-remote --tags --refs --sort=-v:refname "https://github.com/$1.git" 2>/dev/null | head -n1 | sed 's#.*refs/tags/##'
+}
+
+# install_git_tool <commande> <owner/repo> <script d'entrée relatif> <dossier de destination>
+# Pas de release binaire chez cet outil (testssl.sh, nikto...) : on clone le dernier tag, PUIS on vérifie que le
+# commit obtenu est bien celui que GitHub annonce pour ce tag (évite un clone altéré en cours de route).
+install_git_tool() {
+  local name="$1" repo="$2" entry="$3" dest="$4" tag want got
+  if need "$name"; then echo "✅ $name déjà installé ($(command -v "$name"))"; return 0; fi
+  need git || { warn "$name : git requis pour l'installer. → $(pkg_hint git)"; return 1; }
+  tag="$(latest_git_tag "$repo")"
+  if [ -z "$tag" ]; then warn "$name : aucun tag trouvé sur https://github.com/$repo (réseau ?)"; return 1; fi
+  want="$(git ls-remote --tags --refs "https://github.com/$repo.git" "refs/tags/$tag" 2>/dev/null | awk '{print $1}' | head -n1)"
+  rm -rf "$dest"
+  if ! git clone --quiet --depth 1 --branch "$tag" "https://github.com/$repo.git" "$dest" 2>/dev/null; then
+    warn "$name : clone échoué (https://github.com/$repo, tag $tag)"; return 1
+  fi
+  got="$(git -C "$dest" rev-parse HEAD 2>/dev/null)"
+  if [ -z "$want" ] || [ "$got" != "$want" ]; then
+    warn "$name : commit cloné ($got) différent du tag annoncé par GitHub ($want) — installation annulée."
+    rm -rf "$dest"; return 1
+  fi
+  chmod +x "$dest/$entry" 2>/dev/null || true
+  printf '#!/usr/bin/env bash\nexec "%s/%s" "$@"\n' "$dest" "$entry" > "$BIN/$name"
+  chmod +x "$BIN/$name"
+  echo "✅ $name $tag installé dans $dest (commit vérifié contre le tag GitHub), lanceur $BIN/$name"
+}
+
 install_pentest_tools() {
-  local os os_pd amd gl_arch UV
+  local os os_pd amd gl_arch UV gittools
   os="linux"; os_pd="linux"; [ "$(uname -s)" = Darwin ] && { os="darwin"; os_pd="macOS"; }
   case "$(uname -m)" in aarch64|arm64) amd=arm64 ;; *) amd=amd64 ;; esac
   gl_arch="x64"; [ "$amd" = arm64 ] && gl_arch="arm64"
+  gittools="${XDG_DATA_HOME:-$HOME/.local/share}/oc-pentest"
 
   # --- Sur ton code (toujours permis, aucune cible réseau) ---
   # gitleaks (MIT) : secrets/clés oubliés dans le code ou l'historique git
@@ -315,12 +354,22 @@ install_pentest_tools() {
   # Asset non versionné et non compressé : le binaire téléchargé EST osv-scanner (pas de 4e argument).
   install_binary_release osv-scanner "google/osv-scanner" "osv-scanner_${os}_${amd}" || true
 
+  # testssl.sh (GPLv2) et nikto (GPLv2) : pas de release binaire chez ces deux-là, clone du dernier tag
+  # vérifié contre le commit annoncé par GitHub (voir install_git_tool). Nikto a besoin de Perl (presque
+  # toujours présent) ; testssl.sh n'a besoin de rien d'autre que bash + openssl.
+  install_git_tool testssl.sh "testssl/testssl.sh" testssl.sh "$gittools/testssl.sh" || true
+  if [ "${OC_PENTEST_NO_PERL:-0}" != 1 ] && need perl; then
+    install_git_tool nikto "sullo/nikto" program/nikto.pl "$gittools/nikto" || true
+  else
+    warn "perl absent : nikto non installé. → $(pkg_hint perl)"
+  fi
+
   # nmap / sqlmap : paquets système courants, jamais installés avec sudo par ce script
   need nmap   || warn "nmap absent (ports ouverts, services exposés de ton app). → $(pkg_hint nmap)"
   need sqlmap || warn "sqlmap absent (test d'injection SQL ciblé sur ton app). → $(pkg_hint sqlmap)"
 
   : > "$PENTEST_MARKER"
-  echo "✅ Outils pentest/appsec pour sécuriser tes apps (sha256 vérifié sur chaque release) : gitleaks, semgrep, nuclei, httpx, ffuf, osv-scanner ; nmap/sqlmap via le gestionnaire de paquets si absents."
+  echo "✅ Outils pentest/appsec pour sécuriser tes apps (téléchargement vérifié) : gitleaks, semgrep, nuclei, httpx, ffuf, osv-scanner, testssl.sh, nikto ; nmap/sqlmap via le gestionnaire de paquets si absents."
 }
 
 remove_pentest_tools() {
