@@ -20,9 +20,9 @@
   // Équivalent du hook de formatage auto de Boris : formate après chaque édition
   "formatter": true,
 
-  // Mémoire persistante entre sessions (nécessite `pip install mempalace`, fait par install.sh)
-  // OpenCode v2 : clé "plugins" ("plugin" est marquée obsolète dans le schéma officiel).
-  "plugins": ["@rvboris/opencode-mempalace"],
+  // Mémoire persistante (MemPalace) : plugin local plugins/mempalace/ généré par install.sh.
+  // On n'utilise pas "plugins": ["@rvboris/opencode-mempalace"] : OpenCode échoue à installer ce paquet
+  // (conflit de peerDependencies @opentui/core ^0.5 vs 0.8, erreur ERESOLVE côté npm).
 
   // Mode débridé : tout est autorisé sans demande. Seules les catastrophes évidentes
   // (rm -rf /, secrets, push --force...) restent bloquées par plugins/guard/.

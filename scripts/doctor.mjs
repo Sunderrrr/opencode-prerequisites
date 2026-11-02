@@ -161,14 +161,18 @@ for (const [name, m] of Object.entries(mcpServers(cfg))) {
 }
 
 // Plugins
-if ([...(cfg?.plugins ?? []), ...(cfg?.plugin ?? [])].some((p) => String(Array.isArray(p) ? p[0] : p).includes("mempalace"))) {
+const memPluginDir = path.join(DEST, "plugins", "mempalace")
+const memEntry = path.join(HOME, ".mempalace", "plugin", "node_modules", "@rvboris", "opencode-mempalace", "dist", "plugin", "index.js")
+if (fs.existsSync(memPluginDir) || [...(cfg?.plugins ?? []), ...(cfg?.plugin ?? [])].some((p) => String(Array.isArray(p) ? p[0] : p?.package ?? p).includes("mempalace"))) {
   const venvPy = path.join(HOME, ".mempalace", "venv", "bin", "python")
   const envPy = process.env.MEMPALACE_ADAPTER_PYTHON
   const py = envPy || (fs.existsSync(venvPy) ? venvPy : "python3")
   const t = run(py, ["-c", "import mempalace"], 15000)
-  if (t.status !== 0) ko(`MemPalace non installé pour ${py} : lance ./install.sh --memory-only (ou retire le plugin de opencode.jsonc)`)
+  if (t.status !== 0) ko(`MemPalace non installé pour ${py} : lance ./install.sh --memory-only (ou retire plugins/mempalace)`)
   else if (!envPy && fs.existsSync(venvPy)) wa(`MemPalace est dans ${venvPy} mais MEMPALACE_ADAPTER_PYTHON n'est pas défini : ajoute à ton ~/.bashrc  export MEMPALACE_ADAPTER_PYTHON="${venvPy}"`)
   else ok(`MemPalace importable (${py})`)
+  if (fs.existsSync(memPluginDir)) fs.existsSync(memEntry) ? ok("plugin MemPalace installé (npm, peer deps tolérées) et chargé comme plugin local") : ko(`plugins/mempalace pointe vers ${memEntry}, introuvable : lance ./install.sh --memory-only`)
+  else wa("plugin MemPalace déclaré par npm dans la config : OpenCode échoue sur ses peerDependencies (ERESOLVE) : relance ./install.sh pour le charger en local")
 }
 const pdir = path.join(DEST, "plugins")
 if (fs.existsSync(pdir)) {
@@ -258,7 +262,7 @@ if (hasOc) {
       const buf = fs.readFileSync(path.join(logDir, files[0].f), "utf8").slice(-300000)
       const hits = buf.split("\n").filter((l) => /plugin|mempalace|guard|notify/i.test(l) && /fail|error|cannot|unable|not found|denied/i.test(l)).slice(-6)
       console.log(`\nJournal OpenCode (${path.join(logDir, files[0].f)}) :`)
-      hits.length ? hits.forEach((l) => wa(`plugin : ${l.trim().slice(0, 220)}`)) : ok("aucune erreur de plugin dans le dernier journal")
+      hits.length ? hits.forEach((l) => wa(`plugin : ${l.trim().replace(/^timestamp=\S+\s+/, "").slice(0, 420)}`)) : ok("aucune erreur de plugin dans le dernier journal")
     }
   } else console.log("\n(journal OpenCode introuvable : `opencode debug paths` pour voir où il est)")
 }

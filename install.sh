@@ -131,17 +131,35 @@ setup_mempalace() {
   echo "   ➜ Ajoute à ton ~/.bashrc (ou ~/.zshrc) :  export MEMPALACE_ADAPTER_PYTHON=\"$MEMVENV/bin/python\""
 }
 
+# Plugin MemPalace : installé ici avec --legacy-peer-deps (le paquet déclare des peerDependencies
+# incompatibles entre elles : l'installation npm faite par OpenCode échoue en ERESOLVE), puis chargé
+# comme plugin local (dossier plugins/mempalace/ qui ré-exporte le paquet installé).
+MEMPLUGIN="$HOME/.mempalace/plugin"
+install_mempalace_plugin() {
+  need npm || { warn "npm introuvable : plugin MemPalace non installé. → $(pkg_hint node)"; return 1; }
+  mkdir -p "$MEMPLUGIN"
+  [ -f "$MEMPLUGIN/package.json" ] || echo '{"name":"mempalace-plugin-host","private":true}' > "$MEMPLUGIN/package.json"
+  ( cd "$MEMPLUGIN" && npm install @rvboris/opencode-mempalace@2.0.1 --legacy-peer-deps --ignore-scripts --no-audit --no-fund --loglevel=error ) \
+    || { warn "npm install du plugin MemPalace échoué"; return 1; }
+  local entry="$MEMPLUGIN/node_modules/@rvboris/opencode-mempalace/dist/plugin/index.js"
+  [ -f "$entry" ] || { warn "Plugin MemPalace introuvable après installation : $entry"; return 1; }
+  mkdir -p "$DEST/plugins/mempalace"
+  printf '// Généré par install.sh : charge le plugin MemPalace installé dans %s\nexport { default } from "%s"\n' "$MEMPLUGIN" "$entry" > "$DEST/plugins/mempalace/index.ts"
+  echo "✅ Plugin MemPalace chargé comme plugin local (plugins/mempalace)"
+}
+
 drop_mempalace_plugin() {
-  # MemPalace indisponible : retire le plugin de la config installée pour qu'OpenCode démarre proprement
-  if [ -f "$DEST/opencode.jsonc" ]; then
-    sed -i.bak '/"plugins": \["@rvboris\/opencode-mempalace"\]/d' "$DEST/opencode.jsonc" && rm -f "$DEST/opencode.jsonc.bak"
-    warn "Plugin MemPalace retiré de $DEST/opencode.jsonc (relance ./install.sh --memory-only quand tu auras réglé le problème, puis remets la ligne \"plugins\")."
-  fi
+  # MemPalace indisponible : retire le plugin local pour qu'OpenCode démarre proprement
+  rm -rf "$DEST/plugins/mempalace"
+  warn "Plugin MemPalace non activé (relance ./install.sh --memory-only quand le problème sera réglé)."
 }
 
 if [ "$MEMONLY" = 1 ]; then
   echo "⬇️  MemPalace..."
-  setup_mempalace || die "MemPalace n'a pas pu être installé."
+  mkdir -p "$DEST"
+  if ! { setup_mempalace && install_mempalace_plugin; }; then
+    die "MemPalace n'a pas pu être installé."
+  fi
   exit 0
 fi
 
@@ -244,9 +262,15 @@ if [ "$TOOLS" = 1 ]; then
   PATH="$BIN:$PATH" trivy plugin install mcp || warn "trivy plugin install mcp a échoué : relance-le à la main."
 
   echo "⬇️  MemPalace..."
-  if ! setup_mempalace; then
+  if ! { setup_mempalace && install_mempalace_plugin; }; then
     drop_mempalace_plugin
   fi
+fi
+
+# MemPalace déjà installé (venv présent) : (ré)installe seulement son plugin, même avec --no-tools
+if [ "$TOOLS" = 0 ] && [ "$LITE" = 0 ] && [ -x "$MEMVENV/bin/python" ]; then
+  echo "⬇️  Plugin MemPalace..."
+  install_mempalace_plugin || drop_mempalace_plugin
 fi
 
 echo "ℹ️  Système : $DISTRO (gestionnaire : ${PM:-aucun reconnu})"
