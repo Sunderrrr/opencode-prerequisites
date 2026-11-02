@@ -263,9 +263,10 @@ extract_archive() {
   esac
 }
 
-# install_binary_release <commande> <owner/repo> <modèle d'archive> <nom du binaire dans l'archive>
+# install_binary_release <commande> <owner/repo> <modèle d'archive> [nom du binaire dans l'archive]
+# Sans le 4e argument (ou vide) : l'asset téléchargé EST le binaire (pas d'archive à extraire), ex. osv-scanner.
 install_binary_release() {
-  local name="$1" repo="$2" template="$3" inner="$4" info archive got
+  local name="$1" repo="$2" template="$3" inner="${4:-}" info archive got
   if need "$name"; then echo "✅ $name déjà installé ($(command -v "$name"))"; return 0; fi
   if ! info="$(node "$HERE/scripts/pentest-discover.mjs" "$repo" "$template" 2>&1)"; then
     warn "$name : découverte de la dernière version impossible — $(printf '%s' "$info" | tail -n 1)"; return 1
@@ -276,42 +277,50 @@ install_binary_release() {
   got="$(sha256_of "$archive")"
   if [ -z "$got" ]; then warn "$name : ni sha256sum ni shasum, somme non vérifiable — installation annulée."; return 1; fi
   if [ "$got" != "$SHA256" ]; then warn "$name : somme de contrôle invalide (attendu $SHA256, obtenu $got) — installation annulée."; return 1; fi
-  mkdir -p "$TMP/$name-extract"
-  if ! extract_archive "$archive" "$TMP/$name-extract"; then warn "$name : extraction impossible (unzip/bsdtar manquant). → $(pkg_hint unzip)"; return 1; fi
-  if [ ! -f "$TMP/$name-extract/$inner" ]; then warn "$name : binaire \"$inner\" absent de l'archive téléchargée."; return 1; fi
-  install -m 0755 "$TMP/$name-extract/$inner" "$BIN/$name"
+  if [ -z "$inner" ]; then
+    install -m 0755 "$archive" "$BIN/$name"
+  else
+    mkdir -p "$TMP/$name-extract"
+    if ! extract_archive "$archive" "$TMP/$name-extract"; then warn "$name : extraction impossible (unzip/bsdtar manquant). → $(pkg_hint unzip)"; return 1; fi
+    if [ ! -f "$TMP/$name-extract/$inner" ]; then warn "$name : binaire \"$inner\" absent de l'archive téléchargée."; return 1; fi
+    install -m 0755 "$TMP/$name-extract/$inner" "$BIN/$name"
+  fi
   echo "✅ $name $VERSION installé dans $BIN (sha256 vérifié sur la release GitHub)"
 }
 
 install_pentest_tools() {
-  local os amd
-  os="linux"; [ "$(uname -s)" = Darwin ] && os="darwin"
+  local os os_pd amd gl_arch UV
+  os="linux"; os_pd="linux"; [ "$(uname -s)" = Darwin ] && { os="darwin"; os_pd="macOS"; }
   case "$(uname -m)" in aarch64|arm64) amd=arm64 ;; *) amd=amd64 ;; esac
+  gl_arch="x64"; [ "$amd" = arm64 ] && gl_arch="arm64"
 
-  # nuclei (ProjectDiscovery, MIT) : vulnérabilités/misconfigurations connues par templates, sur TES cibles
-  install_binary_release nuclei "projectdiscovery/nuclei" "nuclei_{v}_${os}_${amd}.zip" nuclei || true
+  # --- Sur ton code (toujours permis, aucune cible réseau) ---
   # gitleaks (MIT) : secrets/clés oubliés dans le code ou l'historique git
-  local gl_arch="x64"; [ "$amd" = arm64 ] && gl_arch="arm64"
   install_binary_release gitleaks "gitleaks/gitleaks" "gitleaks_{v}_${os}_${gl_arch}.tar.gz" gitleaks || true
-
   # semgrep (SAST, LGPL-2.1/MIT) : CLI via uv tool install (même uv que MemPalace), pas de sudo
   if need semgrep; then
     echo "✅ semgrep déjà installé ($(command -v semgrep))"
+  elif UV="$(get_uv)" && "$UV" tool install semgrep --quiet; then
+    echo "✅ semgrep installé via uv (SAST, dans $BIN)"
   else
-    local UV
-    if UV="$(get_uv)" && "$UV" tool install semgrep --quiet; then
-      echo "✅ semgrep installé via uv (SAST, dans $BIN)"
-    else
-      warn "Installation de semgrep échouée : installe uv (https://docs.astral.sh/uv/) puis relance ./install.sh --pentest"
-    fi
+    warn "Installation de semgrep échouée : installe uv (https://docs.astral.sh/uv/) puis relance ./install.sh --pentest"
   fi
+
+  # --- Sur une cible que tu contrôles (app en local/staging, CTF, scope écrit) ---
+  # nuclei/httpx utilisent "macOS" (majuscule) pour Darwin, pas "darwin" : attention si tu réutilises ce modèle.
+  install_binary_release nuclei "projectdiscovery/nuclei" "nuclei_{v}_${os_pd}_${amd}.zip" nuclei || true
+  install_binary_release httpx  "projectdiscovery/httpx"  "httpx_{v}_${os_pd}_${amd}.zip"  httpx  || true
+  install_binary_release ffuf   "ffuf/ffuf"                "ffuf_{v}_${os_pd}_${amd}.tar.gz" ffuf  || true
+  # osv-scanner (Google, Apache-2.0) : vulnérabilités connues dans les dépendances (base OSV, complète Trivy).
+  # Asset non versionné et non compressé : le binaire téléchargé EST osv-scanner (pas de 4e argument).
+  install_binary_release osv-scanner "google/osv-scanner" "osv-scanner_${os}_${amd}" || true
 
   # nmap / sqlmap : paquets système courants, jamais installés avec sudo par ce script
   need nmap   || warn "nmap absent (ports ouverts, services exposés de ton app). → $(pkg_hint nmap)"
   need sqlmap || warn "sqlmap absent (test d'injection SQL ciblé sur ton app). → $(pkg_hint sqlmap)"
 
   : > "$PENTEST_MARKER"
-  echo "✅ Outils pentest/appsec pour sécuriser tes apps : nuclei, gitleaks, semgrep (sha256 vérifié) ; nmap/sqlmap via le gestionnaire de paquets si absents."
+  echo "✅ Outils pentest/appsec pour sécuriser tes apps (sha256 vérifié sur chaque release) : gitleaks, semgrep, nuclei, httpx, ffuf, osv-scanner ; nmap/sqlmap via le gestionnaire de paquets si absents."
 }
 
 remove_pentest_tools() {

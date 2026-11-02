@@ -76,11 +76,16 @@ Agent **`reverse-engineer`** + MCP **`rea`** + skill **`reverse-engineer-anythin
 
 Agent **`pentest`** (en plus de `security`/`review`, qui restent passifs et sans modification). **Objectif principal : sécuriser les apps que tu développes (vibecoding) avant de les exposer**, avec les mêmes outils en ligne de commande que les professionnels de l'AppSec — pas seulement des MCP : `./install.sh --pentest` les installe réellement sur la machine (option mémorisée, comme `--android` ; `./install.sh --no-pentest` oublie le choix sans supprimer les binaires déjà posés) :
 
-- **`nuclei`** ([ProjectDiscovery](https://github.com/projectdiscovery/nuclei), MIT) : CVE et mauvaises configurations connues, par templates — binaire téléchargé depuis la dernière release GitHub et **vérifié par sha256** avant installation (même rigueur que Trivy).
-- **`gitleaks`** ([gitleaks/gitleaks](https://github.com/gitleaks/gitleaks), MIT) : secrets/clés oubliés dans le code ou l'historique git — même vérification sha256.
+- **`gitleaks`** ([gitleaks/gitleaks](https://github.com/gitleaks/gitleaks), MIT) : secrets/clés oubliés dans le code ou l'historique git — binaire téléchargé depuis la dernière release GitHub et **vérifié par sha256** avant installation (même rigueur que Trivy).
 - **`semgrep`** (SAST, [semgrep/semgrep](https://github.com/semgrep/semgrep)) : installé en CLI via `uv tool install semgrep` (pas de sudo). Le MCP **`semgrep`** (serveur officiel, `uvx semgrep-mcp`) reste aussi disponible, réservé aux agents `pentest`/`security` (règle `semgrep_*` dans `opencode.jsonc`, comme `rea_*`/`mobile_*`).
+- **`nuclei`** ([ProjectDiscovery](https://github.com/projectdiscovery/nuclei), MIT) : CVE et mauvaises configurations connues, par templates — même vérification sha256.
+- **`httpx`** ([ProjectDiscovery](https://github.com/projectdiscovery/httpx), MIT) : sonde HTTP (statut, titre, techno, en-têtes) sur une liste d'URL, avant de lancer `nuclei` dessus.
+- **`ffuf`** ([ffuf/ffuf](https://github.com/ffuf/ffuf), MIT) : découverte de contenu par force brute (répertoires, fichiers, paramètres, sous-domaines).
+- **`osv-scanner`** ([google/osv-scanner](https://github.com/google/osv-scanner), Apache-2.0) : dépendances vulnérables via la base [OSV](https://osv.dev) — complète `trivy`, ne le remplace pas.
 - **`nmap`** et **`sqlmap`** : paquets système courants (apt/dnf/pacman/brew) — l'installateur ne lance jamais `sudo` lui-même, il indique juste la commande si l'un des deux manque.
 - **OWASP ZAP** (optionnel) : si tu le lances toi-même (Docker/Podman) et exposes un MCP comme [`pierre3/dotnet-zap-mcp`](https://github.com/pierre3/dotnet-zap-mcp), l'agent s'en sert. Pas intégré par défaut (dépendance .NET en plus, pour un usage ponctuel).
+
+Chaque binaire est téléchargé depuis la dernière release GitHub officielle et vérifié par **sha256** avant d'être installé (`scripts/pentest-discover.mjs`, générique : découverte de version/URL/sha256 réutilisable pour d'autres outils). Particularité repérée en construisant le kit : nuclei, httpx et ffuf nomment leur asset macOS `macOS` (majuscule), alors que gitleaks et osv-scanner utilisent `darwin` — géré correctement par `install.sh`, piège à éviter si tu étends la liste.
 
 **Périmètre non négociable** (comme pour `reverse-engineer`) : l'analyse statique (gitleaks, semgrep) est toujours permise sur ton propre projet. Les tests actifs (nuclei, nmap, sqlmap) demandent un périmètre explicite — ton app en local/staging, un CTF/labo, ou une mission avec un scope écrit. Sans ça, l'agent refuse et se limite au statique. Ni DoS, ni attaque de masse, ni brute force en production, ni exploitation au-delà d'une preuve de concept, ni altération de chaîne d'approvisionnement.
 
