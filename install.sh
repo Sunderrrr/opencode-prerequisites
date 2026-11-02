@@ -301,6 +301,18 @@ latest_git_tag() {
   git ls-remote --tags --refs --sort=-v:refname "https://github.com/$1.git" 2>/dev/null | head -n1 | sed 's#.*refs/tags/##'
 }
 
+# tag_commit_sha <owner/repo> <tag> : sha du COMMIT pointé par ce tag, qu'il soit annoté ou léger.
+# Un tag annoté a deux lignes dans `git ls-remote --tags` : refs/tags/<tag> (sha de l'OBJET tag, pas du commit)
+# et refs/tags/<tag>^{} (sha du commit, celui que `git clone`/`rev-parse HEAD` donnent réellement) : on préfère
+# toujours la ligne déréférencée (^{}) quand elle existe, sinon le tag est léger et sa seule ligne EST le commit.
+tag_commit_sha() {
+  local out peeled
+  out="$(git ls-remote --tags "https://github.com/$1.git" 2>/dev/null)" || return 1
+  peeled="$(printf '%s\n' "$out" | awk -v t="refs/tags/$2^{}" '$2==t{print $1; exit}')"
+  if [ -n "$peeled" ]; then echo "$peeled"; return 0; fi
+  printf '%s\n' "$out" | awk -v t="refs/tags/$2" '$2==t{print $1; exit}'
+}
+
 # install_git_tool <commande> <owner/repo> <script d'entrée relatif> <dossier de destination>
 # Pas de release binaire chez cet outil (testssl.sh, nikto...) : on clone le dernier tag, PUIS on vérifie que le
 # commit obtenu est bien celui que GitHub annonce pour ce tag (évite un clone altéré en cours de route).
@@ -310,7 +322,7 @@ install_git_tool() {
   need git || { warn "$name : git requis pour l'installer. → $(pkg_hint git)"; return 1; }
   tag="$(latest_git_tag "$repo")"
   if [ -z "$tag" ]; then warn "$name : aucun tag trouvé sur https://github.com/$repo (réseau ?)"; return 1; fi
-  want="$(git ls-remote --tags --refs "https://github.com/$repo.git" "refs/tags/$tag" 2>/dev/null | awk '{print $1}' | head -n1)"
+  want="$(tag_commit_sha "$repo" "$tag")"
   rm -rf "$dest"
   if ! git clone --quiet --depth 1 --branch "$tag" "https://github.com/$repo.git" "$dest" 2>/dev/null; then
     warn "$name : clone échoué (https://github.com/$repo, tag $tag)"; return 1
