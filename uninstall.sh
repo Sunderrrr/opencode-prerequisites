@@ -46,5 +46,6 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.zshenv"; do
   rm -f "$tmp"
 done
 rm -f "$BIN/mempalace" "$BIN/agent-wt" "$BIN/oc-new-rust" "$BIN/oc-models" "$BIN/oc-playwright-mcp" "$BIN/oc-terraform-mcp" "$BIN/oc-rea-mcp" "$BIN/oc-semgrep-mcp" "$BIN/oc-android" "$BIN/oc-mobile-mcp" && echo "🧹 lanceurs du kit retirés de $BIN"
+rm -f "$DEST/.opencode-prerequisites.pentest" 2>/dev/null || true
 echo "Module Android : l'image Podman (podman rmi localhost/oc-android) et les données de l'émulateur (~/.local/share/oc-android) ne sont pas supprimées."
-echo "Non touchés : obscura, trivy, MemPalace (~/.mempalace) et les paquets pip/npm installés."
+echo "Non touchés : obscura, trivy, nuclei, gitleaks, semgrep, MemPalace (~/.mempalace) et les paquets pip/npm/uv installés (./install.sh --pentest n'est plus mémorisé, mais les binaires restent dans $BIN)."

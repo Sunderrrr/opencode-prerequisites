@@ -11,11 +11,16 @@
 #   ./install.sh --android      module Android (option) : agents android et mobile-tester, MCP mobile, toolchain Podman
 #                               (image à construire ensuite : oc-android build-image --accept-licenses). Mémorisé ;
 #   ./install.sh --no-android   retire le module Android
+#   ./install.sh --pentest      outils réels pour sécuriser TES apps (pas juste des MCP) : nuclei et gitleaks
+#                               (binaires téléchargés et vérifiés par sha256, comme Trivy), semgrep (via uv tool
+#                               install) ; nmap et sqlmap sont indiqués (commande à lancer toi-même, jamais sudo
+#                               depuis ce script). Utilisés par l'agent @pentest. Mémorisé ;
+#   ./install.sh --no-pentest   oublie ce choix (ne désinstalle pas les binaires déjà posés)
 #   (ne lance pas ce script avec sudo : tout irait dans /root au lieu de ton dossier personnel)
 #   OPENCODE_CONFIG_DIR=...     autre dossier de destination ; OBSCURA_BIN_DIR=... dossier des binaires
 set -Eeuo pipefail
 
-LITE=0; TOOLS=1; MATT=0; MEMONLY=0; ALLOWROOT=0; SHELLENV=0; ANDROID=0; NOANDROID=0
+LITE=0; TOOLS=1; MATT=0; MEMONLY=0; ALLOWROOT=0; SHELLENV=0; ANDROID=0; NOANDROID=0; PENTEST=0; NOPENTEST=0
 for a in "$@"; do
   case "$a" in
     --lite) LITE=1; TOOLS=0 ;;
@@ -24,9 +29,11 @@ for a in "$@"; do
     --allow-root) ALLOWROOT=1 ;;
     --android) ANDROID=1 ;;
     --no-android) NOANDROID=1 ;;
+    --pentest) PENTEST=1 ;;
+    --no-pentest) NOPENTEST=1 ;;
     --shell-env) SHELLENV=1 ;;
     --with-matt) MATT=1 ;;
-    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
     *) echo "Option inconnue : $a" >&2; exit 1 ;;
   esac
 done
@@ -86,6 +93,17 @@ pkg_hint() {
     pacman:chromium) echo "sudo pacman -S --needed chromium" ;;
     apt:chromium)    echo "sudo apt install chromium   (ou laisse Playwright télécharger le sien)" ;;
     dnf:chromium)    echo "sudo dnf install chromium" ;;
+    pacman:nmap)   echo "sudo pacman -S --needed nmap" ;;
+    apt:nmap)      echo "sudo apt install nmap" ;;
+    dnf:nmap)      echo "sudo dnf install nmap" ;;
+    brew:nmap)     echo "brew install nmap" ;;
+    pacman:sqlmap) echo "sudo pacman -S --needed sqlmap" ;;
+    apt:sqlmap)    echo "sudo apt install sqlmap" ;;
+    dnf:sqlmap)    echo "sudo dnf install sqlmap   (absent des dépôts RHEL/Rocky : pip install sqlmap --user, ou clone https://github.com/sqlmapproject/sqlmap)" ;;
+    brew:sqlmap)   echo "brew install sqlmap" ;;
+    pacman:unzip)  echo "sudo pacman -S --needed unzip" ;;
+    apt:unzip)     echo "sudo apt install unzip" ;;
+    dnf:unzip)     echo "sudo dnf install unzip" ;;
     *) echo "voir la documentation de ${t} pour ${DISTRO}" ;;
   esac
 }
@@ -221,6 +239,85 @@ remove_android_addon() {
   rm -rf "$DEST/skills/android-dev" "$DEST/android" "$ANDROID_SHIM_ROOT"
 }
 
+# --- Outils pentest/appsec (option --pentest) : pour sécuriser TES PROPRES apps avant de les exposer.
+# Binaires téléchargés et vérifiés par sha256 (comme Trivy) ; aucun sudo lancé par ce script. ---
+PENTEST_MARKER="$DEST/.opencode-prerequisites.pentest"
+if [ "$PENTEST" = 0 ] && [ "$NOPENTEST" = 0 ] && [ -f "$PENTEST_MARKER" ]; then PENTEST=1; fi
+if [ "$LITE" = 1 ] && [ "$PENTEST" = 1 ]; then warn "Le profil léger n'installe pas les outils pentest : ignoré."; PENTEST=0; fi
+
+sha256_of() {
+  if need sha256sum; then sha256sum "$1" | awk '{print $1}'
+  elif need shasum; then shasum -a 256 "$1" | awk '{print $1}'
+  else echo ""; fi
+}
+
+extract_archive() {
+  local archive="$1" dest="$2"
+  case "$archive" in
+    *.zip)
+      if need unzip; then unzip -o -q "$archive" -d "$dest"
+      elif need bsdtar; then bsdtar -xf "$archive" -C "$dest"
+      else return 1; fi ;;
+    *.tar.gz|*.tgz) tar -xzf "$archive" -C "$dest" ;;
+    *) return 1 ;;
+  esac
+}
+
+# install_binary_release <commande> <owner/repo> <modèle d'archive> <nom du binaire dans l'archive>
+install_binary_release() {
+  local name="$1" repo="$2" template="$3" inner="$4" info archive got
+  if need "$name"; then echo "✅ $name déjà installé ($(command -v "$name"))"; return 0; fi
+  if ! info="$(node "$HERE/scripts/pentest-discover.mjs" "$repo" "$template" 2>&1)"; then
+    warn "$name : découverte de la dernière version impossible — $(printf '%s' "$info" | tail -n 1)"; return 1
+  fi
+  eval "$info" # VERSION / URL / SHA256 / ASSET (noms fixes, échappés par pentest-discover.mjs)
+  archive="$TMP/$ASSET"
+  if ! curl -fsSL "$URL" -o "$archive"; then warn "$name : téléchargement échoué ($URL)"; return 1; fi
+  got="$(sha256_of "$archive")"
+  if [ -z "$got" ]; then warn "$name : ni sha256sum ni shasum, somme non vérifiable — installation annulée."; return 1; fi
+  if [ "$got" != "$SHA256" ]; then warn "$name : somme de contrôle invalide (attendu $SHA256, obtenu $got) — installation annulée."; return 1; fi
+  mkdir -p "$TMP/$name-extract"
+  if ! extract_archive "$archive" "$TMP/$name-extract"; then warn "$name : extraction impossible (unzip/bsdtar manquant). → $(pkg_hint unzip)"; return 1; fi
+  if [ ! -f "$TMP/$name-extract/$inner" ]; then warn "$name : binaire \"$inner\" absent de l'archive téléchargée."; return 1; fi
+  install -m 0755 "$TMP/$name-extract/$inner" "$BIN/$name"
+  echo "✅ $name $VERSION installé dans $BIN (sha256 vérifié sur la release GitHub)"
+}
+
+install_pentest_tools() {
+  local os amd
+  os="linux"; [ "$(uname -s)" = Darwin ] && os="darwin"
+  case "$(uname -m)" in aarch64|arm64) amd=arm64 ;; *) amd=amd64 ;; esac
+
+  # nuclei (ProjectDiscovery, MIT) : vulnérabilités/misconfigurations connues par templates, sur TES cibles
+  install_binary_release nuclei "projectdiscovery/nuclei" "nuclei_{v}_${os}_${amd}.zip" nuclei || true
+  # gitleaks (MIT) : secrets/clés oubliés dans le code ou l'historique git
+  local gl_arch="x64"; [ "$amd" = arm64 ] && gl_arch="arm64"
+  install_binary_release gitleaks "gitleaks/gitleaks" "gitleaks_{v}_${os}_${gl_arch}.tar.gz" gitleaks || true
+
+  # semgrep (SAST, LGPL-2.1/MIT) : CLI via uv tool install (même uv que MemPalace), pas de sudo
+  if need semgrep; then
+    echo "✅ semgrep déjà installé ($(command -v semgrep))"
+  else
+    local UV
+    if UV="$(get_uv)" && "$UV" tool install semgrep --quiet; then
+      echo "✅ semgrep installé via uv (SAST, dans $BIN)"
+    else
+      warn "Installation de semgrep échouée : installe uv (https://docs.astral.sh/uv/) puis relance ./install.sh --pentest"
+    fi
+  fi
+
+  # nmap / sqlmap : paquets système courants, jamais installés avec sudo par ce script
+  need nmap   || warn "nmap absent (ports ouverts, services exposés de ton app). → $(pkg_hint nmap)"
+  need sqlmap || warn "sqlmap absent (test d'injection SQL ciblé sur ton app). → $(pkg_hint sqlmap)"
+
+  : > "$PENTEST_MARKER"
+  echo "✅ Outils pentest/appsec pour sécuriser tes apps : nuclei, gitleaks, semgrep (sha256 vérifié) ; nmap/sqlmap via le gestionnaire de paquets si absents."
+}
+
+remove_pentest_tools() {
+  rm -f "$PENTEST_MARKER"
+}
+
 need node || die "Node.js est requis (validation, profil léger, MCP). → $(pkg_hint node)"
 need opencode || warn "opencode introuvable. Installe-le : curl -fsSL https://opencode.ai/install | bash"
 
@@ -261,6 +358,13 @@ if [ "$ANDROID" = 1 ]; then
   install_android_addon
 else
   remove_android_addon   # idempotent : nettoie aussi d'anciennes installations
+fi
+
+# 2c. Outils pentest/appsec (option --pentest)
+if [ "$PENTEST" = 1 ]; then
+  install_pentest_tools
+else
+  remove_pentest_tools   # retire seulement le repère : les binaires déjà posés ne sont pas supprimés
 fi
 
 # 3a. Tes choix de modèles (oc-models set ...) survivent aux mises à jour : on les réapplique après la copie

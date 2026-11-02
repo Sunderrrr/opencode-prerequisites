@@ -30,6 +30,8 @@ jobs:
         run: node scripts/test-install-env.mjs
       - name: "Module Android (faux podman : commandes, montages, protections, faux adb)"
         run: node scripts/test-android.mjs
+      - name: "Outils pentest/appsec (option --pentest : découverte GitHub, sha256, installation)"
+        run: node scripts/test-pentest.mjs
       - name: Containerfile Android (hadolint, erreurs seulement)
         run: docker run --rm -i docker.io/hadolint/hadolint hadolint --failure-threshold error - < addons/android/libexec/oc-android/Containerfile
       - name: Installation avec le module Android, mémorisation puis retrait
@@ -125,6 +127,8 @@ jobs:
         run: node scripts/test-install-env.mjs
       - name: Module Android (tests avec faux podman, sans Docker)
         run: node scripts/test-android.mjs
+      - name: Outils pentest/appsec (option --pentest)
+        run: node scripts/test-pentest.mjs
       - name: Lanceurs MCP (choix du navigateur et du moteur de conteneurs)
         run: |
           mkdir -p /tmp/fake && cd /tmp/fake
