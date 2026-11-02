@@ -45,6 +45,23 @@ Points propres à chaque famille :
 - Le MCP **kubernetes** quitte au démarrage s'il n'y a aucun contexte `kubectl` : l'installateur le désactive (`"disabled": true`) dans ce cas ; retire la ligne quand tu as un cluster.
 - Les lanceurs `oc-playwright-mcp` et `oc-terraform-mcp` sont installés dans `~/.local/bin` (le dossier doit être dans le `PATH`).
 
+## Choisir les modèles
+
+Par défaut tout tourne sur `opencode-go/deepseek-v4.1-flash`. Pour changer, sans éditer de fichier :
+
+```bash
+oc-models list                          # modèle de chaque agent (◀ = modèle propre)
+oc-models set ceo deepseek-v4-pro       # un agent (le préfixe opencode-go/ est facultatif)
+oc-models set security opencode-go/glm-5.2
+oc-models set default kimi-k2.7-code    # le modèle de tous les agents sans modèle propre
+oc-models set small glm-5.3-flash       # le petit modèle (titres, résumés)
+oc-models set all deepseek-v4.1-flash   # tout sur un seul modèle (supprime les modèles propres)
+oc-models reset ceo                     # retire le modèle propre d'un agent (reset all : tout)
+oc-models available                     # liste des modèles OpenCode Go (en ligne)
+```
+
+Tes choix sont enregistrés dans `~/.config/opencode/oc-models.json` et **ré-appliqués à chaque `./install.sh`** : une mise à jour du kit ne les écrase pas. Redémarre OpenCode après un changement. Si OpenCode affiche encore l'ancien modèle, tape `/models` : il peut mémoriser ton dernier choix manuel.
+
 ## Profils
 
 | | Complet | Léger (`--lite`) |
@@ -63,7 +80,7 @@ Le profil léger est dérivé du complet par `scripts/make-lite.mjs` : il n'y a 
 - `config/skills/` : `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`.
 - `config/commands/` : `/check`, `/plan-first`, `/simplify`, `/verify`, `/learn`, `/ship`, `/pr`, `/usage`.
 - `config/plugins/` : `guard/` (bloque secrets et commandes destructrices) et `notify/` (notification quand une session attend), au **format plugin OpenCode v2** (un dossier, `export default Plugin.define({ id, setup })`) ; testés par `scripts/test-plugins.mjs`. Le compactage à 90 % est natif : `compaction.buffer: "10%"`.
-- `config/bin/agent-wt` : un worktree git par agent (`new`, `merge`, `remove`, `list`, `integration`, `sync`).
+- `config/bin/oc-models` : choix du modèle par agent ; `config/bin/agent-wt` : un worktree git par agent (`new`, `merge`, `remove`, `list`, `integration`, `sync`).
 - `templates/rust-project/` + `oc-new-rust <nom>` : projet Rust avec `AGENTS.md`, tests, CI GitHub Actions et `git init`.
 - `scripts/validate-kit.mjs` : validation (utilisée par l'installateur et la CI) ; `.github/workflows/ci.yml` : validation, installation à blanc, ShellCheck, gabarit Rust.
 

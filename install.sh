@@ -192,11 +192,16 @@ cp "$TMP/new.manifest" "$MANIFEST"
 for f in "$SRC"/bin/*; do install -m 0755 "$f" "$BIN/$(basename "$f")"; done
 install -m 0755 "$HERE/scripts/new-rust-project.sh" "$BIN/oc-new-rust"
 cp -a "$HERE/templates" "$DEST/templates"
-echo "✅ Config installée dans $DEST ; lanceurs (agent-wt, oc-new-rust, oc-playwright-mcp, oc-terraform-mcp) dans $BIN"
+echo "✅ Config installée dans $DEST ; lanceurs (agent-wt, oc-new-rust, oc-models, oc-playwright-mcp, oc-terraform-mcp) dans $BIN"
 
 # 3. Profil léger
 if [ "$LITE" = 1 ]; then
   node "$HERE/scripts/make-lite.mjs" "$DEST"
+fi
+
+# 3a. Tes choix de modèles (oc-models set ...) survivent aux mises à jour : on les réapplique après la copie
+if [ -f "$DEST/oc-models.json" ]; then
+  OPENCODE_CONFIG_DIR="$DEST" node "$DEST/libexec/oc-models.mjs" apply && echo "✅ Modèles personnalisés réappliqués ($DEST/oc-models.json)"
 fi
 
 # 3b. Kubernetes : le serveur MCP quitte au démarrage s'il n'y a aucun contexte kubectl

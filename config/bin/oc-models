@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Choisir le modèle de chaque agent :  oc-models list | set <agent|default|small|all> <modèle> | reset <agent|all> | available
+exec node "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/libexec/oc-models.mjs" "$@"

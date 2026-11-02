@@ -94,6 +94,12 @@ for (const f of ls(path.join(C, "plugins"))) {
   finally { fs.rmSync(tmp, { force: true }) }
 }
 
+// 5b. Scripts Node de config/libexec (syntaxe)
+for (const f of ls(path.join(C, "libexec")).filter((x) => x.endsWith(".mjs"))) {
+  try { execFileSync(process.execPath, ["--check", path.join(C, "libexec", f)], { stdio: "pipe" }) }
+  catch (e) { err(`libexec/${f} : erreur de syntaxe\n${e.stderr}`) }
+}
+
 // 6. Secrets
 const SECRET = [/sk-[A-Za-z0-9]{20,}/, /ghp_[A-Za-z0-9]{30,}/, /gho_[A-Za-z0-9]{30,}/, /AKIA[0-9A-Z]{16}/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /xox[bap]-[A-Za-z0-9-]{10,}/]
 const walk = (d) => ls(d).flatMap((x) => {

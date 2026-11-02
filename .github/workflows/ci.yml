@@ -20,6 +20,8 @@ jobs:
         run: node scripts/validate-kit.mjs
       - name: Plugins locaux (test fonctionnel avec un faux contexte OpenCode v2)
         run: node scripts/test-plugins.mjs
+      - name: oc-models (choix des modèles par agent, survie aux mises à jour)
+        run: node scripts/test-models.mjs
       - name: Config conforme au schéma JSON officiel d'OpenCode (complet + léger)
         run: |
           pip install --quiet jsonschema
