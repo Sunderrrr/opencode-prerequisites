@@ -97,7 +97,9 @@ emu_start() {
     esac
   done
   need_image
-  [ -r "$KVM" ] && [ -w "$KVM" ] || die "$KVM inaccessible : l'émulateur exige l'accélération matérielle. Active la virtualisation dans le BIOS et ajoute-toi au groupe kvm (sudo usermod -aG kvm \$USER, puis reconnecte-toi)."
+  if ! { [ -r "$KVM" ] && [ -w "$KVM" ]; }; then
+    die "$KVM inaccessible : l'émulateur exige l'accélération matérielle. Active la virtualisation dans le BIOS et ajoute-toi au groupe kvm (sudo usermod -aG kvm \$USER, puis reconnecte-toi)."
+  fi
   if running; then echo "ℹ️  L'émulateur tourne déjà ($EMU)."; [ "$wait" = 1 ] && emu_wait; return 0; fi
   "$PODMAN" rm -f "$EMU" >/dev/null 2>&1 || true
   ensure_net; mkdir -p "$STATE/avd"
@@ -157,7 +159,7 @@ cmd_doctor() {
   if check "$PODMAN" image exists "$IMAGE"; then echo "✅ Image $IMAGE présente"; ok=1; else echo "⚠️  Image absente : oc-android build-image --accept-licenses"; fi
   if [ -r "$KVM" ] && [ -w "$KVM" ]; then echo "✅ $KVM accessible"; else echo "⚠️  $KVM inaccessible (groupe kvm, virtualisation du BIOS)"; fi
   if running; then echo "✅ Émulateur en marche"; else echo "ℹ️  Émulateur arrêté (oc-android emulator start)"; fi
-  [ -x "$STATE/sdk/platform-tools/adb" ] && echo "✅ Faux adb pour mobile-mcp : $STATE/sdk/platform-tools/adb" || echo "⚠️  Faux adb absent : relance ./install.sh --android"
+  if [ -x "$STATE/sdk/platform-tools/adb" ]; then echo "✅ Faux adb pour mobile-mcp : $STATE/sdk/platform-tools/adb"; else echo "⚠️  Faux adb absent : relance ./install.sh --android"; fi
   [ "$ok" = 1 ] || rc=1
   return "$rc"
 }
