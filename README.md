@@ -57,7 +57,7 @@ Le profil léger est dérivé du complet par `scripts/make-lite.mjs` : il n'y a 
 
 ## Contenu
 
-- `config/opencode.jsonc` : modèle unique `opencode-go/deepseek-v4.1-flash` (gros quota), `deepseek-v4-pro` pour `ceo`, `architect` et `security`, permissions débridées, formatage auto, compactage.
+- `config/opencode.jsonc` : modèle unique `opencode-go/deepseek-v4.1-flash` pour TOUS les agents (gros quota ; aucun agent n'a de modèle propre, pour en changer un : ajoute `model: opencode-go/<id>` dans son fichier `agents/<nom>.md`), permissions débridées, formatage auto, compactage.
 - `config/AGENTS.md` : règles globales (≈ 700 mots, lues à chaque session) : CEO, Rust par défaut, « terminé = prouvé », git multi-agents, sécurité internet, quota.
 - `config/agents/` : `ceo` (par défaut), domaine (`architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`), langages/outils (`rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`), contrôle (`review`, `code-simplifier`, `verify-app`), git (`integrator`).
 - `config/skills/` : `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`.
