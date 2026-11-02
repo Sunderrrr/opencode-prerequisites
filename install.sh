@@ -287,19 +287,31 @@ need gh || warn "gh (GitHub CLI) introuvable : requis pour /pr et la recherche G
 [ "$BIN" = "$HOME/.local/bin" ] || warn "Les MCP playwright et terraform pointent vers \$HOME/.local/bin (lanceurs oc-*) : copie-les depuis $BIN ou garde le dossier par défaut."
 case ":$PATH:" in *":$BIN:"*) ;; *) warn "Ajoute $BIN à ton PATH : export PATH=\"$BIN:\$PATH\"" ;; esac
 
-# Variables d'environnement dans le shell (opt-in, idempotent)
+# Variables d'environnement dans le shell (opt-in). Bloc balisé, remplacé à chaque exécution (pas de doublon).
+# IMPORTANT : ~/.local/bin est ajouté EN FIN de PATH, jamais en tête (en tête, il peut faire boucler les shims mise/asdf).
 if [ "$SHELLENV" = 1 ]; then
   for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
     [ -f "$rc" ] || continue
-    if ! grep -q 'opencode-prerequisites' "$rc"; then
-      {
-        echo ""
-        echo "# opencode-prerequisites"
-        echo "export PATH=\"$BIN:\$PATH\""
-        [ -x "$MEMVENV/bin/python" ] && echo "export MEMPALACE_ADAPTER_PYTHON=\"$MEMVENV/bin/python\""
-      } >> "$rc"
-      echo "✅ PATH et MEMPALACE_ADAPTER_PYTHON ajoutés à $rc (ouvre un nouveau terminal)"
-    fi
+    [ -e "$rc.bak-opencode-prerequisites" ] || cp -p "$rc" "$rc.bak-opencode-prerequisites"
+    # retire l'ancien bloc (balisé, ou ancien format sans balises) puis écrit le nouveau
+    awk '
+      /^# >>> opencode-prerequisites >>>$/ { skip=1; next }
+      /^# <<< opencode-prerequisites <<<$/ { skip=0; next }
+      skip==1 { next }
+      /^# opencode-prerequisites$/ { old=1; next }
+      old==1 && /^export (PATH|MEMPALACE_ADAPTER_PYTHON)=/ { next }
+      { old=0; print }
+    ' "$rc" > "$TMP/rc.new"
+    {
+      cat "$TMP/rc.new"
+      echo ""
+      echo "# >>> opencode-prerequisites >>>"
+      echo "case \":\$PATH:\" in *\":$BIN:\"*) ;; *) export PATH=\"\$PATH:$BIN\" ;; esac"
+      [ -x "$MEMVENV/bin/python" ] && echo "export MEMPALACE_ADAPTER_PYTHON=\"$MEMVENV/bin/python\""
+      echo "# <<< opencode-prerequisites <<<"
+    } > "$TMP/rc.final"
+    cat "$TMP/rc.final" > "$rc"   # cat > : conserve les droits et les liens symboliques (dotfiles)
+    echo "✅ PATH (en fin) et MEMPALACE_ADAPTER_PYTHON écrits dans $rc (ouvre un nouveau terminal ; sauvegarde : $rc.bak-opencode-prerequisites)"
   done
 fi
 

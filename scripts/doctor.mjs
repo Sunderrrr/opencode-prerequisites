@@ -48,6 +48,10 @@ try {
 } catch { /* macOS ou autre */ }
 console.log(`Système : ${distro} · Node ${process.versions.node}`)
 console.log(`Dossier de config : ${DEST}\n`)
+if ((process.env.PATH ?? "").split(path.delimiter)[0] === BIN) {
+  console.log(`⚠️  ${BIN} est EN TÊTE de ton PATH : cela peut faire boucler les shims mise/asdf (lignes « mise … tools: opencode@… » répétées). Relance  ./install.sh --no-tools --shell-env  (il le met désormais en fin de PATH), puis ouvre un nouveau terminal.`)
+  warned++
+}
 if (!(process.env.PATH ?? "").split(path.delimiter).includes(BIN)) {
   console.log(`⚠️  ${BIN} n'est pas dans ton PATH : ajoute  export PATH="${BIN}:$PATH"  à ton ~/.bashrc / ~/.zshrc (obscura, trivy, agent-wt, oc-new-rust)`)
   warned++
