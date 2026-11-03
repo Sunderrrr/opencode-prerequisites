@@ -90,6 +90,14 @@ r = oc(["adb", "logcat", "-d"], {}, horsProjet)
 c = calls().split("\n").find((l) => l.startsWith("run ") && l.includes(" adb ")) ?? ""
 check("adb hors projet : logcat marche, dossier courant monté", r.status === 0 && c.includes(`-v ${horsProjetReal}:${horsProjetReal}`) && c.includes(`-w ${horsProjetReal}`) && c.includes("adb logcat -d"), r.stderr + calls())
 
+// 3c. exec : le « -- » de séparation des options (habitude courante) ne doit pas partir à Podman
+reset(); r = oc(["exec", "--", "java", "-version"])
+c = calls().split("\n").find((l) => l.startsWith("run ")) ?? ""
+check("exec -- : -- retiré, la commande arrive telle quelle à Podman", r.status === 0 && / java -version$/.test(c) && !/ -- java -version/.test(c), r.stderr + calls())
+reset(); r = oc(["exec", "java", "-version"])
+c = calls().split("\n").find((l) => l.startsWith("run ")) ?? ""
+check("exec sans -- : commande inchangée", r.status === 0 && / java -version$/.test(c) && !/ -- java -version/.test(c), r.stderr + calls())
+
 r = oc(["emulator", "stop"]); check("emulator stop : supprime le conteneur", r.status === 0 && /rm -f oc-android-emu/.test(calls()))
 
 // 4. construction de l'image

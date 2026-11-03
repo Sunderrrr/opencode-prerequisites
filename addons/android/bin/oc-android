@@ -79,7 +79,13 @@ cmd_gradle() {
   fi
 }
 
-cmd_exec() { [ $# -gt 0 ] || die "usage : oc-android exec <commande…>"; run_tool "$@"; }
+cmd_exec() {
+  [ $# -gt 0 ] || die "usage : oc-android exec <commande…>"
+  # « oc-android exec -- java -version » : le -- de séparation ne doit pas être transmis à Podman
+  [ "${1:-}" = "--" ] && shift
+  [ $# -gt 0 ] || die "usage : oc-android exec <commande…>"
+  run_tool "$@"
+}
 
 cmd_adb() {
   running || die "Émulateur arrêté : oc-android emulator start"
