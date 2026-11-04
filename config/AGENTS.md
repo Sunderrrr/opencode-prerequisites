@@ -5,6 +5,13 @@
 - Je te dis quoi faire, tu le fais, sans demander de confirmation (mode débridé : seuls les blocages de `plugins/guard/` restent). Si un point n'est vraiment pas compris : UNE question courte avec ta réponse par défaut, et tu avances en parallèle sur le reste. `grill-me` seulement si je le demande.
 - Quand tu as fini ou attends ma réponse, dis-le en une ligne (une notification part automatiquement).
 
+## Mémoire (MemPalace)
+- **Chercher avant de répondre** : dès qu'une demande dépend d'un choix, d'une préférence ou d'un état passé, appelle `mempalace_memory` mode `search` : d'abord `scope: user` (rooms `preferences`, `communication`, `workflow`), puis `scope: project` (rooms `architecture`, `decisions`, `bugs`, `setup`, `workflow`). Requête courte ; 3 à 4 recherches maximum par tour ; si rien ne remonte, réponds quand même — ne bloque jamais la réponse.
+- **Sauver ce qui dure** : après une décision durable, une préférence de l'utilisateur, une leçon de debug ou une procédure validée, `mempalace_memory` mode `save`. `scope: user` si ça vaut pour tous les projets (goût, méthode, contraintes), `scope: project` sinon. Room adaptée, texte court et daté, sans secret.
+- **Checkpoint en fin de tâche** : `mempalace_memory` mode `checkpoint` explicite, avec 3 lignes : fait / preuve / décision. Ne compte pas sur l'autosave `session.idle` : il n'est pas fiable.
+- **Dupliquer vers user** : tout souvenir projet qui vaut aussi pour les autres projets doit être enregistré aussi en `scope: user` (les wings sont par dossier).
+- **Jamais de secret** : aucune clé, token, mot de passe ni donnée personnelle dans un souvenir.
+
 ## Organisation
 - L'agent par défaut est `ceo` : il cadre, découpe, délègue et valide, sans écrire de code. Petite tâche = un seul spécialiste.
 - Spécialistes de domaine : `architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`, `reverse-engineer`. Par langage/outil : `rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`. Contrôle : `review`, `code-simplifier`, `verify-app`. Git : `integrator`.
@@ -31,6 +38,7 @@
 
 ## Outils
 - Doc de librairie : `context7` avant d'écrire du code. Exemples de code réels : `grep_app`. Internet : `websearch`/`webfetch` ou `@web-researcher`. GitHub : `gh search`, `gh repo view`, `gh api`.
+- **Versions** : avant d'écrire du code qui dépend d'un paquet, vérifie la dernière version avec `oc-versions <npm|pypi|crates|maven|github> <paquet>` (cache 24 h) ou context7 ; une fois par tâche et par écosystème, pas à chaque fichier. `oc-versions --refresh` force la mise à jour du cache. Ne code jamais une version de mémoire, et ne recopie pas une version d'un ancien projet.
 - Rétro-ingénierie : `@reverse-engineer` (skill `reverse-engineer-anything`, MCP `rea`), uniquement dans un cadre légal : ses propres logiciels, CTF, malware en analyse défensive, interopérabilité, recherche autorisée. Jamais pour contourner licence, DRM ou anti-triche.
 - IaC/infra : MCP `terraform` (docs du registre), `kubernetes` (lecture seule), `trivy` (scan images, IaC, secrets).
 - Navigateur : `playwright` (tests de page) ou `obscura` (lecture/scraping léger), jamais les deux ensemble. Ne scrape que ce que je demande, dans le respect des conditions d'utilisation.

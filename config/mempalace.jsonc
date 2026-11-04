@@ -1,9 +1,25 @@
 {
-  // Réglages du plugin opencode-mempalace
+  // Réglages du plugin opencode-mempalace (lues dans ~/.config/opencode/mempalace.jsonc).
+  // Attention : le plugin ne retire que les commentaires en début de ligne, pas les commentaires en fin de ligne.
   "autosaveEnabled": true,
   "retrievalEnabled": true,
   "keywordSaveEnabled": true,
-  "maxInjectedItems": 6,        // limite le contexte injecté (économise le quota Go)
+  // Limite le contexte injecté (économise le quota Go).
+  "maxInjectedItems": 6,
   "retrievalQueryLimit": 5,
-  "privacyRedactionEnabled": true // masque les secrets avant sauvegarde
+  // Masque les secrets avant sauvegarde.
+  "privacyRedactionEnabled": true,
+  // Déclenche l'autosave sur ces mots (regex \b…\b, insensible à la casse : « Retiens ça » marche aussi).
+  // La liste REMPLACE les motifs par défaut du plugin : on garde donc les anglais.
+  "keywordPatterns": [
+    "remember",
+    "save this",
+    "don't forget",
+    "note that",
+    "retiens",
+    "retiens ça",
+    "souviens-toi",
+    "note que",
+    "n'oublie pas"
+  ]
 }
