@@ -505,7 +505,7 @@ install_trivy() {
 # --- Obscura: pinned version; sha256 taken from the GitHub API (asset digest) or from a published
 # checksums file. No "latest" asset, no installation without a checksum. ---
 install_obscura() {
-  local platform rel obscura_asset obscura_asset_nr meta url sha sums_url sums want f src
+  local platform rel obscura_asset obscura_asset_nr meta url sha sums_url sums want f src line meta_file meta_err
   case "$(uname -s)-$(uname -m)" in
     Linux-x86_64)              platform="x86_64-linux" ;;
     Linux-aarch64|Linux-arm64) platform="aarch64-linux" ;;
@@ -520,8 +520,10 @@ install_obscura() {
   fi
   obscura_asset="obscura-$platform.tar.gz"
   obscura_asset_nr="obscura-$platform-no-render.tar.gz"
+  meta_file="$TMP/obscura-meta.txt"
+  meta_err="$TMP/obscura-meta.err"
   # shellcheck disable=SC2016  # JS script in single quotes: no shell expansion intended
-  mapfile -t meta < <(node -e '
+  if ! node -e '
 const fs = require("fs");
 const [file, ...names] = process.argv.slice(1);
 const assets = JSON.parse(fs.readFileSync(file, "utf8")).assets || [];
@@ -535,7 +537,18 @@ const sums = assets.find((a) => /checksums|sha256sums/i.test(a.name) && !/\.sig(
 console.log(found.browser_download_url);
 console.log(String(found.digest || "").replace(/^sha256:/, ""));
 console.log(sums ? sums.browser_download_url : "");
-' "$rel" "$obscura_asset" "$obscura_asset_nr")
+' "$rel" "$obscura_asset" "$obscura_asset_nr" > "$meta_file" 2> "$meta_err"; then
+    # The JS has a single explicit failure path: the requested asset is absent.
+    if grep -q '^assets missing' "$meta_err"; then
+      warn "obscura: asset \"$obscura_asset\" or \"$obscura_asset_nr\" missing from release v$OC_OBSCURA_VERSION — installation cancelled."
+    else
+      warn "obscura: release metadata incomplete — installation cancelled."
+      cat "$meta_err" >&2
+    fi
+    return 1
+  fi
+  meta=()
+  while IFS= read -r line; do meta+=("$line"); done < "$meta_file"
   url="${meta[0]:-}"; sha="${meta[1]:-}"; sums_url="${meta[2]:-}"
   if [ -z "$url" ]; then
     warn "obscura: asset \"$obscura_asset\" or \"$obscura_asset_nr\" missing from release v$OC_OBSCURA_VERSION — installation cancelled."
