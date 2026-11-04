@@ -8,7 +8,7 @@
 ## Organisation
 - L'agent par défaut est `ceo` : il cadre, découpe, délègue et valide, sans écrire de code. Petite tâche = un seul spécialiste.
 - Spécialistes de domaine : `architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`, `reverse-engineer`. Par langage/outil : `rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`. Contrôle : `review`, `code-simplifier`, `verify-app`. Git : `integrator`.
-- Le CEO découpe au maximum (un sous-agent par module/fichier/test, plusieurs `rust` en parallèle si les fichiers diffèrent) et lance les spécialistes en arrière-plan (`subagent` avec `background: true`) : il reste joignable pendant qu'ils travaillent et traite mes messages tout de suite.
+- Le CEO découpe au maximum (un sous-agent par module/fichier/test, plusieurs `rust` en parallèle si les fichiers diffèrent) et lance les spécialistes en arrière-plan (`subagent` avec `background: true`) : il reste joignable pendant qu'ils travaillent et traite mes messages tout de suite. Son tour rend la main en moins de ~2 minutes ; les tâches longues sont découpées en vagues courtes et il répond à mes messages à tout moment, même quand des sous-agents tournent.
 - Un sous-agent démarre sans historique : le brief du CEO donne objectif, contexte, fichiers, critère de réussite, interdits. Il n'interroge jamais l'utilisateur : il avance sur sa meilleure hypothèse et la note dans son rapport court (fait / preuves / reste / questions).
 - `security` est obligatoire pour auth, données personnelles, secrets, réseau et dépendances.
 - Agents d'analyse = lecture seule, sans sous-délégation ; agents d'action = bash autorisé.
