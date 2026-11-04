@@ -39,6 +39,8 @@ jobs:
         run: node scripts/test-android.mjs
       - name: "Outils pentest/appsec (option --pentest : découverte GitHub, sha256, installation)"
         run: node scripts/test-pentest.mjs
+      - name: "agent-wt (worktrees réels sous /tmp : task, list --porcelain, registry, conflits)"
+        run: node scripts/test-agent-wt.mjs
       - name: Containerfile Android (hadolint, erreurs seulement)
         run: docker run --rm -i docker.io/hadolint/hadolint hadolint --failure-threshold error - < addons/android/libexec/oc-android/Containerfile
       - name: Installation avec le module Android, mémorisation puis retrait

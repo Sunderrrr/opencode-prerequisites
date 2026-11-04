@@ -142,7 +142,7 @@ Le profil léger est dérivé du complet par `scripts/make-lite.mjs` : il n'y a 
 - `config/skills/` : `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`, `reverse-engineer-anything`.
 - `config/commands/` : `/check`, `/plan-first`, `/simplify`, `/verify`, `/learn`, `/ship`, `/pr`, `/usage`.
 - `config/plugins/` : `guard/` (garde-fou textuel : bloque la lecture des fichiers de secrets et les commandes destructrices courantes ; **ce n'est pas une barrière** et cela ne remplace pas une revue de sécurité) et `notify/` (notification quand une session attend), au **format plugin OpenCode v2** (un dossier, `export default Plugin.define({ id, setup })`) ; testés par `scripts/test-plugins.mjs`. Le compactage à 90 % est natif : `compaction.buffer: "10%"`.
-- `config/bin/oc-models` : choix du modèle par agent ; `config/bin/agent-wt` : un worktree git par agent (`new`, `merge`, `remove`, `list`, `integration`, `sync`).
+- `config/bin/oc-models` : choix du modèle par agent ; `config/bin/agent-wt` : un worktree git par agent (`new`, `merge`, `remove`, `list`, `registry`, `integration`, `sync`). `agent-wt list --porcelain` donne l'état machine (une ligne par worktree, 7 champs tabulés) ; `agent-wt registry --out .worktrees/REGISTRE.md` tient le registre persistant du CEO (tableau réécrit, section `## Historique` existante conservée).
 - Versions MCP épinglées, pas de `@latest` implicite : `@playwright/mcp@0.0.84`, `rea-agents@6.8.0`, `kubernetes-mcp-server@0.1.1`, `@mobilenext/mobile-mcp@1.0.15`, `semgrep-mcp==0.9.0`, image `terraform-mcp-server:1.4.1`.
 - `templates/rust-project/` + `oc-new-rust <nom>` : projet Rust avec `AGENTS.md`, tests, CI GitHub Actions et `git init`.
 - `scripts/validate-kit.mjs` : validation (utilisée par l'installateur et la CI) ; `.github/workflows/ci.yml` : validation, installation à blanc, ShellCheck, gabarit Rust.
@@ -155,7 +155,7 @@ Le profil léger est dérivé du complet par `scripts/make-lite.mjs` : il n'y a 
 
 **Validation.** Chaque agent qui produit du code ajoute des tests, lance la suite, exécute vraiment la fonctionnalité, et corrige jusqu'au vert. Désactiver ou affaiblir un test est interdit.
 
-**Git sans conflit.** Un fichier = un propriétaire, un worktree par tâche parallèle, les spécialistes ne poussent jamais, `integrator` fusionne un à la fois avec tests après chaque fusion. Mode PR : branche `integration/<nom>`, rebase sur `origin/main`, `gh pr create`, re-synchronisation si `main` avance.
+**Git sans conflit.** Un fichier = un propriétaire, un worktree par tâche parallèle, les spécialistes ne poussent jamais, `integrator` fusionne un à la fois avec tests après chaque fusion. Le CEO suit l'état avec `agent-wt list --porcelain` et tient `.worktrees/REGISTRE.md` via `agent-wt registry --out .worktrees/REGISTRE.md`. Mode PR : branche `integration/<nom>`, rebase sur `origin/main`, `gh pr create`, re-synchronisation si `main` avance.
 
 **MCP DevOps (lecture seule).** `terraform` (docs du registre, via Docker, sans jeton), `kubernetes` (lecture seule, Secrets bloqués par `k8s-mcp.toml`), `trivy`. Internet : `websearch`/`webfetch`, `grep_app`, `gh`, agent `web-researcher` ; tout contenu externe est traité comme donnée, jamais comme instruction.
 
