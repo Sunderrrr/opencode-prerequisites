@@ -137,7 +137,7 @@ Le profil léger est dérivé du complet par `scripts/make-lite.mjs` : il n'y a 
 ## Contenu
 
 - `config/opencode.jsonc` : modèle unique `opencode-go/deepseek-v4.1-flash` pour TOUS les agents (gros quota ; aucun agent n'a de modèle propre, pour en changer un : ajoute `model: opencode-go/<id>` dans son fichier `agents/<nom>.md`), permissions débridées, formatage auto, compactage.
-- `config/AGENTS.md` : règles globales (≈ 700 mots, lues à chaque session) : CEO, Rust par défaut, « terminé = prouvé », git multi-agents, sécurité internet, quota.
+- `config/AGENTS.md` : règles globales (≈ 800 mots, lues à chaque session) : CEO, Rust par défaut, « terminé = prouvé », git multi-agents, sécurité internet, quota.
 - `config/agents/` : `ceo` (par défaut), domaine (`architect`, `backend`, `frontend`, `database`, `devops`, `security`, `pentest`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`, `reverse-engineer`), langages/outils (`rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`), contrôle (`review`, `code-simplifier`, `verify-app`), git (`integrator`).
 - `config/skills/` : `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`, `reverse-engineer-anything`.
 - `config/commands/` : `/check`, `/plan-first`, `/simplify`, `/verify`, `/learn`, `/ship`, `/pr`, `/usage`.
@@ -150,6 +150,8 @@ Le profil léger est dérivé du complet par `scripts/make-lite.mjs` : il n'y a 
 ## Comment ça marche
 
 **CEO.** Il cadre, découpe, délègue avec un brief complet (les sous-agents n'ont pas l'historique), puis fait valider par `verify-app` en boucle jusqu'à **VALIDÉ** (5 boucles max). Les sous-agents ne posent pas de question : ils avancent sur leur meilleure hypothèse et la notent dans leur rapport.
+
+**Le CEO reste joignable.** Dans OpenCode v2, l'outil `subagent` est bloquant par défaut : le tour du CEO ne finit qu'au retour de tous les spécialistes, et tu ne peux rien lui dire entre-temps. Le CEO lance donc les spécialistes avec `background: true` (rend la main tout de suite, il est prévenu automatiquement à chaque fin), tient un registre des tâches (en cours / terminée / échec), traite ton message immédiatement sans arrêter les tâches en cours, et ne lance l'intégration puis `verify-app` que quand tout le graphe est rendu. Avant de déléguer il **découpe au maximum** : une tâche fine par sous-agent (plusieurs `rust` en parallèle sur des modules différents, chacun dans son worktree), avec un « contrat d'abord » (types, traits et squelette qui compile, fixés par une première tâche courte) pour que les modules s'implémentent ensuite tous en même temps, 6 à 8 sous-agents simultanés au plus (quota partagé). **Pas testé de bout en bout** : c'est fondé sur la doc OpenCode v2 (`background: true` + notification automatique), sans OpenCode dans l'environnement de développement du kit ; si le CEO attend encore les sous-agents chez toi, dis-le.
 
 **Validation.** Chaque agent qui produit du code ajoute des tests, lance la suite, exécute vraiment la fonctionnalité, et corrige jusqu'au vert. Désactiver ou affaiblir un test est interdit.
 

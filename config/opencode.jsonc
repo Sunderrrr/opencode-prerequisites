@@ -12,7 +12,9 @@
 
   // Le CEO est l'agent par défaut : il délègue aux spécialistes (agents/*.md)
   "default_agent": "ceo",
-  "subagent_depth": 1, // les spécialistes ne lancent pas d'autres sous-agents
+  // Les spécialistes ne lancent pas d'autres sous-agents (profondeur 1 = défaut v2). La clé de premier niveau
+  // "subagent_depth" est ignorée en v2 : elle se règle sous "experimental".
+  "experimental": { "subagent_depth": 1 },
 
   // Compactage natif : buffer "10%" = on compacte quand il reste 10 % de contexte, soit à 90 % d'utilisation.
   "compaction": { "auto": true, "buffer": "10%" },
