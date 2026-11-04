@@ -22,6 +22,10 @@ jobs:
         run: node scripts/test-plugins.mjs
       - name: oc-models (choix des modèles par agent, survie aux mises à jour)
         run: node scripts/test-models.mjs
+      - name: oc-versions (dernières versions réelles, cache et fixtures sans réseau)
+        run: node scripts/test-versions.mjs
+      - name: "Chaîne d'approvisionnement (versions épinglées, checksums, refus des assets altérés)"
+        run: node scripts/test-supply-chain.mjs
       - name: Config conforme au schéma JSON officiel d'OpenCode (complet + léger)
         run: |
           # jsonschema du dépôt peut être trop ancien (Debian 12 : 4.10.3, Rocky 9 : 3.2.0) :

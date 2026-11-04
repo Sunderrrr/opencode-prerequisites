@@ -20,6 +20,18 @@
 #   OPENCODE_CONFIG_DIR=...     autre dossier de destination ; OBSCURA_BIN_DIR=... dossier des binaires
 set -Eeuo pipefail
 
+# --- Versions épinglées des outils téléchargés : aucune URL « latest » ni « main ».
+# Surchargeables (OC_*_VERSION) pour suivre une release précise ou pour les tests hermétiques.
+# Valeurs par défaut vérifiées sur la machine d'écriture ; uv = dernière release stable au moment de l'audit.
+OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.76.1}"
+OC_TRIVY_MCP_VERSION="${OC_TRIVY_MCP_VERSION:-v0.0.20}"
+OC_OBSCURA_VERSION="${OC_OBSCURA_VERSION:-0.2.6}"
+OC_UV_VERSION="${OC_UV_VERSION:-0.13.7}"
+OC_MEMPALACE_VERSION="${OC_MEMPALACE_VERSION:-3.11.0}"
+OC_SEMGREP_VERSION="${OC_SEMGREP_VERSION:-1.183.0}"
+OC_PLAYWRIGHT_VERSION="${OC_PLAYWRIGHT_VERSION:-1.64.1}"
+OC_SKILLS_VERSION="${OC_SKILLS_VERSION:-1.7.6}"
+
 LITE=0; TOOLS=1; MATT=0; MEMONLY=0; ALLOWROOT=0; SHELLENV=0; ANDROID=0; NOANDROID=0; PENTEST=0; NOPENTEST=0; PENTEST_EXPLICIT=0
 for a in "$@"; do
   case "$a" in
@@ -49,6 +61,34 @@ trap 'rm -rf "$TMP"' EXIT
 need() { command -v "$1" >/dev/null 2>&1; }
 warn() { echo "⚠️  $*" >&2; }
 die()  { echo "❌ $*" >&2; exit 1; }
+
+# Une version surchargeable ne doit jamais pouvoir injecter une URL ou une option.
+for v in "$OC_TRIVY_VERSION" "$OC_TRIVY_MCP_VERSION" "$OC_OBSCURA_VERSION" "$OC_UV_VERSION" \
+         "$OC_MEMPALACE_VERSION" "$OC_SEMGREP_VERSION" "$OC_PLAYWRIGHT_VERSION" "$OC_SKILLS_VERSION"; do
+  if [[ ! "$v" =~ ^[0-9A-Za-z._-]+$ ]]; then die "Version invalide : $v"; fi
+done
+
+sha256_of() {
+  if need sha256sum; then sha256sum "$1" | awk '{print $1}'
+  elif need shasum; then shasum -a 256 "$1" | awk '{print $1}'
+  else echo ""; fi
+}
+
+# fetch_verified <url> <destination> <sha256 attendu> <libellé>
+# Télécharge puis refuse d'aller plus loin si la somme est absente ou différente (échec fermé).
+fetch_verified() {
+  local url="$1" dest="$2" want="$3" label="$4" got
+  if ! curl -fsSL --retry 2 --connect-timeout 15 "$url" -o "$dest"; then
+    warn "$label : téléchargement échoué ($url)"; return 1
+  fi
+  got="$(sha256_of "$dest")"
+  if [ -z "$got" ]; then
+    warn "$label : ni sha256sum ni shasum — somme non vérifiable, installation annulée."; return 1
+  fi
+  if [ "$got" != "$want" ]; then
+    die "$label : somme de contrôle invalide (attendu $want, obtenu $got) — installation annulée."
+  fi
+}
 
 # unique_path <chemin> : le chemin s'il est libre, sinon <chemin>-1, -2... (deux installations
 # dans la même seconde ne doivent jamais se copier l'une dans l'autre).
@@ -124,20 +164,38 @@ pkg_hint() {
   esac
 }
 
-# get_uv : trouve uv ou télécharge le binaire statique officiel (aucun paquet python3-venv requis)
+# get_uv : trouve uv ou télécharge le binaire statique officiel (aucun paquet python3-venv requis).
+# Version épinglée et somme .sha256 publiée à côté de l'archive, vérifiée avant extraction.
 get_uv() {
   if need uv; then echo uv; return 0; fi
-  local arch os
+  local arch os uv_asset base sumfile want
   case "$(uname -m)" in x86_64) arch=x86_64 ;; aarch64|arm64) arch=aarch64 ;; *) return 1 ;; esac
   case "$(uname -s)" in
     Linux)  os="unknown-linux-musl" ;;
     Darwin) os="apple-darwin" ;;
     *) return 1 ;;
   esac
+  uv_asset="uv-$arch-$os.tar.gz"
+  base="https://github.com/astral-sh/uv/releases/download/$OC_UV_VERSION"
+  sumfile="$TMP/uv.sha256"
+  if ! curl -fsSL --retry 2 --connect-timeout 15 "$base/$uv_asset.sha256" -o "$sumfile"; then
+    warn "uv $OC_UV_VERSION : fichier .sha256 introuvable ($base/$uv_asset.sha256) — installation annulée."
+    return 1
+  fi
+  want="$(awk '{print $1; exit}' "$sumfile")"
+  if ! [[ "$want" =~ ^[0-9a-f]{64}$ ]]; then
+    warn "uv : somme sha256 illisible dans $uv_asset.sha256 — installation annulée."
+    return 1
+  fi
   mkdir -p "$TMP/uvbin"
-  curl -fsSL "https://github.com/astral-sh/uv/releases/latest/download/uv-$arch-$os.tar.gz" -o "$TMP/uv.tgz" \
-    && tar -xzf "$TMP/uv.tgz" -C "$TMP/uvbin" --strip-components=1 \
-    && [ -x "$TMP/uvbin/uv" ] && echo "$TMP/uvbin/uv"
+  fetch_verified "$base/$uv_asset" "$TMP/uv.tgz" "$want" "uv $OC_UV_VERSION" || return 1
+  if ! tar -xzf "$TMP/uv.tgz" -C "$TMP/uvbin" --strip-components=1; then
+    warn "uv : extraction de l'archive impossible."; return 1
+  fi
+  if [ ! -x "$TMP/uvbin/uv" ]; then
+    warn "uv : binaire \"uv\" absent de l'archive extraite."; return 1
+  fi
+  echo "$TMP/uvbin/uv"
 }
 
 # Lancé via sudo : $HOME serait celui de root (config, outils et MemPalace installés au mauvais endroit)
@@ -169,7 +227,8 @@ setup_mempalace() {
       UV_PYTHON_INSTALL_DIR="$HOME/.mempalace/python" "$UV" venv --seed --managed-python --python 3.12 "$MEMVENV" || return 1
     fi
   fi
-  "$MEMVENV/bin/python" -m pip install -q --upgrade mempalace || return 1
+  # Version épinglée : pas de « -U » implicite, une réinstallation ne fait pas dériver la version.
+  "$MEMVENV/bin/python" -m pip install -q "mempalace==$OC_MEMPALACE_VERSION" || return 1
 
   # Le palais se crée tout seul à la première sauvegarde, là où MemPalace le cherche (~/.config/mempalace/palace).
   # Ancienne version de ce script : « mempalace init » sur ~/.mempalace/palace y laissait un mempalace.yaml orphelin.
@@ -265,12 +324,6 @@ if [ "$PENTEST" = 0 ] && [ "$NOPENTEST" = 0 ] && [ -f "$PENTEST_MARKER" ]; then
 fi
 if [ "$LITE" = 1 ] && [ "$PENTEST" = 1 ]; then warn "Le profil léger n'installe pas les outils pentest : ignoré."; PENTEST=0; fi
 
-sha256_of() {
-  if need sha256sum; then sha256sum "$1" | awk '{print $1}'
-  elif need shasum; then shasum -a 256 "$1" | awk '{print $1}'
-  else echo ""; fi
-}
-
 extract_archive() {
   local archive="$1" dest="$2"
   case "$archive" in
@@ -363,7 +416,7 @@ install_pentest_tools() {
   # semgrep (SAST, LGPL-2.1/MIT) : CLI via uv tool install (même uv que MemPalace), pas de sudo
   if need semgrep; then
     echo "✅ semgrep déjà installé ($(command -v semgrep))"
-  elif UV="$(get_uv)" && "$UV" tool install semgrep --quiet; then
+  elif UV="$(get_uv)" && "$UV" tool install "semgrep==$OC_SEMGREP_VERSION" --quiet; then
     echo "✅ semgrep installé via uv (SAST, dans $BIN)"
   else
     warn "Installation de semgrep échouée : installe uv (https://docs.astral.sh/uv/) puis relance ./install.sh --pentest"
@@ -399,6 +452,122 @@ install_pentest_tools() {
 remove_pentest_tools() {
   rm -f "$PENTEST_MARKER"
 }
+
+# --- Trivy : binaire de release épinglé + checksums.txt, jamais le script contrib/install.sh de « main ». ---
+install_trivy() {
+  local plat trivy_asset base sums want
+  if need trivy; then echo "✅ trivy déjà installé ($(command -v trivy))"; return 0; fi
+  case "$(uname -s)-$(uname -m)" in
+    Linux-x86_64)              plat="Linux-64bit" ;;
+    Linux-aarch64|Linux-arm64) plat="Linux-ARM64" ;;
+    Darwin-x86_64)             plat="macOS-64bit" ;;
+    Darwin-arm64)              plat="macOS-ARM64" ;;
+    *) warn "trivy : plateforme non supportée ($(uname -s)-$(uname -m)) — installation annulée."; return 1 ;;
+  esac
+  trivy_asset="trivy_${OC_TRIVY_VERSION}_${plat}.tar.gz"
+  base="https://github.com/aquasecurity/trivy/releases/download/v${OC_TRIVY_VERSION}"
+  sums="$TMP/trivy-checksums.txt"
+  if ! curl -fsSL --retry 2 --connect-timeout 15 "$base/trivy_${OC_TRIVY_VERSION}_checksums.txt" -o "$sums"; then
+    warn "trivy $OC_TRIVY_VERSION : checksums.txt introuvable ($base/trivy_${OC_TRIVY_VERSION}_checksums.txt) — installation annulée."
+    return 1
+  fi
+  want="$(awk -v a="$trivy_asset" '$2==a{print $1; exit}' "$sums")"
+  if ! [[ "$want" =~ ^[0-9a-f]{64}$ ]]; then
+    warn "trivy : asset \"$trivy_asset\" absent des sommes de la version v$OC_TRIVY_VERSION — installation annulée (version ou plateforme non publiée ?)."
+    return 1
+  fi
+  fetch_verified "$base/$trivy_asset" "$TMP/trivy.tgz" "$want" "trivy $OC_TRIVY_VERSION" || return 1
+  mkdir -p "$TMP/trivy-extract"
+  if ! tar -xzf "$TMP/trivy.tgz" -C "$TMP/trivy-extract" trivy 2>/dev/null; then
+    warn "trivy : archive illisible ou binaire \"trivy\" absent."; return 1
+  fi
+  if [ ! -f "$TMP/trivy-extract/trivy" ]; then
+    warn "trivy : binaire \"trivy\" absent de l'archive extraite."; return 1
+  fi
+  install -m 0755 "$TMP/trivy-extract/trivy" "$BIN/trivy"
+  echo "✅ trivy $OC_TRIVY_VERSION installé dans $BIN (sha256 vérifié sur checksums.txt)"
+}
+
+# --- Obscura : version épinglée ; sha256 pris dans l'API GitHub (digest de l'asset) ou dans un
+# fichier de sommes publié. Aucun asset « latest », aucune installation sans somme. ---
+install_obscura() {
+  local plat rel obscura_asset obscura_asset_nr meta url sha sums_url sums want f src
+  case "$(uname -s)-$(uname -m)" in
+    Linux-x86_64)              plat="x86_64-linux" ;;
+    Linux-aarch64|Linux-arm64) plat="aarch64-linux" ;;
+    Darwin-arm64)              plat="aarch64-macos" ;;
+    Darwin-x86_64)             plat="x86_64-macos" ;;
+    *) warn "obscura : plateforme non supportée ($(uname -s)-$(uname -m)) (sous Windows, utilise WSL)."; return 1 ;;
+  esac
+  rel="$TMP/obscura-release.json"
+  if ! curl -fsSL --retry 2 --connect-timeout 15 "https://api.github.com/repos/h4ckf0r0day/obscura/releases/tags/v${OC_OBSCURA_VERSION}" -o "$rel"; then
+    warn "obscura $OC_OBSCURA_VERSION : release introuvable — installation annulée."
+    return 1
+  fi
+  obscura_asset="obscura-$plat.tar.gz"
+  obscura_asset_nr="obscura-$plat-no-render.tar.gz"
+  # shellcheck disable=SC2016  # script JS entre apostrophes : aucune expansion shell voulue
+  mapfile -t meta < <(node -e '
+const fs = require("fs");
+const [file, ...names] = process.argv.slice(1);
+const assets = JSON.parse(fs.readFileSync(file, "utf8")).assets || [];
+let found;
+for (const n of names) { found = assets.find((a) => a.name === n); if (found) break; }
+if (!found) {
+  console.error(`assets absents (${names.join(" ou ")}) ; disponibles : ${assets.map((a) => a.name).join(", ")}`);
+  process.exit(1);
+}
+const sums = assets.find((a) => /checksums|sha256sums/i.test(a.name) && !/\.sig(st|store)?/i.test(a.name));
+console.log(found.browser_download_url);
+console.log(String(found.digest || "").replace(/^sha256:/, ""));
+console.log(sums ? sums.browser_download_url : "");
+' "$rel" "$obscura_asset" "$obscura_asset_nr")
+  url="${meta[0]:-}"; sha="${meta[1]:-}"; sums_url="${meta[2]:-}"
+  if [ -z "$url" ]; then
+    warn "obscura : asset \"$obscura_asset\" ou \"$obscura_asset_nr\" absent de la release v$OC_OBSCURA_VERSION — installation annulée."
+    return 1
+  fi
+  if [ -z "$sha" ] && [ -n "$sums_url" ]; then
+    sums="$TMP/obscura-checksums.txt"
+    if ! curl -fsSL --retry 2 --connect-timeout 15 "$sums_url" -o "$sums"; then
+      warn "obscura : fichier de sommes introuvable ($sums_url) — installation annulée."
+      return 1
+    fi
+    want="$(awk -v a="$(basename "$url")" '$2==a{print $1; exit}' "$sums")"
+    sha="$want"
+  fi
+  if ! [[ "$sha" =~ ^[0-9a-f]{64}$ ]]; then
+    warn "obscura : aucun sha256 publié pour \"$(basename "$url")\" — installation annulée."
+    return 1
+  fi
+  fetch_verified "$url" "$TMP/obscura.tgz" "$sha" "obscura $OC_OBSCURA_VERSION" || return 1
+  mkdir -p "$TMP/obscura-extract"
+  if ! tar -xzf "$TMP/obscura.tgz" -C "$TMP/obscura-extract"; then
+    warn "obscura : archive illisible."; return 1
+  fi
+  for f in obscura obscura-worker; do
+    src="$(find "$TMP/obscura-extract" -type f -name "$f" | head -n 1)"
+    if [ -z "$src" ]; then
+      if [ "$f" = obscura ]; then warn "obscura : binaire \"obscura\" absent de l'archive."; return 1; fi
+      continue
+    fi
+    if ! install -m 0755 "$src" "$BIN/.$f.new" || ! mv -f "$BIN/.$f.new" "$BIN/$f"; then
+      warn "obscura : installation de $f impossible."; return 1
+    fi
+  done
+  if "$BIN/obscura" --help >/dev/null 2>&1; then
+    echo "✅ obscura $OC_OBSCURA_VERSION installé dans $BIN (sha256 vérifié)"
+  else
+    warn "obscura ne répond pas à --help : vérifie-le à la main (MCP obscura à désactiver sinon)."
+  fi
+}
+
+# Mode bibliothèque pour scripts/test-supply-chain.mjs : charge les fonctions (fetch_verified,
+# get_uv, install_trivy, install_obscura) sans rien copier ni installer.
+if [ "${OC_INSTALL_LIB:-0}" = 1 ]; then
+  [ "${BASH_SOURCE[0]}" != "$0" ] && return 0
+  exit 0
+fi
 
 need node || die "Node.js est requis (validation, profil léger, MCP). → $(pkg_hint node)"
 need opencode || warn "opencode introuvable. Installe-le : curl -fsSL https://opencode.ai/install | bash"
@@ -545,47 +714,25 @@ if [ "$TOOLS" = 1 ]; then
     echo "✅ Navigateur système détecté ($SYSBROWSER) : le MCP Playwright l'utilisera, pas de téléchargement."
   else
     echo "⬇️  Playwright : installation de Chromium (aucun navigateur système trouvé)..."
-    npx -y playwright install chromium || warn "Chromium non installé. Sur ${DISTRO} : $(pkg_hint chromium)"
+    npx -y "playwright@$OC_PLAYWRIGHT_VERSION" install chromium || warn "Chromium non installé. Sur ${DISTRO} : $(pkg_hint chromium)"
     case "$PM" in
       apt) echo "   Si Chromium ne démarre pas (bibliothèques manquantes) : sudo npx playwright install-deps chromium" ;;
       pacman|dnf) echo "   Playwright ne supporte pas officiellement ${DISTRO} : le plus simple est le Chromium du système → $(pkg_hint chromium)" ;;
     esac
   fi
 
-  case "$(uname -s)-$(uname -m)" in
-    Linux-x86_64) PLAT="x86_64-linux" ;;
-    Linux-aarch64|Linux-arm64) PLAT="aarch64-linux" ;;
-    Darwin-arm64) PLAT="aarch64-macos" ;;
-    Darwin-x86_64) PLAT="x86_64-macos" ;;
-    *) die "Plateforme non supportée pour obscura : $(uname -s)-$(uname -m) (sous Windows, utilise WSL)." ;;
-  esac
-  echo "⬇️  Obscura ($PLAT)..."
-  BASE="https://github.com/h4ckf0r0day/obscura/releases/latest/download"
-  curl -fsSL "$BASE/obscura-$PLAT.tar.gz" -o "$TMP/o.tgz" \
-    || curl -fsSL "$BASE/obscura-$PLAT-no-render.tar.gz" -o "$TMP/o.tgz" \
-    || die "Téléchargement d'obscura échoué."
-  mkdir -p "$TMP/obscura" && tar -xzf "$TMP/o.tgz" -C "$TMP/obscura"
-  # Copie vers un nom temporaire puis renommage : fonctionne même si obscura tourne déjà (« Text file busy »)
-  for f in obscura obscura-worker; do
-    src="$(find "$TMP/obscura" -type f -name "$f" | head -n 1)"
-    [ -n "$src" ] || continue
-    cp "$src" "$BIN/.$f.new" && chmod +x "$BIN/.$f.new" && mv -f "$BIN/.$f.new" "$BIN/$f"
-  done
-  if "$BIN/obscura" --help >/dev/null 2>&1; then
-    echo "✅ Obscura installé dans $BIN"
-  else
-    warn "obscura ne répond pas à --help : vérifie-le à la main (MCP obscura à désactiver sinon)."
-  fi
+  echo "⬇️  Obscura $OC_OBSCURA_VERSION..."
+  install_obscura || warn "Obscura non installé (téléchargement ou vérification impossible)."
 
-  if ! need trivy; then
-    echo "⬇️  Trivy : installation dans $BIN..."
-    if curl -fsSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh -o "$TMP/trivy-install.sh"; then
-      sh "$TMP/trivy-install.sh" -b "$BIN" || warn "Installation de Trivy échouée : https://trivy.dev/latest/getting-started/installation/"
-    else
-      warn "Téléchargement du script Trivy échoué : https://trivy.dev/latest/getting-started/installation/"
+  echo "⬇️  Trivy $OC_TRIVY_VERSION..."
+  install_trivy || warn "Trivy non installé : https://trivy.dev/latest/getting-started/installation/"
+  if PATH="$BIN:$PATH" command -v trivy >/dev/null 2>&1; then
+    if ! PATH="$BIN:$PATH" trivy plugin install "github.com/aquasecurity/trivy-plugin-mcp@$OC_TRIVY_MCP_VERSION"; then
+      warn "plugin Trivy MCP $OC_TRIVY_MCP_VERSION non installé : relance « trivy plugin install » à la main."
     fi
+  else
+    warn "plugin Trivy MCP non installé : trivy absent."
   fi
-  PATH="$BIN:$PATH" trivy plugin install mcp || warn "trivy plugin install mcp a échoué : relance-le à la main."
 
   echo "⬇️  MemPalace..."
   if ! { setup_mempalace && install_mempalace_plugin; }; then
@@ -655,7 +802,7 @@ fi
 
 # 5. Skills de Matt Pocock (optionnel)
 if [ "$MATT" = 1 ]; then
-  npx -y skills@latest add mattpocock/skills -a opencode || warn "Échec : voir le README du dépôt mattpocock/skills."
+  npx -y "skills@$OC_SKILLS_VERSION" add mattpocock/skills -a opencode || warn "Échec : voir le README du dépôt mattpocock/skills."
 fi
 
 # Repère de fin d'installation : le diagnostic ignore les lignes de journal antérieures

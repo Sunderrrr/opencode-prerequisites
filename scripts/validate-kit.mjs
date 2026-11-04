@@ -128,17 +128,37 @@ for (const d of addonDirs) {
   }
 }
 
-// 6. Secrets
-const SECRET = [/sk-[A-Za-z0-9]{20,}/, /ghp_[A-Za-z0-9]{30,}/, /gho_[A-Za-z0-9]{30,}/, /AKIA[0-9A-Z]{16}/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /xox[bap]-[A-Za-z0-9-]{10,}/]
+// 6. Secrets : tout fichier texte du dépôt (.git, demo/, node_modules et .worktrees exclus).
+// Un binaire est repéré par un octet nul. Les .env* sont scannés sauf .env.example,
+// y compris les fichiers sans extension (Containerfile, config/bin/oc-*) et les backups.
+// Limite : un secret encodé (base64, hexa) ou réparti sur plusieurs lignes n'est pas vu.
+const SECRET = [
+  { name: "jeton GitHub", re: /\bgh[pousr]_[A-Za-z0-9]{30,}\b/ },
+  { name: "jeton GitHub fin", re: /\bgithub_pat_[A-Za-z0-9_]{40,}\b/ },
+  { name: "jeton GitLab", re: /\bglpat[-_][A-Za-z0-9_-]{20,}\b/ },
+  { name: "jeton npm", re: /\bnpm_[A-Za-z0-9]{30,}\b/ },
+  { name: "clé API (sk-)", re: /\bsk-[A-Za-z0-9_-]{20,}\b/ },
+  { name: "clé AWS", re: /\bAKIA[0-9A-Z]{16}\b/ },
+  { name: "jeton Slack", re: /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/ },
+  { name: "JWT", re: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/ },
+  { name: "clé privée", re: /-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----/ },
+  { name: "mot de passe en clair", re: /\bpassword\s*=\s*["']?(?!\$\{?|process\.env|os\.environ|os\.getenv|env\(|getenv|\.\.\.|<)[^\s"'\x60#]{8,}/i },
+]
+const SKIP_DIRS = new Set([".git", "node_modules", ".worktrees", "demo"])
 const walk = (d) => ls(d).flatMap((x) => {
-  if ([".git", "node_modules", ".worktrees"].includes(x)) return []
+  if (SKIP_DIRS.has(x)) return []
   const p = path.join(d, x)
-  return fs.statSync(p).isDirectory() ? walk(p) : [p]
+  const st = fs.lstatSync(p)
+  if (st.isSymbolicLink()) return []
+  return st.isDirectory() ? walk(p) : [p]
 })
 for (const f of walk(ROOT)) {
-  if (!/\.(md|jsonc?|js|mjs|sh|toml|yml|yaml|txt)$/.test(f) && !f.endsWith("agent-wt")) continue
-  const t = read(f)
-  for (const re of SECRET) if (re.test(t)) err(`${path.relative(ROOT, f)} : motif de secret détecté (${re})`)
+  if (path.basename(f) === ".env.example") continue
+  let buf
+  try { buf = fs.readFileSync(f) } catch { continue }
+  if (buf.includes(0)) continue // binaire simple
+  const t = buf.toString("utf8")
+  for (const { name, re } of SECRET) if (re.test(t)) err(`${path.relative(ROOT, f)} : motif de secret détecté (${name})`)
 }
 
 // 7. Scripts shell
