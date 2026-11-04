@@ -37,6 +37,18 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
+# Physical path of an existing directory, without symlinks: 'pwd -P' avoids a
+# realpath dependency and works on bash 3.2 (macOS). A missing directory (for
+# example a worktree deleted by hand) is returned unchanged: nothing to resolve.
+canon_dir() {
+  local dir="$1" physical
+  if physical="$(cd -- "$dir" 2>/dev/null && pwd -P)"; then
+    printf '%s' "$physical"
+  else
+    printf '%s' "$dir"
+  fi
+}
+
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   printf '❌ agent-wt: not inside a git repository\n' >&2
   exit 1
@@ -44,7 +56,11 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
 # If we are in a worktree, go back to the main repository: the first record
 # of 'git worktree list' is always the main repository. awk sub() keeps spaces.
 MAIN="$(cd "$ROOT" && git worktree list --porcelain | awk '/^worktree /{sub(/^worktree /, ""); print; exit}')"
-WT_DIR="$MAIN/.worktrees"
+# git reports resolved paths (/private/var/... on macOS) while $TMPDIR may be a
+# symlink (/var/...): normalize MAIN so every comparison and printed path uses
+# the same canonical form.
+MAIN="$(canon_dir "$MAIN")"
+WT_DIR="$(canon_dir "$MAIN/.worktrees")"
 MAIN_HEAD="$(git -C "$MAIN" rev-parse HEAD 2>/dev/null || true)"
 cmd="${1:-}"
 task="${2:-}"
@@ -120,6 +136,8 @@ task_name() {
 emit_record() {
   local cb="$1" path="$2" ref="$3"
   local name dirty=0 ahead=0 behind=0 commit="-" branch="-" counts
+  # Same canonical form as WT_DIR (git may report a path going through a symlink).
+  path="$(canon_dir "$path")"
   name="$(task_name "$path")"
   if [ -n "$ref" ]; then
     branch="${ref#refs/heads/}"
@@ -244,13 +262,15 @@ case "$cmd" in
       die "worktree already exists: $WT_DIR/$task"
     fi
     mkdir -p "$WT_DIR"
+    WT_DIR="$(canon_dir "$WT_DIR")"
     ensure_exclude '.worktrees/'
     ensure_exclude '/task'
     if ! git -C "$MAIN" worktree add -b "agent/$task" "$WT_DIR/$task" "$base" >/dev/null; then
       die "cannot create worktree (base '$base'?)"
     fi
+    wt_path="$(canon_dir "$WT_DIR/$task")"
     created="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    task_file="$WT_DIR/$task/task"
+    task_file="$wt_path/task"
     printf 'task=%s\n' "$task" >"$task_file"
     printf 'branch=agent/%s\n' "$task" >>"$task_file"
     if [ -n "$agent" ]; then
@@ -260,7 +280,7 @@ case "$cmd" in
       printf 'sessionID=%s\n' "$session" >>"$task_file"
     fi
     printf 'created=%s\n' "$created" >>"$task_file"
-    printf '%s\n' "$WT_DIR/$task"
+    printf '%s\n' "$wt_path"
     ;;
 
   merge)
@@ -269,11 +289,12 @@ case "$cmd" in
     if ! git -C "$MAIN" show-ref --verify --quiet "refs/heads/agent/$task"; then
       die "branch agent/$task not found"
     fi
-    if [ ! -d "$WT_DIR/$task" ]; then
-      die "worktree not found: $WT_DIR/$task"
+    wt="$(canon_dir "$WT_DIR/$task")"
+    if [ ! -d "$wt" ]; then
+      die "worktree not found: $wt"
     fi
-    if [ -n "$(git -C "$WT_DIR/$task" status --porcelain 2>/dev/null || true)" ]; then
-      die "$task has uncommitted changes: commit them first in $WT_DIR/$task"
+    if [ -n "$(git -C "$wt" status --porcelain 2>/dev/null || true)" ]; then
+      die "$task has uncommitted changes: commit them first in $wt"
     fi
     if git -C "$MAIN" merge --no-ff -m "merge agent/$task" "agent/$task"; then
       printf '✅ agent/%s merged\n' "$task"
@@ -294,7 +315,7 @@ case "$cmd" in
       "") ;;
       *) die "usage: agent-wt remove <task> [--force]" ;;
     esac
-    wt="$WT_DIR/$task"
+    wt="$(canon_dir "$WT_DIR/$task")"
     registered=0
     if git -C "$MAIN" worktree list --porcelain | grep -Fxq "worktree $wt"; then
       registered=1

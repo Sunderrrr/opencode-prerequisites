@@ -11,7 +11,16 @@ import { fileURLToPath } from "node:url"
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const TOOL = path.join(ROOT, "config", "bin", "agent-wt")
-const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "agent-wt-test-"))
+// macOS $TMPDIR (/var/folders/...) is a symlink to /private/var/folders/... while
+// git reports resolved paths: compare canonical paths on both sides.
+const real = (p) => {
+  try {
+    return fs.realpathSync.native ? fs.realpathSync.native(p) : fs.realpathSync(p)
+  } catch {
+    return p
+  }
+}
+const TMP = real(fs.mkdtempSync(path.join(os.tmpdir(), "agent-wt-test-")))
 const REPO = path.join(TMP, "repo with space")
 const WT = path.join(REPO, ".worktrees")
 const EXCLUDE = path.join(REPO, ".git", "info", "exclude")
@@ -75,7 +84,11 @@ try {
   // --- new --------------------------------------------------------------------------
   let r = run(["new", "alpha", "--agent", "rust", "--session", "ses_alpha"])
   const ALPHA = path.join(WT, "alpha")
-  check("new: exit 0 and path on stdout", r.status === 0 && r.stdout.trim() === ALPHA, r.stderr)
+  check(
+    "new: exit 0, path on stdout, canonical (no symlink component)",
+    r.status === 0 && real(r.stdout.trim()) === real(ALPHA) && r.stdout.trim() === real(r.stdout.trim()),
+    r.stderr,
+  )
   check(
     "new: branch agent/alpha created",
     git(["show-ref", "--verify", "--quiet", "refs/heads/agent/alpha"]).status === 0,
@@ -108,14 +121,14 @@ try {
   r = run(["new", "beta"])
   const BETA = path.join(WT, "beta")
   const betaTask = read(path.join(BETA, "task"))
-  check("new without options: exit 0", r.status === 0 && r.stdout.trim() === BETA, r.stderr)
+  check("new without options: exit 0", r.status === 0 && real(r.stdout.trim()) === real(BETA), r.stderr)
   check("new without options: no agent= line", !/^agent=/m.test(betaTask), betaTask)
   check("new without options: no sessionID= line", !/^sessionID=/m.test(betaTask), betaTask)
   check("new without options: exclude still unique", countLine(read(EXCLUDE), ".worktrees/") === 1)
 
   r = run(["new", "base-test", "main", "--agent", "qa"])
   const BASETEST = path.join(WT, "base-test")
-  check("new [base]: positional argument still accepted", r.status === 0 && r.stdout.trim() === BASETEST, r.stderr)
+  check("new [base]: positional argument still accepted", r.status === 0 && real(r.stdout.trim()) === real(BASETEST), r.stderr)
   check("new [base]: agent= written after the base argument", /^agent=qa$/m.test(read(path.join(BASETEST, "task"))))
   check(
     "new [base]: branch created at main's HEAD",
@@ -166,7 +179,7 @@ try {
     mainRow && mainRow.join("|"),
   )
   check("porcelain: main short commit", Boolean(mainRow && /^[0-9a-f]{7,}$/.test(mainRow[5])))
-  check("porcelain: exact main path", mainRow && mainRow[6] === REPO, mainRow && mainRow[6])
+  check("porcelain: exact main path", mainRow && real(mainRow[6]) === real(REPO), mainRow && mainRow[6])
   check(
     "porcelain: alpha (task, branch, dirty 0, 0/0)",
     alphaRow &&
@@ -176,7 +189,7 @@ try {
       alphaRow[4] === "0",
     alphaRow && alphaRow.join("|"),
   )
-  check("porcelain: exact alpha path with a space", alphaRow && alphaRow[6] === ALPHA, alphaRow && alphaRow[6])
+  check("porcelain: exact alpha path with a space", alphaRow && real(alphaRow[6]) === real(ALPHA), alphaRow && alphaRow[6])
   check(
     "porcelain: alpha short commit",
     Boolean(alphaRow && alphaRow[5] === gitOk(["rev-parse", "--short", "HEAD"], ALPHA).trim()),
@@ -215,7 +228,7 @@ try {
   // detached HEAD: no branch
   r = run(["new", "detach"])
   const DET = path.join(WT, "detach")
-  check("new detach: exit 0", r.status === 0 && r.stdout.trim() === DET, r.stderr)
+  check("new detach: exit 0", r.status === 0 && real(r.stdout.trim()) === real(DET), r.stderr)
   gitOk(["checkout", "--detach", "HEAD"], DET)
   p = porcelain()
   check("porcelain: branch '-' when HEAD is detached", p.byTask.get("detach")[1] === "-", p.byTask.get("detach").join("|"))
@@ -245,7 +258,7 @@ try {
       alphaMd[4] === gitOk(["rev-parse", "--short", "HEAD"], ALPHA).trim(),
     alphaMd && alphaMd.join("|"),
   )
-  check("registry: alpha path with a space", alphaMd && alphaMd[5] === ALPHA, alphaMd && alphaMd[5])
+  check("registry: alpha path with a space", alphaMd && real(alphaMd[5]) === real(ALPHA), alphaMd && alphaMd[5])
   check("registry: main repository excluded", !rows.some((row) => row[0] === "-"), r.stdout)
   check("registry: orphan task file ignored", !r.stdout.includes("orphan"), r.stdout)
   check("list: orphan worktree absent", !porcelain().byTask.has("orphan"))
@@ -275,7 +288,7 @@ try {
   // --- remove -----------------------------------------------------------------------
   r = run(["new", "dirty"])
   const DIRTY = path.join(WT, "dirty")
-  check("new dirty: exit 0", r.status === 0 && r.stdout.trim() === DIRTY, r.stderr)
+  check("new dirty: exit 0", r.status === 0 && real(r.stdout.trim()) === real(DIRTY), r.stderr)
   fs.writeFileSync(path.join(DIRTY, "uncommitted.txt"), "to lose\n")
   r = run(["remove", "dirty"])
   check("remove: refused with uncommitted changes", r.status !== 0 && /uncommitted changes/.test(r.stderr), r.stderr)
@@ -297,7 +310,7 @@ try {
   // --- merge ------------------------------------------------------------------------
   r = run(["new", "conflict"])
   const CONF = path.join(WT, "conflict")
-  check("new conflict: exit 0", r.status === 0 && r.stdout.trim() === CONF, r.stderr)
+  check("new conflict: exit 0", r.status === 0 && real(r.stdout.trim()) === real(CONF), r.stderr)
   fs.writeFileSync(path.join(CONF, "README.md"), "worktree version\n")
   gitOk(["add", "README.md"], CONF)
   gitOk(["commit", "-q", "-m", "worktree conflict"], CONF)
