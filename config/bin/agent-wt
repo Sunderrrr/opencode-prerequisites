@@ -1,48 +1,48 @@
 #!/usr/bin/env bash
-# agent-wt : un worktree git isolé par tâche d'agent, pour éviter les conflits en travail parallèle.
-# Bash 3.2+ (macOS/Linux), aucune dépendance hors git.
+# agent-wt: one isolated git worktree per agent task, to avoid conflicts in parallel work.
+# Bash 3.2+ (macOS/Linux), no dependency beyond git.
 #
-#   agent-wt new <tâche> [base] [--agent <nom>] [--session <id>]
-#       crée .worktrees/<tâche> sur la branche agent/<tâche> depuis <base> (défaut HEAD)
-#       et écrit .worktrees/<tâche>/task : task=, branch=, agent= (si fourni),
-#       sessionID= (si fourni), created= (UTC ISO 8601). Le fichier task est ignoré par
-#       git via les motifs '.worktrees/' et '/task' de .git/info/exclude (jamais
-#       .gitignore), sinon il rendrait chaque worktree « sale ».
-#   agent-wt merge <tâche>
-#       fusionne agent/<tâche> dans la branche courante du dépôt principal.
-#   agent-wt remove <tâche> [--force]
-#       supprime le worktree et la branche ; refuse les changements non commités sans
-#       --force ; une branche non fusionnée est conservée (message explicite).
+#   agent-wt new <task> [base] [--agent <name>] [--session <id>]
+#       creates .worktrees/<task> on branch agent/<task> from <base> (default HEAD)
+#       and writes .worktrees/<task>/task: task=, branch=, agent= (when provided),
+#       sessionID= (when provided), created= (UTC ISO 8601). The task file is ignored by
+#       git through the '.worktrees/' and '/task' patterns in .git/info/exclude (never
+#       .gitignore), otherwise it would make every worktree "dirty".
+#   agent-wt merge <task>
+#       merges agent/<task> into the current branch of the main repository.
+#   agent-wt remove <task> [--force]
+#       removes the worktree and the branch; refuses uncommitted changes without
+#       --force; an unmerged branch is kept (explicit message).
 #   agent-wt list [--porcelain]
-#       défaut : git worktree list (lisible). --porcelain : une ligne par worktree,
-#       7 champs séparés par une tabulation : tâche, branche, dirty, ahead, behind,
-#       commit court, chemin. tâche = "-" pour le dépôt principal ; branche = "-" si
-#       HEAD est détaché ; dirty = 0/1 ; ahead/behind = commits du worktree absents du
-#       HEAD principal / commits du HEAD principal absents du worktree. Pas d'en-tête.
-#       Limite : un chemin contenant une tabulation ou un saut de ligne casse le format.
-#   agent-wt registry [--out <fichier>]
-#       tableau Markdown des worktrees d'agents (les fichiers task sans worktree sont
-#       ignorés). Sans --out, écrit sur stdout : 'registry > REGISTRE.md' écrase le
-#       fichier, car le shell le tronque avant l'exécution. Avec --out, la section
-#       « ## Historique » du fichier existant est recopiée à la fin (append), pour que
-#       le CEO garde la trace après compactage.
-#   agent-wt integration <nom> [base]
-#       crée la branche integration/<nom> depuis origin/<base> (défaut main) pour une PR unique.
+#       default: git worktree list (human-readable). --porcelain: one line per worktree,
+#       7 tab-separated fields: task, branch, dirty, ahead, behind,
+#       short commit, path. task = "-" for the main repository; branch = "-" when
+#       HEAD is detached; dirty = 0/1; ahead/behind = commits in the worktree missing from
+#       the main HEAD / commits in the main HEAD missing from the worktree. No header.
+#       Limit: a path containing a tab or a newline breaks the format.
+#   agent-wt registry [--out <file>]
+#       Markdown table of agent worktrees (task files without a worktree are
+#       ignored). Without --out, writes to stdout: 'registry > REGISTRY.md' overwrites the
+#       file, because the shell truncates it before execution. With --out, the
+#       "## History" section of the existing file is copied to the end (append), so that
+#       the CEO keeps the trace after compaction.
+#   agent-wt integration <name> [base]
+#       creates branch integration/<name> from origin/<base> (default main) for a single PR.
 #   agent-wt sync [base]
-#       rebase la branche courante sur origin/<base> (code 2 + fichiers si conflit).
+#       rebases the current branch onto origin/<base> (exit 2 + files on conflict).
 #
-# Limites connues : worktree verrouillé (git worktree lock) non déverrouillé ici ;
-# sous-modules non initialisés dans les nouveaux worktrees ; chemins avec saut de ligne
-# non gérés par le format porcelain.
+# Known limits: locked worktree (git worktree lock) not unlocked here;
+# submodules not initialized in new worktrees; paths with newlines
+# not handled by the porcelain format.
 set -Eeuo pipefail
 IFS=$'\n\t'
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
-  printf '❌ agent-wt : hors dépôt git\n' >&2
+  printf '❌ agent-wt: not inside a git repository\n' >&2
   exit 1
 }
-# Si on est dans un worktree, remonter au dépôt principal : le premier enregistrement
-# de 'git worktree list' est toujours le dépôt principal. awk sub() garde les espaces.
+# If we are in a worktree, go back to the main repository: the first record
+# of 'git worktree list' is always the main repository. awk sub() keeps spaces.
 MAIN="$(cd "$ROOT" && git worktree list --porcelain | awk '/^worktree /{sub(/^worktree /, ""); print; exit}')"
 WT_DIR="$MAIN/.worktrees"
 MAIN_HEAD="$(git -C "$MAIN" rev-parse HEAD 2>/dev/null || true)"
@@ -56,13 +56,13 @@ die() {
 
 usage_text() {
   cat <<'EOF'
-usage : agent-wt <commande> [arguments]
-  new <tâche> [base] [--agent <nom>] [--session <id>]
-  merge <tâche>
-  remove <tâche> [--force]
+usage: agent-wt <command> [arguments]
+  new <task> [base] [--agent <name>] [--session <id>]
+  merge <task>
+  remove <task> [--force]
   list [--porcelain]
-  registry [--out <fichier>]
-  integration <nom> [base]
+  registry [--out <file>]
+  integration <name> [base]
   sync [base]
 EOF
 }
@@ -77,20 +77,20 @@ usage() {
   exit "$code"
 }
 
-# Nom de tâche = nom de dossier et fin de branche : ni espace, ni '/', ni '..', ni
-# leading '-'. Le premier caractère alphanumérique exclut '.', '..' et '-evil'.
+# Task name = directory name and branch suffix: no space, no '/', no '..', no
+# leading '-'. The first alphanumeric character excludes '.', '..' and '-evil'.
 safe() {
   local name="$1"
-  [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "Nom de tâche invalide : $name"
+  [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "Invalid task name: $name"
   case "$name" in
-    *..* | *.lock | *.) die "Nom de tâche invalide (réservé par git) : $name" ;;
+    *..* | *.lock | *.) die "Invalid task name (reserved by git): $name" ;;
   esac
 }
 
-# Valeurs écrites dans le fichier task : pas d'espace, de saut de ligne ni de '|'.
+# Values written to the task file: no space, newline or '|'.
 safe_value() {
   local value="$1" what="$2"
-  [[ "$value" =~ ^[A-Za-z0-9._@:-]+$ ]] || die "Valeur de $what invalide : $value"
+  [[ "$value" =~ ^[A-Za-z0-9._@:-]+$ ]] || die "Invalid $what value: $value"
 }
 
 ensure_exclude() {
@@ -101,7 +101,7 @@ ensure_exclude() {
   return 0
 }
 
-# Nom de tâche d'un worktree : '-' pour le dépôt principal ou un chemin hors .worktrees.
+# Task name of a worktree: '-' for the main repository or a path outside .worktrees.
 task_name() {
   local path="$1" name="-"
   case "$path" in
@@ -115,8 +115,8 @@ task_name() {
   printf '%s' "$name"
 }
 
-# Calcule les champs d'un worktree puis appelle $1 avec :
-# tâche, branche, dirty, ahead, behind, commit court, chemin.
+# Computes the fields of a worktree then calls $1 with:
+# task, branch, dirty, ahead, behind, short commit, path.
 emit_record() {
   local cb="$1" path="$2" ref="$3"
   local name dirty=0 ahead=0 behind=0 commit="-" branch="-" counts
@@ -136,14 +136,14 @@ emit_record() {
       fi
     fi
   else
-    # Worktree supprimé à la main : on le montre quand même, en le marquant « sale ».
+    # Worktree deleted by hand: still show it, marked as "dirty".
     dirty=1
   fi
   "$cb" "$name" "$branch" "$dirty" "$ahead" "$behind" "$commit" "$path"
 }
 
-# Parcourt 'git worktree list --porcelain' sans perdre les chemins avec espaces.
-# $1 = fonction de rendu, appelée par emit_record.
+# Walks 'git worktree list --porcelain' without losing paths with spaces.
+# $1 = render function, called by emit_record.
 worktree_records() {
   local cb="$1" w_path="" w_branch="" line
   while IFS= read -r line || [ -n "$line" ]; do
@@ -179,8 +179,8 @@ md_escape() {
 }
 
 row_markdown() {
-  # Le dépôt principal, les worktrees hors .worktrees et les worktrees disparus
-  # (métadonnées git sans dossier) ne sont pas des tâches.
+  # The main repository, worktrees outside .worktrees and vanished worktrees
+  # (git metadata without a directory) are not tasks.
   [ "$1" = "-" ] && return 0
   [ -d "$7" ] || return 0
   printf '| %s | %s | %s | %s/%s | %s | %s |\n' \
@@ -198,30 +198,30 @@ case "$cmd" in
     while [ $# -gt 0 ]; do
       case "$1" in
         --agent)
-          [ $# -ge 2 ] || die "option --agent : valeur manquante"
+          [ $# -ge 2 ] || die "--agent: missing value"
           agent="$2"
           shift 2
           ;;
         --session)
-          [ $# -ge 2 ] || die "option --session : valeur manquante"
+          [ $# -ge 2 ] || die "--session: missing value"
           session="$2"
           shift 2
           ;;
         --)
           shift
-          [ $# -le 1 ] || die "trop d'arguments après --"
+          [ $# -le 1 ] || die "too many arguments after --"
           if [ $# -eq 1 ]; then
-            [ "$positional" -eq 0 ] || die "trop d'arguments : $1"
+            [ "$positional" -eq 0 ] || die "too many arguments: $1"
             base="$1"
             positional=1
             shift
           fi
           ;;
         -*)
-          die "option inconnue : $1 (voir agent-wt --help)"
+          die "unknown option: $1 (see agent-wt --help)"
           ;;
         *)
-          [ "$positional" -eq 0 ] || die "trop d'arguments : $1"
+          [ "$positional" -eq 0 ] || die "too many arguments: $1"
           base="$1"
           positional=1
           shift
@@ -229,7 +229,7 @@ case "$cmd" in
       esac
     done
     case "$base" in
-      -*) die "base invalide : $base" ;;
+      -*) die "invalid base: $base" ;;
     esac
     if [ -n "$agent" ]; then
       safe_value "$agent" "agent"
@@ -238,16 +238,16 @@ case "$cmd" in
       safe_value "$session" "session"
     fi
     if git -C "$MAIN" show-ref --verify --quiet "refs/heads/agent/$task"; then
-      die "branche agent/$task déjà existante"
+      die "branch agent/$task already exists"
     fi
     if [ -e "$WT_DIR/$task" ]; then
-      die "worktree déjà existant : $WT_DIR/$task"
+      die "worktree already exists: $WT_DIR/$task"
     fi
     mkdir -p "$WT_DIR"
     ensure_exclude '.worktrees/'
     ensure_exclude '/task'
     if ! git -C "$MAIN" worktree add -b "agent/$task" "$WT_DIR/$task" "$base" >/dev/null; then
-      die "création du worktree impossible (base '$base' ?)"
+      die "cannot create worktree (base '$base'?)"
     fi
     created="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     task_file="$WT_DIR/$task/task"
@@ -264,35 +264,35 @@ case "$cmd" in
     ;;
 
   merge)
-    [ $# -le 2 ] || die "usage : agent-wt merge <tâche>"
+    [ $# -le 2 ] || die "usage: agent-wt merge <task>"
     safe "$task"
     if ! git -C "$MAIN" show-ref --verify --quiet "refs/heads/agent/$task"; then
-      die "branche agent/$task introuvable"
+      die "branch agent/$task not found"
     fi
     if [ ! -d "$WT_DIR/$task" ]; then
-      die "worktree introuvable : $WT_DIR/$task"
+      die "worktree not found: $WT_DIR/$task"
     fi
     if [ -n "$(git -C "$WT_DIR/$task" status --porcelain 2>/dev/null || true)" ]; then
-      die "$task a des changements non commités : commite d'abord dans $WT_DIR/$task"
+      die "$task has uncommitted changes: commit them first in $WT_DIR/$task"
     fi
     if git -C "$MAIN" merge --no-ff -m "merge agent/$task" "agent/$task"; then
-      printf '✅ agent/%s fusionné\n' "$task"
+      printf '✅ agent/%s merged\n' "$task"
     else
-      printf '⚠️  CONFLITS dans agent/%s. Fichiers :\n' "$task" >&2
+      printf '⚠️  CONFLICTS in agent/%s. Files:\n' "$task" >&2
       git -C "$MAIN" diff --name-only --diff-filter=U >&2 || true
-      printf "Résous-les, puis 'git add' + 'git commit' dans %s (ou 'git merge --abort').\n" "$MAIN" >&2
+      printf "Resolve them, then 'git add' + 'git commit' in %s (or 'git merge --abort').\n" "$MAIN" >&2
       exit 2
     fi
     ;;
 
   remove)
-    [ $# -le 3 ] || die "usage : agent-wt remove <tâche> [--force]"
+    [ $# -le 3 ] || die "usage: agent-wt remove <task> [--force]"
     safe "$task"
     force=0
     case "${3:-}" in
       --force) force=1 ;;
       "") ;;
-      *) die "usage : agent-wt remove <tâche> [--force]" ;;
+      *) die "usage: agent-wt remove <task> [--force]" ;;
     esac
     wt="$WT_DIR/$task"
     registered=0
@@ -301,57 +301,57 @@ case "$cmd" in
     fi
     if [ "$registered" -eq 0 ]; then
       if ! git -C "$MAIN" show-ref --verify --quiet "refs/heads/agent/$task"; then
-        die "worktree et branche introuvables pour la tâche $task"
+        die "worktree and branch not found for task $task"
       fi
       if git -C "$MAIN" branch -d "agent/$task" 2>/dev/null; then
-        printf '✅ branche agent/%s supprimée (worktree déjà absent)\n' "$task"
+        printf '✅ branch agent/%s deleted (worktree already gone)\n' "$task"
       else
-        printf 'Branche agent/%s conservée (non fusionnée ?)\n' "$task"
+        printf 'Branch agent/%s kept (not merged?)\n' "$task"
       fi
       exit 0
     fi
     if [ "$force" -eq 0 ] && [ -d "$wt" ] &&
       [ -n "$(git -C "$wt" status --porcelain 2>/dev/null || true)" ]; then
-      die "$task a des changements non commités dans $wt : commite-les, ou relance avec --force pour les perdre."
+      die "$task has uncommitted changes in $wt: commit them, or rerun with --force to discard them."
     fi
     if [ -d "$wt" ]; then
       if [ "$force" -eq 1 ]; then
-        git -C "$MAIN" worktree remove --force "$wt" || die "suppression impossible : $wt"
+        git -C "$MAIN" worktree remove --force "$wt" || die "cannot remove: $wt"
       else
-        git -C "$MAIN" worktree remove "$wt" || die "suppression impossible : $wt (changements non commités ?)"
+        git -C "$MAIN" worktree remove "$wt" || die "cannot remove: $wt (uncommitted changes?)"
       fi
     else
-      # Worktree supprimé à la main : nettoyer les métadonnées avant la branche.
+      # Worktree deleted by hand: clean the metadata before the branch.
       git -C "$MAIN" worktree prune
     fi
     if ! git -C "$MAIN" show-ref --verify --quiet "refs/heads/agent/$task"; then
-      printf '✅ worktree agent/%s supprimé (branche déjà absente)\n' "$task"
+      printf '✅ agent/%s worktree removed (branch already gone)\n' "$task"
     elif git -C "$MAIN" branch -d "agent/$task" 2>/dev/null; then
-      printf '✅ worktree et branche agent/%s supprimés\n' "$task"
+      printf '✅ agent/%s worktree and branch removed\n' "$task"
     else
-      printf 'Branche agent/%s conservée (non fusionnée ?)\n' "$task"
+      printf 'Branch agent/%s kept (not merged?)\n' "$task"
     fi
     ;;
 
   list)
-    [ $# -le 2 ] || die "usage : agent-wt list [--porcelain]"
+    [ $# -le 2 ] || die "usage: agent-wt list [--porcelain]"
     case "${2:-}" in
       "") git -C "$MAIN" worktree list ;;
       --porcelain) worktree_records row_porcelain ;;
-      *) die "usage : agent-wt list [--porcelain]" ;;
+      *) die "usage: agent-wt list [--porcelain]" ;;
     esac
     ;;
 
   registry)
-    [ $# -le 3 ] || die "usage : agent-wt registry [--out <fichier>]"
+    [ $# -le 3 ] || die "usage: agent-wt registry [--out <file>]"
     out=""
     case "${2:-}" in
       "") ;;
       --out)
-        [ $# -eq 3 ] || die "usage : agent-wt registry [--out <fichier>]"
+        [ $# -eq 3 ] || die "usage: agent-wt registry [--out <file>]"
         out="$3"
         ;;
-      *) die "usage : agent-wt registry [--out <fichier>]" ;;
+      *) die "usage: agent-wt registry [--out <file>]" ;;
     esac
     tmp=""
     hist=""
@@ -362,26 +362,27 @@ case "$cmd" in
     trap cleanup_registry EXIT
     tmp="$(mktemp "${TMPDIR:-/tmp}/agent-wt-registry.XXXXXX")"
     {
-      printf '# Registre des tâches\n\n'
-      printf "> Instantané généré le %s par \`agent-wt registry\`.\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-      printf '> Ahead/Behind : commits par rapport au HEAD du dépôt principal.\n\n'
-      printf '| Tâche | Branche | Dirty | Ahead/Behind | Commit | Chemin |\n'
+      printf '# Task registry\n\n'
+      printf "> Snapshot generated on %s by \`agent-wt registry\`.\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      printf '> Ahead/Behind: commits relative to the main repository HEAD.\n\n'
+      printf '| Task | Branch | Dirty | Ahead/Behind | Commit | Path |\n'
       printf '| --- | --- | --- | --- | --- | --- |\n'
       worktree_records row_markdown
       printf '\n'
-      printf "_Dirty : 0 propre, 1 changements non commités. Les fichiers \`task\` sans worktree sont ignorés._\n"
+      printf "_Dirty: 0 clean, 1 uncommitted changes. \`task\` files without a worktree are ignored._\n"
     } >"$tmp"
     if [ -n "$out" ]; then
-      if [ -f "$out" ] && grep -q '^## Historique' "$out"; then
+      # Keep the history section from a previous registry, including legacy French heading.
+      if [ -f "$out" ] && grep -qE '^## (History|Historique)' "$out"; then
         hist="$(mktemp "${TMPDIR:-/tmp}/agent-wt-history.XXXXXX")"
-        awk '/^## Historique/ { seen = 1 } seen { print }' "$out" >"$hist"
+        awk '/^## (History|Historique)/ { seen = 1 } seen { print }' "$out" >"$hist"
       fi
       cat -- "$tmp" >"$out"
       if [ -n "$hist" ]; then
         printf '\n' >>"$out"
         cat -- "$hist" >>"$out"
       fi
-      printf '✅ registre écrit : %s\n' "$out" >&2
+      printf '✅ registry written: %s\n' "$out" >&2
     else
       cat -- "$tmp"
     fi
@@ -391,22 +392,22 @@ case "$cmd" in
     safe "$task"
     base="${3:-main}"
     if [ -n "$(git -C "$MAIN" status --porcelain)" ]; then
-      die "Dépôt principal non propre : commite d'abord."
+      die "Main repository is not clean: commit first."
     fi
     git -C "$MAIN" fetch -q origin "$base"
     git -C "$MAIN" switch -c "integration/$task" "origin/$base"
-    printf '✅ branche integration/%s créée depuis origin/%s\n' "$task" "$base"
+    printf '✅ branch integration/%s created from origin/%s\n' "$task" "$base"
     ;;
 
   sync)
     base="${2:-main}"
     git -C "$MAIN" fetch -q origin "$base"
     if git -C "$MAIN" rebase "origin/$base"; then
-      printf '✅ rebasé sur origin/%s\n' "$base"
+      printf '✅ rebased onto origin/%s\n' "$base"
     else
-      printf '⚠️  CONFLITS pendant le rebase sur origin/%s. Fichiers :\n' "$base" >&2
+      printf '⚠️  CONFLICTS while rebasing onto origin/%s. Files:\n' "$base" >&2
       git -C "$MAIN" diff --name-only --diff-filter=U >&2 || true
-      printf "Résous-les, 'git add', puis 'git rebase --continue' dans %s (ou 'git rebase --abort').\n" "$MAIN" >&2
+      printf "Resolve them, 'git add', then 'git rebase --continue' in %s (or 'git rebase --abort').\n" "$MAIN" >&2
       exit 2
     fi
     ;;

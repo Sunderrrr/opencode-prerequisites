@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# oc-android : toolchain Android (JDK, SDK, Gradle, émulateur) dans des conteneurs Podman rootless.
-#   oc-android build-image [--api N] --accept-licenses   construit l'image (licences Android acceptées par TOI)
-#   oc-android gradle <args…>                             lance ./gradlew (ou gradle) du dossier courant dans le conteneur
-#   oc-android exec <commande…>                           commande quelconque dans le conteneur (sdkmanager, avdmanager…)
-#   oc-android emulator start [--wait] [--mount DIR]…     démarre l'émulateur (sans fenêtre, nécessite /dev/kvm)
-#   oc-android emulator wait|stop|status                  attendre le démarrage / arrêter / état
-#   oc-android adb <args…>                                adb de l'émulateur (dossier courant monté, comme le faux adb de mobile-mcp)
-#   oc-android doctor                                     état de Podman, de l'image, de KVM et de l'émulateur
-# Le dossier courant est monté dans le conteneur : lance les commandes depuis la racine de ton projet.
+# oc-android: Android toolchain (JDK, SDK, Gradle, emulator) in rootless Podman containers.
+#   oc-android build-image [--api N] --accept-licenses   build the image (Android licenses accepted by YOU)
+#   oc-android gradle <args…>                             run the current directory's ./gradlew (or gradle) in the container
+#   oc-android exec <command…>                            any command in the container (sdkmanager, avdmanager…)
+#   oc-android emulator start [--wait] [--mount DIR]…     start the emulator (headless, needs /dev/kvm)
+#   oc-android emulator wait|stop|status                  wait for boot / stop / status
+#   oc-android adb <args…>                                emulator adb (current directory mounted, like mobile-mcp's fake adb)
+#   oc-android doctor                                     Podman, image, KVM and emulator status
+# The current directory is mounted in the container: run commands from the root of your project.
 set -Eeuo pipefail
 
 PODMAN="${OC_PODMAN:-podman}"
@@ -23,18 +23,18 @@ DEFAULT_API="36"
 
 die() { echo "❌ $*" >&2; exit 1; }
 need_podman() {
-  command -v "$PODMAN" >/dev/null 2>&1 || die "Podman introuvable (Arch : sudo pacman -S podman · Debian/Ubuntu : sudo apt install podman · Fedora : sudo dnf install podman)"
-  "$PODMAN" info >/dev/null 2>&1 || die "Podman ne répond pas en rootless. Vérifie /etc/subuid et /etc/subgid (sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 \$USER) puis reconnecte-toi."
+  command -v "$PODMAN" >/dev/null 2>&1 || die "Podman not found (Arch: sudo pacman -S podman · Debian/Ubuntu: sudo apt install podman · Fedora: sudo dnf install podman)"
+  "$PODMAN" info >/dev/null 2>&1 || die "Podman is not responding in rootless mode. Check /etc/subuid and /etc/subgid (sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 \$USER), then log back in."
 }
 need_image() {
   need_podman
-  "$PODMAN" image exists "$IMAGE" 2>/dev/null || die "Image $IMAGE absente. Construis-la : oc-android build-image --accept-licenses"
+  "$PODMAN" image exists "$IMAGE" 2>/dev/null || die "Image $IMAGE missing. Build it: oc-android build-image --accept-licenses"
 }
 ensure_net() { "$PODMAN" network exists "$NET" 2>/dev/null || "$PODMAN" network create "$NET" >/dev/null; }
 running() { [ "$("$PODMAN" container inspect -f '{{.State.Running}}' "$EMU" 2>/dev/null || echo false)" = "true" ]; }
 tty_flags() { if [ -t 0 ] && [ -t 1 ]; then echo "-it"; else echo "-i"; fi; }
 
-# Options communes des conteneurs de build : projet monté, cache Gradle persistant, SELinux sans re-étiquetage du projet
+# Shared options for build containers: project mounted, persistent Gradle cache, SELinux without relabeling the project
 run_tool() {
   need_image; ensure_net; mkdir -p "$GRADLE_DIR/home"
   # shellcheck disable=SC2046
@@ -48,50 +48,50 @@ cmd_build_image() {
   local api="$DEFAULT_API" accept=no
   while [ $# -gt 0 ]; do
     case "$1" in
-      --api) api="${2:?--api demande un numéro}"; shift 2 ;;
+      --api) api="${2:?--api requires a number}"; shift 2 ;;
       --accept-licenses) accept=yes; shift ;;
-      *) die "option inconnue : $1" ;;
+      *) die "unknown option: $1" ;;
     esac
   done
-  [ "$accept" = yes ] || die "Il faut accepter les licences du SDK Android (https://developer.android.com/studio/terms) : relance avec --accept-licenses"
+  [ "$accept" = yes ] || die "You must accept the Android SDK licenses (https://developer.android.com/studio/terms): rerun with --accept-licenses"
   need_podman
-  [ -f "$CTX/Containerfile" ] || die "Containerfile introuvable dans $CTX : relance ./install.sh --android"
-  command -v node >/dev/null 2>&1 || die "node est requis pour découvrir les versions officielles"
-  echo "🔎 Recherche des versions officielles (Google, Gradle)…"
+  [ -f "$CTX/Containerfile" ] || die "Containerfile not found in $CTX: rerun ./install.sh --android"
+  command -v node >/dev/null 2>&1 || die "node is required to discover the official versions"
+  echo "🔎 Looking up the official versions (Google, Gradle)…"
   local vars; vars="$(node "$CTX/discover.mjs" "$api")" || exit 1
   local API CLT_URL CLT_SHA1 BUILD_TOOLS GRADLE_VERSION GRADLE_URL GRADLE_SHA256
   eval "$vars"
   echo "   API $API · build-tools $BUILD_TOOLS · Gradle $GRADLE_VERSION"
-  echo "⏳ Construction de $IMAGE (plusieurs Go à télécharger, 10 à 20 minutes)…"
+  echo "⏳ Building $IMAGE (several GB to download, 10 to 20 minutes)…"
   "$PODMAN" build -t "$IMAGE" -f "$CTX/Containerfile" \
     --build-arg "ACCEPT_ANDROID_LICENSES=$accept" --build-arg "API=$API" --build-arg "BUILD_TOOLS=$BUILD_TOOLS" \
     --build-arg "CLT_URL=$CLT_URL" --build-arg "CLT_SHA1=$CLT_SHA1" \
     --build-arg "GRADLE_VERSION=$GRADLE_VERSION" --build-arg "GRADLE_URL=$GRADLE_URL" --build-arg "GRADLE_SHA256=$GRADLE_SHA256" \
     "$CTX"
-  echo "✅ Image construite : $IMAGE"
+  echo "✅ Image built: $IMAGE"
 }
 
 cmd_gradle() {
   if [ -x ./gradlew ]; then run_tool ./gradlew "$@"
   else
-    echo "ℹ️  Pas de ./gradlew dans $PWD : j'utilise le Gradle de l'image (pour créer le wrapper : oc-android gradle wrapper)." >&2
+    echo "ℹ️  No ./gradlew in $PWD: using the image's Gradle (to create the wrapper: oc-android gradle wrapper)." >&2
     run_tool gradle "$@"
   fi
 }
 
 cmd_exec() {
-  [ $# -gt 0 ] || die "usage : oc-android exec <commande…>"
-  # « oc-android exec -- java -version » : le -- de séparation ne doit pas être transmis à Podman
+  [ $# -gt 0 ] || die "usage: oc-android exec <command…>"
+  # "oc-android exec -- java -version": the separating -- must not be passed on to Podman
   [ "${1:-}" = "--" ] && shift
-  [ $# -gt 0 ] || die "usage : oc-android exec <commande…>"
+  [ $# -gt 0 ] || die "usage: oc-android exec <command…>"
   run_tool "$@"
 }
 
 cmd_adb() {
-  running || die "Émulateur arrêté : oc-android emulator start"
+  running || die "Emulator stopped: oc-android emulator start"
   need_image; ensure_net
-  # Le dossier courant est monté au même chemin absolu (sauf /, qui écraserait la racine du conteneur) :
-  # les chemins relatifs des APK marchent et « adb pull » peut écrire sur l'hôte.
+  # The current directory is mounted at the same absolute path (except /, which would shadow the container root):
+  # relative APK paths work and "adb pull" can write to the host.
   local mounts=()
   [ "$PWD" = / ] || mounts=(-v "$PWD:$PWD")
   # shellcheck disable=SC2046
@@ -105,51 +105,51 @@ emu_start() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --wait) wait=1; shift ;;
-      --mount) mounts+=("$(cd "${2:?--mount demande un dossier}" && pwd)"); shift 2 ;;
-      *) die "option inconnue : $1" ;;
+      --mount) mounts+=("$(cd "${2:?--mount requires a directory}" && pwd)"); shift 2 ;;
+      *) die "unknown option: $1" ;;
     esac
   done
   need_image
   if ! { [ -r "$KVM" ] && [ -w "$KVM" ]; }; then
-    die "$KVM inaccessible : l'émulateur exige l'accélération matérielle. Active la virtualisation dans le BIOS et ajoute-toi au groupe kvm (sudo usermod -aG kvm \$USER, puis reconnecte-toi)."
+    die "$KVM is not accessible: the emulator needs hardware acceleration. Enable virtualization in the BIOS and add yourself to the kvm group (sudo usermod -aG kvm \$USER, then log back in)."
   fi
-  if running; then echo "ℹ️  L'émulateur tourne déjà ($EMU)."; [ "$wait" = 1 ] && emu_wait; return 0; fi
+  if running; then echo "ℹ️  The emulator is already running ($EMU)."; [ "$wait" = 1 ] && emu_wait; return 0; fi
   "$PODMAN" rm -f "$EMU" >/dev/null 2>&1 || true
   ensure_net; mkdir -p "$STATE/avd"
   printf '%s\n' "${mounts[@]}" > "$STATE/mounts"
   local vflags=() m
   for m in "${mounts[@]}"; do vflags+=(-v "$m:$m:ro"); done
-  # Conteneur « root » rootless = ton utilisateur ; keep-groups conserve l'accès à /dev/kvm (groupe kvm)
+  # Rootless "root" container = your user; keep-groups preserves access to /dev/kvm (kvm group)
   "$PODMAN" run -d --name "$EMU" --network "$NET" --security-opt label=disable \
     --device "$KVM" --group-add keep-groups \
     -e ANDROID_AVD_HOME=/avd -v "$STATE/avd:/avd" "${vflags[@]}" \
     --entrypoint /usr/local/bin/oc-emulator-entrypoint "$IMAGE" >/dev/null
-  echo "✅ Émulateur lancé (conteneur $EMU). Démarrage d'Android : oc-android emulator wait"
+  echo "✅ Emulator started (container $EMU). Android boot: oc-android emulator wait"
   [ "$wait" = 1 ] && emu_wait
   return 0
 }
 
 emu_wait() {
   local timeout="${1:-420}" waited=0
-  running || die "Émulateur arrêté : oc-android emulator start"
-  echo "⏳ Attente du démarrage d'Android (jusqu'à ${timeout}s)…"
+  running || die "Emulator stopped: oc-android emulator start"
+  echo "⏳ Waiting for Android to boot (up to ${timeout}s)…"
   until [ "$("$PODMAN" exec "$EMU" adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n' || true)" = "1" ]; do
-    [ "$waited" -lt "$timeout" ] || die "Android n'a pas fini de démarrer après ${timeout}s (voir : oc-android emulator logs)"
-    running || die "Le conteneur émulateur s'est arrêté (voir : oc-android emulator logs)"
+    [ "$waited" -lt "$timeout" ] || die "Android did not finish booting after ${timeout}s (see: oc-android emulator logs)"
+    running || die "The emulator container stopped (see: oc-android emulator logs)"
     sleep 5; waited=$((waited + 5))
   done
-  echo "✅ Android est prêt."
+  echo "✅ Android is ready."
 }
 
-emu_stop() { need_podman; "$PODMAN" rm -f "$EMU" >/dev/null 2>&1 || true; rm -f "$STATE/mounts"; echo "✅ Émulateur arrêté."; }
+emu_stop() { need_podman; "$PODMAN" rm -f "$EMU" >/dev/null 2>&1 || true; rm -f "$STATE/mounts"; echo "✅ Emulator stopped."; }
 
 emu_status() {
   need_podman
   if running; then
-    echo "émulateur : en marche ($EMU)"
+    echo "emulator: running ($EMU)"
     "$PODMAN" exec "$EMU" adb devices 2>/dev/null | tail -n +2 | sed '/^$/d;s/^/  /' || true
-    echo "  boot terminé : $("$PODMAN" exec "$EMU" adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n' || echo '?')"
-  else echo "émulateur : arrêté"; fi
+    echo "  boot completed: $("$PODMAN" exec "$EMU" adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n' || echo '?')"
+  else echo "emulator: stopped"; fi
 }
 
 cmd_emulator() {
@@ -160,19 +160,19 @@ cmd_emulator() {
     stop) emu_stop ;;
     status) emu_status ;;
     logs) need_podman; "$PODMAN" logs --tail 80 "$EMU" ;;
-    *) die "usage : oc-android emulator start [--wait] [--mount DIR] | wait | stop | status | logs" ;;
+    *) die "usage: oc-android emulator start [--wait] [--mount DIR] | wait | stop | status | logs" ;;
   esac
 }
 
 cmd_doctor() {
   local rc=0 ok=0
   check() { if "$@" >/dev/null 2>&1; then return 0; else return 1; fi; }
-  if command -v "$PODMAN" >/dev/null 2>&1; then echo "✅ Podman : $("$PODMAN" --version)"; else echo "❌ Podman introuvable"; exit 1; fi
-  if check "$PODMAN" info; then echo "✅ Podman rootless fonctionne"; else echo "❌ Podman ne répond pas (subuid/subgid ?)"; rc=1; fi
-  if check "$PODMAN" image exists "$IMAGE"; then echo "✅ Image $IMAGE présente"; ok=1; else echo "⚠️  Image absente : oc-android build-image --accept-licenses"; fi
-  if [ -r "$KVM" ] && [ -w "$KVM" ]; then echo "✅ $KVM accessible"; else echo "⚠️  $KVM inaccessible (groupe kvm, virtualisation du BIOS)"; fi
-  if running; then echo "✅ Émulateur en marche"; else echo "ℹ️  Émulateur arrêté (oc-android emulator start)"; fi
-  if [ -x "$STATE/sdk/platform-tools/adb" ]; then echo "✅ Faux adb pour mobile-mcp : $STATE/sdk/platform-tools/adb"; else echo "⚠️  Faux adb absent : relance ./install.sh --android"; fi
+  if command -v "$PODMAN" >/dev/null 2>&1; then echo "✅ Podman: $("$PODMAN" --version)"; else echo "❌ Podman not found"; exit 1; fi
+  if check "$PODMAN" info; then echo "✅ Rootless Podman works"; else echo "❌ Podman is not responding (subuid/subgid?)"; rc=1; fi
+  if check "$PODMAN" image exists "$IMAGE"; then echo "✅ Image $IMAGE present"; ok=1; else echo "⚠️  Image missing: oc-android build-image --accept-licenses"; fi
+  if [ -r "$KVM" ] && [ -w "$KVM" ]; then echo "✅ $KVM accessible"; else echo "⚠️  $KVM not accessible (kvm group, BIOS virtualization)"; fi
+  if running; then echo "✅ Emulator running"; else echo "ℹ️  Emulator stopped (oc-android emulator start)"; fi
+  if [ -x "$STATE/sdk/platform-tools/adb" ]; then echo "✅ Fake adb for mobile-mcp: $STATE/sdk/platform-tools/adb"; else echo "⚠️  Fake adb missing: rerun ./install.sh --android"; fi
   [ "$ok" = 1 ] || rc=1
   return "$rc"
 }
@@ -186,5 +186,5 @@ case "$sub" in
   adb) cmd_adb "$@" ;;
   doctor) cmd_doctor ;;
   ""|-h|--help|help) sed -n '2,12p' "$0" ;;
-  *) die "commande inconnue : $sub (oc-android --help)" ;;
+  *) die "unknown command: $sub (oc-android --help)" ;;
 esac

@@ -1,0 +1,86 @@
+name: Nightly CI (real full installation)
+
+on:
+  schedule:
+    # Every day at 03:17 UTC (off-peak), to detect drift in upstream tools.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-nightly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  install-reelle:
+    name: Ubuntu 24.04 (network allowed, real tools)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      # Download cache only (uv and npm): tools are reinstalled on every
+      # run to test the real installation, not a cached state.
+      - name: uv and npm cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/uv
+            ~/.npm
+          key: ${{ runner.os }}-nightly-${{ hashFiles('install.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-nightly-
+
+      # Binaries installed by the kit (nuclei, semgrep, trivy, obscura, oc-*) go into
+      # ~/.local/bin. It is appended at the END of PATH: doctor.sh warns if it is first.
+      - name: Add kit binaries to PATH
+        run: echo "PATH=$PATH:$HOME/.local/bin" >> "$GITHUB_ENV"
+
+      # doctor.sh requires the opencode CLI ("opencode debug config"). Latest version: the goal
+      # of the nightly is precisely to detect incompatibility with a new release.
+      - name: Install OpenCode (official CLI, latest version)
+        run: |
+          npm install -g @opencode/cli --no-fund --no-audit
+          opencode --version
+
+      - name: Real kit installation with pentest tools (network allowed)
+        run: ./install.sh --pentest
+
+      - name: Strict checks of installed tools
+        env:
+          OC_SEMGREP_CHECK_TIMEOUT: "300"
+        run: |
+          set -euo pipefail
+          check() {
+            echo "::group::$1"
+            shift
+            "$@"
+            echo "::endgroup::"
+          }
+          check "nuclei" nuclei -version
+          check "gitleaks" gitleaks version
+          check "httpx" httpx -version
+          check "ffuf" ffuf -V
+          check "osv-scanner" osv-scanner --version
+          check "testssl.sh" testssl.sh --version
+          check "nikto" nikto -Version
+          check "semgrep" semgrep --version
+          check "trivy" trivy --version
+          check "obscura" obscura --help
+          check "MCP semgrep (initialize handshake)" timeout 420 oc-semgrep-mcp --check
+
+      - name: Import MemPalace from the kit venv
+        run: ~/.mempalace/venv/bin/python -c 'import mempalace'
+
+      - name: oc-versions (real access to the npm registry)
+        run: oc-versions npm @playwright/mcp
+
+      - name: Offline diagnostic of the installed configuration
+        run: ./doctor.sh --offline

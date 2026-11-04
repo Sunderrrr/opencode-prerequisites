@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-// Génère le profil léger à partir de la config complète (pas de dérive entre les deux) :
-//   node make-lite.mjs <dossier-config-installé>
-// - garde seulement les agents de profiles/lite-agents.txt
-// - garde seulement les MCP context7 et grep_app, retire les plugins npm (mempalace)
+// Builds the lightweight profile from the full config (no drift between the two):
+//   node make-lite.mjs <installed-config-directory>
+// - keeps only the agents listed in profiles/lite-agents.txt
+// - keeps only the context7 and grep_app MCPs, removes npm plugins (mempalace)
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { parseJsonc, mcpServers } from "./lib/jsonc.mjs"
 
 const dest = process.argv[2]
-if (!dest) { console.error("usage : make-lite.mjs <dossier-config>"); process.exit(1) }
+if (!dest) { console.error("usage: make-lite.mjs <config-directory>"); process.exit(1) }
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const keep = new Set(fs.readFileSync(path.join(ROOT, "profiles/lite-agents.txt"), "utf8")
   .split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#")))
@@ -21,17 +21,17 @@ for (const f of fs.readdirSync(agentsDir)) {
 }
 const mentions = (text) => [...text.matchAll(/(?:^|[\s(`|/])@([a-z][a-z0-9-]+)/g)].map((m) => m[1])
 
-// Skills liés à des agents/MCP absents du profil léger
+// Skills tied to agents/MCPs absent from the lightweight profile
 for (const skill of ["reverse-engineer-anything", "android-dev"]) fs.rmSync(path.join(dest, "skills", skill), { recursive: true, force: true })
 
-// Commandes qui appellent un agent supprimé
+// Commands that call a removed agent
 const cmdDir = path.join(dest, "commands")
 for (const f of fs.existsSync(cmdDir) ? fs.readdirSync(cmdDir) : []) {
   const t = fs.readFileSync(path.join(cmdDir, f), "utf8")
   if (mentions(t).some((a) => removed.has(a))) fs.rmSync(path.join(cmdDir, f))
 }
 
-// CEO : retire les lignes de la table d'équipe qui ne visent que des agents supprimés, et précise l'équipe réelle
+// CEO: drop team-table rows that only target removed agents, and state the real team
 const ceoPath = path.join(agentsDir, "ceo.md")
 let ceo = fs.readFileSync(ceoPath, "utf8")
 ceo = ceo.split("\n").filter((l) => {
@@ -39,11 +39,11 @@ ceo = ceo.split("\n").filter((l) => {
   const m = mentions(l.split("|")[1] ?? "")
   return !(m.length && m.every((a) => removed.has(a)))
 }).join("\n")
-ceo += `\n## Profil léger\nSeuls ces agents existent : ${[...keep].map((a) => "@" + a).join(", ")}. N'appelle jamais un autre nom : les rôles manquants (langages autres que Rust, devops, docs, base de données…) sont repris par @rust, @backend ou @frontend, en suivant la checklist du domaine dans le brief. Il n'y a pas de @code-simplifier : relis toi-même le diff avant @verify-app.\n`
+ceo += `\n## Light profile\nOnly these agents exist: ${[...keep].map((a) => "@" + a).join(", ")}. Never call any other name: missing roles (languages other than Rust, devops, docs, database…) are handled by @rust, @backend or @frontend, following the domain checklist in the brief. There is no @code-simplifier: review the diff yourself before @verify-app.\n`
 fs.writeFileSync(ceoPath, ceo)
 
-// AGENTS.md : précise la liste réelle
-fs.appendFileSync(path.join(dest, "AGENTS.md"), `\n## Profil léger\nAgents disponibles : ${[...keep].join(", ")}. Ignore les autres noms d'agents cités plus haut.\n`)
+// AGENTS.md: state the real list
+fs.appendFileSync(path.join(dest, "AGENTS.md"), `\n## Light profile\nAvailable agents: ${[...keep].join(", ")}. Ignore any other agent names mentioned above.\n`)
 const cfgPath = path.join(dest, "opencode.jsonc")
 const cfg = parseJsonc(fs.readFileSync(cfgPath, "utf8"))
 const keepMcp = Object.fromEntries(Object.entries(mcpServers(cfg)).filter(([k]) => ["context7", "grep_app"].includes(k)))
@@ -51,8 +51,8 @@ cfg.mcp = { ...(cfg.mcp?.timeout ? { timeout: cfg.mcp.timeout } : {}), servers: 
 delete cfg.plugin
 delete cfg.plugins
 fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + "\n")
-// Plugin local MemPalace : OpenCode charge plugins/*/ même sans entrée dans opencode.jsonc. Le retirer ici,
-// sinon le profil léger garde la mémoire alors que mempalace.jsonc a été supprimé.
+// MemPalace local plugin: OpenCode loads plugins/*/ even without an entry in opencode.jsonc. Remove it here,
+// otherwise the lightweight profile keeps memory even though mempalace.jsonc was deleted.
 fs.rmSync(path.join(dest, "plugins", "mempalace"), { recursive: true, force: true })
 for (const f of ["mempalace.jsonc", "k8s-mcp.toml"]) fs.rmSync(path.join(dest, f), { force: true })
-console.log(`Profil léger : ${keep.size} agents, MCP ${Object.keys(keepMcp).join(", ")}`)
+console.log(`Light profile: ${keep.size} agents, MCP ${Object.keys(keepMcp).join(", ")}`)

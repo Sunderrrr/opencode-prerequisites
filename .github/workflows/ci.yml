@@ -10,61 +10,71 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, ubuntu-26.04]
+        os: [ubuntu-24.04, ubuntu-22.04]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 26
-      - name: Valider le kit (config, agents, skills, plugins, secrets)
+      - name: Validate the kit (config, agents, skills, plugins, secrets)
         run: node scripts/validate-kit.mjs
-      - name: Plugins locaux (test fonctionnel avec un faux contexte OpenCode v2)
+      - name: "MCP state (idempotent JSONC, comments preserved, exit codes 1/2)"
+        run: node scripts/test-mcp-state.mjs
+      - name: "Lite profile (12 agents, MCP, plugins, skills, commands, CEO prose)"
+        run: node scripts/test-lite.mjs
+      - name: "Offline diagnostic (exit codes 0/1, no network requests)"
+        run: node scripts/test-doctor.mjs
+      - name: "oc-deps (pinned version drift: local fixtures, isolated cache, no network)"
+        run: node scripts/test-deps.mjs
+      - name: Local plugins (functional test with a fake OpenCode v2 context)
         run: node scripts/test-plugins.mjs
-      - name: oc-models (choix des modèles par agent, survie aux mises à jour)
+      - name: oc-models (per-agent model selection, survives updates)
         run: node scripts/test-models.mjs
-      - name: oc-versions (dernières versions réelles, cache et fixtures sans réseau)
+      - name: oc-versions (latest real versions, cache and fixtures without network)
         run: node scripts/test-versions.mjs
-      - name: "Chaîne d'approvisionnement (versions épinglées, checksums, refus des assets altérés)"
+      - name: "Supply chain (pinned versions, checksums, rejection of tampered assets)"
         run: node scripts/test-supply-chain.mjs
-      - name: Config conforme au schéma JSON officiel d'OpenCode (complet + léger)
+      - name: Config conforms to the official OpenCode JSON schema (full + lite)
         run: |
-          # jsonschema du dépôt peut être trop ancien (Debian 12 : 4.10.3, Rocky 9 : 3.2.0) :
-          # venv dédié avec >= 4.18, qui suit la référence distante du schéma (UA accepté).
+          # The distro jsonschema may be too old (Debian 12: 4.10.3, Rocky 9: 3.2.0):
+          # dedicated venv with >= 4.18, which follows the schema's remote reference (UA accepted).
           python3 -m venv /tmp/schema-venv
           /tmp/schema-venv/bin/pip install --quiet 'jsonschema>=4.18'
           /tmp/schema-venv/bin/python scripts/validate-schema.py
-      - name: "Installateur côté machine : bloc d'environnement, désinstallation, MemPalace, diagnostic OpenCode périmé"
+      - name: "Machine-side installer: environment block, uninstall, MemPalace, stale OpenCode diagnostic"
         run: node scripts/test-install-env.mjs
-      - name: "Module Android (faux podman : commandes, montages, protections, faux adb)"
+      - name: "Android module (fake podman: commands, mounts, safeguards, fake adb)"
         run: node scripts/test-android.mjs
-      - name: "Outils pentest/appsec (option --pentest : découverte GitHub, sha256, installation)"
+      - name: "Pentest/appsec tools (--pentest option: GitHub discovery, sha256, installation)"
         run: node scripts/test-pentest.mjs
-      - name: "agent-wt (worktrees réels sous /tmp : task, list --porcelain, registry, conflits)"
+      - name: "agent-wt (real worktrees under /tmp: task, list --porcelain, registry, conflicts)"
         run: node scripts/test-agent-wt.mjs
-      - name: Containerfile Android (hadolint, erreurs seulement)
-        run: docker run --rm -i docker.io/hadolint/hadolint hadolint --failure-threshold error - < addons/android/libexec/oc-android/Containerfile
-      - name: Installation avec le module Android, mémorisation puis retrait
+      - name: "Android project generator (hermetic: template, substitutions, git, overwrite refusal)"
+        run: node scripts/test-new-android.mjs
+      - name: Android Containerfile (hadolint, errors only)
+        run: docker run --rm -i docker.io/hadolint/hadolint:v2.15.1 hadolint --failure-threshold error - < addons/android/libexec/oc-android/Containerfile
+      - name: Installation with the Android module, remembered then removed
         run: |
           export OPENCODE_CONFIG_DIR="$RUNNER_TEMP/android" OBSCURA_BIN_DIR="$RUNNER_TEMP/abin"
           ./install.sh --no-tools --android
           test -f "$OPENCODE_CONFIG_DIR/agents/android.md" && test -f "$OPENCODE_CONFIG_DIR/skills/android-dev/SKILL.md"
-          ./install.sh --no-tools                      # sans option : le module est conservé
+          ./install.sh --no-tools                      # no option: the module is kept
           test -f "$OPENCODE_CONFIG_DIR/agents/mobile-tester.md"
           test "$(grep -c '>>> android' "$OPENCODE_CONFIG_DIR/agents/ceo.md")" -eq 1
           ./install.sh --no-tools --no-android
           test ! -e "$OPENCODE_CONFIG_DIR/agents/android.md"
-      - name: Installation à blanc (complète puis légère, sans outils)
+      - name: Dry-run installation (full then lite, without tools)
         run: |
           OPENCODE_CONFIG_DIR="$RUNNER_TEMP/full" OBSCURA_BIN_DIR="$RUNNER_TEMP/bin" ./install.sh --no-tools
           OPENCODE_CONFIG_DIR="$RUNNER_TEMP/lite" OBSCURA_BIN_DIR="$RUNNER_TEMP/bin" ./install.sh --lite
-          test "$(ls "$RUNNER_TEMP/lite/agents" | wc -l)" -eq 12
+          test "$(find "$RUNNER_TEMP/lite/agents" -maxdepth 1 -type f | wc -l)" -eq 12
 
   shellcheck:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, ubuntu-26.04]
+        os: [ubuntu-24.04, ubuntu-22.04]
     steps:
       - uses: actions/checkout@v7
       - name: ShellCheck
@@ -75,13 +85,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, ubuntu-26.04]
+        os: [ubuntu-24.04, ubuntu-22.04]
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Générer et vérifier le gabarit Rust
+      - name: Generate and check the Rust template
         run: |
           git config --global user.name ci && git config --global user.email ci@example.com
           ./scripts/new-rust-project.sh demo-ci "$RUNNER_TEMP"
@@ -90,8 +100,8 @@ jobs:
           cargo clippy --all-targets -- -D warnings
           cargo test --all-targets
 
-  # Distributions : Arch (base d'Omarchy), Debian, Ubuntu, Fedora, RHEL (Rocky)
-  # Images épinglées par tag daté, jamais latest (tags vérifiés le 2026-11-03).
+  # Distributions: Arch (Omarchy base), Debian, Ubuntu, Fedora, RHEL (Rocky)
+  # Images pinned by dated tag, never latest (tags checked on 2026-11-03).
   distros:
     runs-on: ubuntu-latest
     strategy:
@@ -100,7 +110,7 @@ jobs:
         include:
           - name: Arch Linux (Omarchy)
             image: archlinux:base-20261101.0.620205
-            python: python            # Arch ne fournit pas python3, seulement python
+            python: python            # Arch does not provide python3, only python
             setup: pacman -Syu --noconfirm nodejs npm git python tar gzip curl
           - name: Debian 12 (bookworm)
             image: debian:12.12
@@ -125,59 +135,71 @@ jobs:
           - name: RHEL (Rocky 9)
             image: quay.io/rockylinux/rockylinux:9.8
             python: python3
-            # L'image fournit curl-minimal : demander curl casse la transaction dnf.
+            # The image provides curl-minimal: requesting curl breaks the dnf transaction.
             setup: dnf module enable -y nodejs:20 && dnf install -y --setopt=install_weak_deps=False nodejs npm git python3 tar gzip python3-pip
     name: ${{ matrix.name }}
     container: ${{ matrix.image }}
     steps:
-      - name: Dépendances système
+      - name: System dependencies
         run: ${{ matrix.setup }}
       - uses: actions/checkout@v7
-      - name: Syntaxe des scripts d'installation
+      - name: Installation script syntax
         run: bash -n install.sh uninstall.sh
-      - name: Validation du kit
+      - name: Kit validation
         run: node --version && node scripts/validate-kit.mjs
-      - name: Plugins locaux (faux contexte OpenCode v2)
+      - name: Local plugins (fake OpenCode v2 context)
         run: node scripts/test-plugins.mjs
-      - name: oc-models (choix des modèles par agent, survie aux mises à jour)
+      - name: "MCP state (idempotent JSONC, comments preserved, exit codes 1/2)"
+        run: node scripts/test-mcp-state.mjs
+      - name: "Lite profile (12 agents, MCP, plugins, skills, commands, CEO prose)"
+        run: node scripts/test-lite.mjs
+      - name: "Offline diagnostic (exit codes 0/1, no network requests)"
+        run: node scripts/test-doctor.mjs
+      - name: "oc-deps (pinned version drift: local fixtures, no network)"
+        run: node scripts/test-deps.mjs
+      - name: oc-models (per-agent model selection, survives updates)
         run: node scripts/test-models.mjs
-      - name: Config conforme au schéma JSON officiel d'OpenCode (venv, jsonschema >= 4.18)
+      - name: Config conforms to the official OpenCode JSON schema (venv, jsonschema >= 4.18)
         run: |
-          # jsonschema du dépôt est trop ancien (Debian 12 : 4.10.3, Rocky 9 : 3.2.0) et ne
-          # résout pas la référence distante du schéma (403 sur l'UA) : venv dédié.
+          # The distro jsonschema is too old (Debian 12: 4.10.3, Rocky 9: 3.2.0) and does
+          # not resolve the schema's remote reference (403 on UA): dedicated venv.
           ${{ matrix.python }} -m venv /tmp/schema-venv
           /tmp/schema-venv/bin/pip install --quiet 'jsonschema>=4.18'
           /tmp/schema-venv/bin/python scripts/validate-schema.py
-      - name: Installation avec le module Android (sans outils) et présence des fichiers
+      - name: Installation with the Android module (no tools) and file presence
         run: |
           export OPENCODE_CONFIG_DIR=/tmp/oc-android OBSCURA_BIN_DIR=/tmp/oc-bin
           ./install.sh --no-tools --android
           test -f "$OPENCODE_CONFIG_DIR/agents/android.md"
           test -f "$OPENCODE_CONFIG_DIR/agents/mobile-tester.md"
           test -f "$OPENCODE_CONFIG_DIR/skills/android-dev/SKILL.md"
-      - name: Installation à blanc (complète puis légère)
+      - name: Dry-run installation (full then lite)
+        shell: bash
         run: |
+          set -o pipefail
           export OPENCODE_CONFIG_DIR=/tmp/oc-full OBSCURA_BIN_DIR=/tmp/oc-bin
           ./install.sh --no-tools 2>&1 | tee /tmp/install.log
-          grep -q "Système :" /tmp/install.log
+          grep -q "System:" /tmp/install.log
           OPENCODE_CONFIG_DIR=/tmp/oc-lite ./install.sh --lite
-          test "$(ls /tmp/oc-lite/agents | wc -l)" -eq 12
-      - name: oc-rea-mcp (versions de Node acceptées par REA)
+          test "$(find /tmp/oc-lite/agents -maxdepth 1 -type f | wc -l)" -eq 12
+      - name: oc-rea-mcp (Node versions accepted by REA)
         run: |
           check() { OC_REA_NODE_VERSION="$1" ./config/bin/oc-rea-mcp --check >/dev/null 2>&1; }
-          for v in 26.12.1 26.13.0 27.0.0 24.22.1 24.30.0 22.23.4; do check "$v" || { echo "attendu OK : $v"; exit 1; }; done
-          for v in 26.7.0 26.12.0 25.9.0 24.22.0 22.23.3 20.19.0 18.0.0; do check "$v" && { echo "attendu KO : $v"; exit 1; } || true; done
-      - name: Installateur côté machine (awk et sed de la distribution)
+          for v in 26.12.1 26.13.0 27.0.0 24.22.1 24.30.0 22.23.4; do check "$v" || { echo "expected OK: $v"; exit 1; }; done
+          for v in 26.7.0 26.12.0 25.9.0 24.22.0 22.23.3 20.19.0 18.0.0; do check "$v" && { echo "expected failure: $v"; exit 1; } || true; done
+      - name: Machine-side installer (distribution awk and sed)
         run: node scripts/test-install-env.mjs
-      - name: Module Android (tests avec faux podman, sans Docker)
+      - name: Android module (tests with fake podman, no Docker)
         run: node scripts/test-android.mjs
-      - name: Outils pentest/appsec (option --pentest)
+      - name: Android project generator (hermetic, no Podman)
+        run: node scripts/test-new-android.mjs
+      - name: Pentest/appsec tools (--pentest option)
         run: node scripts/test-pentest.mjs
-      - name: Lanceurs MCP (choix du navigateur et du moteur de conteneurs)
+      - name: MCP launchers (browser and container engine selection)
         run: |
           mkdir -p /tmp/fake && cd /tmp/fake
-          printf '#!/bin/sh\necho "[npx] $*"\n' > npx && chmod +x npx
-          printf '#!/bin/sh\n[ "$1" = info ] && exit 0\necho "[podman] $*"\n' > podman && chmod +x podman
+          printf '%s\n' '#!/bin/sh' "echo \"[npx] \$*\"" > npx && chmod +x npx
+          printf '%s\n' '#!/bin/sh' "[ \"\$1\" = info ] && exit 0" "echo \"[podman] \$*\"" > podman && chmod +x podman
           printf '#!/bin/sh\n' > chromium && chmod +x chromium
           PATH=/tmp/fake:$PATH /tmp/oc-bin/oc-playwright-mcp | grep -- "--executable-path /tmp/fake/chromium"
           PATH=/tmp/fake:/usr/bin:/bin /tmp/oc-bin/oc-terraform-mcp | grep -E "\[(podman|docker)\] run"

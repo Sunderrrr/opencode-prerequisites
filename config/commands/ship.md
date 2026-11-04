@@ -1,6 +1,6 @@
 ---
-description: Simplifier, valider jusqu'au vert, puis préparer le commit
+description: Simplify, validate until green, then prepare the commit
 ---
-1. Utilise @code-simplifier.
-2. Utilise @verify-app. S'il répond ÉCHEC, fais corriger par le bon spécialiste puis relance @verify-app, jusqu'à VALIDÉ (5 boucles max).
-3. Quand c'est VALIDÉ, charge le skill git-commit et propose le message. Ne push pas.
+1. Use @code-simplifier.
+2. Use @verify-app. If it answers FAIL, have the right specialist fix it then rerun @verify-app, until VALIDATED (5 loops max).
+3. When it is VALIDATED, load the git-commit skill and suggest the message. Do not push.

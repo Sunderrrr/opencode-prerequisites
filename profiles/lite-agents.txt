@@ -1,4 +1,4 @@
-# Agents conservés par le profil léger (un par ligne)
+# Agents kept by the lightweight profile (one per line)
 ceo
 architect
 rust

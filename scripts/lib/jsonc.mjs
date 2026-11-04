@@ -1,4 +1,4 @@
-// Lecteur JSONC minimal et sûr : retire commentaires // et /* */ (hors chaînes) et virgules finales.
+// Minimal, safe JSONC reader: strips // and /* */ comments (outside strings) and trailing commas.
 export function parseJsonc(text) {
   let out = ""
   let i = 0
@@ -22,7 +22,7 @@ export function parseJsonc(text) {
   return JSON.parse(out)
 }
 
-// Frontmatter YAML minimal : clés de premier niveau "clé: valeur".
+// Minimal YAML frontmatter: top-level "key: value" pairs.
 export function frontmatter(md) {
   const m = md.match(/^---\n([\s\S]*?)\n---\n/)
   if (!m) return null
@@ -34,7 +34,7 @@ export function frontmatter(md) {
   return fm
 }
 
-// Serveurs MCP : forme v2 (mcp.servers) ou ancienne forme plate (mcp.<nom>), pour lire les deux.
+// MCP servers: v2 form (mcp.servers) or legacy flat form (mcp.<name>), so both can be read.
 export function mcpServers(cfg) {
   const m = cfg?.mcp ?? {}
   if (m.servers && typeof m.servers === "object") return m.servers

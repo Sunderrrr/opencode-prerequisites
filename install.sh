@@ -1,35 +1,35 @@
 #!/usr/bin/env bash
-# Installe le kit OpenCode dans ~/.config/opencode (sauvegarde automatique de l'existant).
-# Ne touche à aucune clé API.
+# Installs the OpenCode kit into ~/.config/opencode (existing config is backed up automatically).
+# Never touches API keys.
 #
-#   ./install.sh                installation complète (outils inclus)
-#   ./install.sh --lite         profil léger : 12 agents, MCP context7 + grep_app, sans outils lourds
-#   ./install.sh --no-tools     copie la config seulement (aucun téléchargement/installation d'outil)
-#   ./install.sh --memory-only  (re)tente seulement l'installation de MemPalace, sans rien recopier
-#   ./install.sh --force-config écrase les fichiers du kit que tu as modifiés (sinon, à partir de la
-#                               première installation qui écrit les empreintes sha256, ils sont conservés
-#                               et la version du kit est déposée en <fichier>.new ; un ancien manifeste
-#                               sans empreintes est signalé avant la copie)
-#   ./install.sh --shell-env    ajoute PATH et MEMPALACE_ADAPTER_PYTHON à ~/.bashrc / ~/.zshrc (une seule fois)
-#   ./install.sh --with-matt    + skills complets de Matt Pocock
-#   ./install.sh --android      module Android (option) : agents android et mobile-tester, MCP mobile, toolchain Podman
-#                               (image à construire ensuite : oc-android build-image --accept-licenses). Mémorisé ;
-#   ./install.sh --no-android   retire le module Android
-#   ./install.sh --pentest      outils réels pour sécuriser TES apps (pas juste des MCP) : nuclei et gitleaks
-#                               (binaires téléchargés et vérifiés par sha256, comme Trivy), semgrep (via uv tool
-#                               install) ; nmap et sqlmap sont indiqués (commande à lancer toi-même, jamais sudo
-#                               depuis ce script). Utilisés par l'agent @pentest. Mémorisé ;
-#   ./install.sh --no-pentest   oublie ce choix (ne désinstalle pas les binaires déjà posés)
-#   (ne lance pas ce script avec sudo : tout irait dans /root au lieu de ton dossier personnel)
-#   OPENCODE_CONFIG_DIR=...     autre dossier de destination ; OBSCURA_BIN_DIR=... dossier des binaires
+#   ./install.sh                full install (tools included)
+#   ./install.sh --lite         lightweight profile: 12 agents, context7 + grep_app MCPs, no heavy tools
+#   ./install.sh --no-tools     copy the config only (no tool download/installation)
+#   ./install.sh --memory-only  only (re)try installing MemPalace, without copying anything
+#   ./install.sh --force-config overwrite kit files you have modified (otherwise, starting with the
+#                               first install that writes sha256 fingerprints, they are preserved
+#                               and the kit version is written to <file>.new; an old manifest
+#                               without fingerprints is reported before copying)
+#   ./install.sh --shell-env    add PATH and MEMPALACE_ADAPTER_PYTHON to ~/.bashrc / ~/.zshrc (once)
+#   ./install.sh --with-matt    + full Matt Pocock skills
+#   ./install.sh --android      Android module (optional): android and mobile-tester agents, mobile MCP, Podman toolchain
+#                               (image still to be built: oc-android build-image --accept-licenses). Remembered;
+#   ./install.sh --no-android   remove the Android module
+#   ./install.sh --pentest      real tools to secure YOUR apps (not just MCPs): nuclei and gitleaks
+#                               (binaries downloaded and sha256-verified, like Trivy), semgrep (via uv tool
+#                               install); nmap and sqlmap are reported (run the command yourself, never sudo
+#                               from this script). Used by the @pentest agent. Remembered;
+#   ./install.sh --no-pentest   forget this choice (does not uninstall binaries already installed)
+#   (do not run this script with sudo: everything would go to /root instead of your home directory)
+#   OPENCODE_CONFIG_DIR=...     alternate destination directory; OBSCURA_BIN_DIR=... binary directory
 set -Eeuo pipefail
-# La config peut contenir des noms de serveurs, des chemins et des choix personnels :
-# rien de ce que crée ce script ne doit être lisible par les autres comptes locaux.
+# The config may contain server names, paths and personal choices: nothing this script creates
+# should be readable by other local accounts.
 umask 077
 
-# --- Versions épinglées des outils téléchargés : aucune URL « latest » ni « main ».
-# Surchargeables (OC_*_VERSION) pour suivre une release précise ou pour les tests hermétiques.
-# Valeurs par défaut vérifiées sur la machine d'écriture ; uv = dernière release stable au moment de l'audit.
+# --- Pinned versions of downloaded tools: no "latest" or "main" URLs.
+# Overridable (OC_*_VERSION) to track a specific release or for hermetic tests.
+# Defaults verified on the authoring machine; uv = latest stable release at audit time.
 OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.76.1}"
 OC_TRIVY_MCP_VERSION="${OC_TRIVY_MCP_VERSION:-v0.0.20}"
 OC_OBSCURA_VERSION="${OC_OBSCURA_VERSION:-0.2.6}"
@@ -54,7 +54,7 @@ for a in "$@"; do
     --shell-env) SHELLENV=1 ;;
     --with-matt) MATT=1 ;;
     -h|--help) awk 'NR > 1 && /^set -/ { exit } NR > 1 { print }' "$0"; exit 0 ;;
-    *) echo "Option inconnue : $a" >&2; exit 1 ;;
+    *) echo "Unknown option: $a" >&2; exit 1 ;;
   esac
 done
 
@@ -70,10 +70,10 @@ need() { command -v "$1" >/dev/null 2>&1; }
 warn() { echo "⚠️  $*" >&2; }
 die()  { echo "❌ $*" >&2; exit 1; }
 
-# Une version surchargeable ne doit jamais pouvoir injecter une URL ou une option.
+# An overridable version must never be able to inject a URL or an option.
 for v in "$OC_TRIVY_VERSION" "$OC_TRIVY_MCP_VERSION" "$OC_OBSCURA_VERSION" "$OC_UV_VERSION" \
          "$OC_MEMPALACE_VERSION" "$OC_SEMGREP_VERSION" "$OC_PLAYWRIGHT_VERSION" "$OC_SKILLS_VERSION"; do
-  if [[ ! "$v" =~ ^[0-9A-Za-z._-]+$ ]]; then die "Version invalide : $v"; fi
+  if [[ ! "$v" =~ ^[0-9A-Za-z._-]+$ ]]; then die "Invalid version: $v"; fi
 done
 
 sha256_of() {
@@ -83,32 +83,32 @@ sha256_of() {
   else echo ""; fi
 }
 
-# fetch_verified <url> <destination> <sha256 attendu> <libellé>
-# Télécharge puis refuse d'aller plus loin si la somme est absente ou différente (échec fermé).
+# fetch_verified <url> <destination> <expected sha256> <label>
+# Download, then refuse to continue if the checksum is missing or different (fail closed).
 fetch_verified() {
   local url="$1" dest="$2" want="$3" label="$4" got
   if ! curl -fsSL --retry 2 --connect-timeout 15 "$url" -o "$dest"; then
-    warn "$label : téléchargement échoué ($url)"; return 1
+    warn "$label: download failed ($url)"; return 1
   fi
   got="$(sha256_of "$dest")"
   if [ -z "$got" ]; then
-    warn "$label : ni sha256sum ni shasum — somme non vérifiable, installation annulée."; return 1
+    warn "$label: neither sha256sum nor shasum available — checksum cannot be verified, installation cancelled."; return 1
   fi
   if [ "$got" != "$want" ]; then
-    die "$label : somme de contrôle invalide (attendu $want, obtenu $got) — installation annulée."
+    die "$label: invalid checksum (expected $want, got $got) — installation cancelled."
   fi
 }
 
-# unique_path <chemin> : le chemin s'il est libre, sinon <chemin>-1, -2... (deux installations
-# dans la même seconde ne doivent jamais se copier l'une dans l'autre).
+# unique_path <path>: the path if free, otherwise <path>-1, -2... (two installs in the same
+# second must never copy over each other).
 unique_path() {
   local base="$1" cand="$1" n=1
   while [ -e "$cand" ] || [ -L "$cand" ]; do cand="$base-$n"; n=$((n + 1)); done
   printf '%s\n' "$cand"
 }
 
-# --- Distribution (Omarchy/Arch, Debian/Ubuntu, Fedora/RHEL, macOS) : sert aux conseils d'installation ---
-DISTRO="inconnue"; PM=""
+# --- Distribution (Omarchy/Arch, Debian/Ubuntu, Fedora/RHEL, macOS): used for install hints ---
+DISTRO="unknown"; PM=""
 if [ "$(uname -s)" = Darwin ]; then
   DISTRO="macOS"; PM="brew"
 elif [ -r /etc/os-release ]; then
@@ -122,33 +122,33 @@ elif [ -r /etc/os-release ]; then
   esac
 fi
 
-# pkg_hint <outil> : commande d'installation adaptée à la distribution
+# pkg_hint <tool>: install command for the current distribution
 pkg_hint() {
   local t="$1"
   case "$PM:$t" in
-    pacman:docker) echo "sudo pacman -S --needed docker && sudo systemctl enable --now docker && sudo usermod -aG docker \$USER   (ou: sudo pacman -S podman)" ;;
-    apt:docker)    echo "sudo apt install docker.io   (ou: sudo apt install podman)" ;;
-    dnf:docker)    echo "sudo dnf install podman   (ou Docker CE : https://docs.docker.com/engine/install/)" ;;
+    pacman:docker) echo "sudo pacman -S --needed docker && sudo systemctl enable --now docker && sudo usermod -aG docker \$USER   (or: sudo pacman -S podman)" ;;
+    apt:docker)    echo "sudo apt install docker.io   (or: sudo apt install podman)" ;;
+    dnf:docker)    echo "sudo dnf install podman   (or Docker CE: https://docs.docker.com/engine/install/)" ;;
     brew:docker)   echo "brew install --cask docker" ;;
     pacman:gh)     echo "sudo pacman -S --needed github-cli" ;;
-    apt:gh)        echo "sudo apt install gh   (sinon : https://github.com/cli/cli/blob/trunk/docs/install_linux.md)" ;;
+    apt:gh)        echo "sudo apt install gh   (otherwise: https://github.com/cli/cli/blob/trunk/docs/install_linux.md)" ;;
     dnf:gh)        echo "sudo dnf install gh" ;;
     brew:gh)       echo "brew install gh" ;;
-    pacman:node)   echo "sudo pacman -S --needed nodejs npm   (ou: mise use -g node)" ;;
-    apt:node)      echo "sudo apt install nodejs npm   (ou: https://nodejs.org)" ;;
+    pacman:node)   echo "sudo pacman -S --needed nodejs npm   (or: mise use -g node)" ;;
+    apt:node)      echo "sudo apt install nodejs npm   (or: https://nodejs.org)" ;;
     dnf:node)      echo "sudo dnf install nodejs npm" ;;
     brew:node)     echo "brew install node" ;;
     apt:venv)      echo "sudo apt install python3-venv" ;;
-    pacman:podman) echo "sudo pacman -S --needed podman   (rootless : /etc/subuid et /etc/subgid doivent avoir une plage pour ton utilisateur)" ;;
+    pacman:podman) echo "sudo pacman -S --needed podman   (rootless: /etc/subuid and /etc/subgid must have a range for your user)" ;;
     apt:podman)    echo "sudo apt install podman" ;;
     dnf:podman)    echo "sudo dnf install podman" ;;
     brew:podman)   echo "brew install podman" ;;
-    pacman:android) echo "sudo pacman -S --needed android-tools jdk17-openjdk   + SDK : paquet AUR android-sdk-cmdline-tools-latest (yay -S ...) ou Android Studio" ;;
-    apt:android)    echo "sudo apt install adb openjdk-17-jdk   + SDK : outils en ligne de commande depuis https://developer.android.com/studio#command-tools (ou Android Studio)" ;;
-    dnf:android)    echo "sudo dnf install android-tools java-17-openjdk-devel   + SDK : outils en ligne de commande depuis https://developer.android.com/studio#command-tools (ou Android Studio)" ;;
+    pacman:android) echo "sudo pacman -S --needed android-tools jdk17-openjdk   + SDK: AUR package android-sdk-cmdline-tools-latest (yay -S ...) or Android Studio" ;;
+    apt:android)    echo "sudo apt install adb openjdk-17-jdk   + SDK: command-line tools from https://developer.android.com/studio#command-tools (or Android Studio)" ;;
+    dnf:android)    echo "sudo dnf install android-tools java-17-openjdk-devel   + SDK: command-line tools from https://developer.android.com/studio#command-tools (or Android Studio)" ;;
     brew:android)   echo "brew install --cask android-platform-tools android-commandlinetools && brew install openjdk@17" ;;
     pacman:chromium) echo "sudo pacman -S --needed chromium" ;;
-    apt:chromium)    echo "sudo apt install chromium   (ou laisse Playwright télécharger le sien)" ;;
+    apt:chromium)    echo "sudo apt install chromium   (or let Playwright download its own)" ;;
     dnf:chromium)    echo "sudo dnf install chromium" ;;
     pacman:nmap)   echo "sudo pacman -S --needed nmap" ;;
     apt:nmap)      echo "sudo apt install nmap" ;;
@@ -156,7 +156,7 @@ pkg_hint() {
     brew:nmap)     echo "brew install nmap" ;;
     pacman:sqlmap) echo "sudo pacman -S --needed sqlmap" ;;
     apt:sqlmap)    echo "sudo apt install sqlmap" ;;
-    dnf:sqlmap)    echo "sudo dnf install sqlmap   (absent des dépôts RHEL/Rocky : pip install sqlmap --user, ou clone https://github.com/sqlmapproject/sqlmap)" ;;
+    dnf:sqlmap)    echo "sudo dnf install sqlmap   (not in RHEL/Rocky repositories: pip install sqlmap --user, or clone https://github.com/sqlmapproject/sqlmap)" ;;
     brew:sqlmap)   echo "brew install sqlmap" ;;
     pacman:unzip)  echo "sudo pacman -S --needed unzip" ;;
     apt:unzip)     echo "sudo apt install unzip" ;;
@@ -169,12 +169,12 @@ pkg_hint() {
     apt:git)       echo "sudo apt install git" ;;
     dnf:git)       echo "sudo dnf install git" ;;
     brew:git)      echo "brew install git" ;;
-    *) echo "voir la documentation de ${t} pour ${DISTRO}" ;;
+    *) echo "see the ${t} documentation for ${DISTRO}" ;;
   esac
 }
 
-# get_uv : trouve uv ou télécharge le binaire statique officiel (aucun paquet python3-venv requis).
-# Version épinglée et somme .sha256 publiée à côté de l'archive, vérifiée avant extraction.
+# get_uv: find uv or download the official static binary (no python3-venv package required).
+# Pinned version and .sha256 file published next to the archive, verified before extraction.
 get_uv() {
   if need uv; then echo uv; return 0; fi
   local arch os uv_asset base sumfile want
@@ -188,32 +188,32 @@ get_uv() {
   base="https://github.com/astral-sh/uv/releases/download/$OC_UV_VERSION"
   sumfile="$TMP/uv.sha256"
   if ! curl -fsSL --retry 2 --connect-timeout 15 "$base/$uv_asset.sha256" -o "$sumfile"; then
-    warn "uv $OC_UV_VERSION : fichier .sha256 introuvable ($base/$uv_asset.sha256) — installation annulée."
+    warn "uv $OC_UV_VERSION: .sha256 file not found ($base/$uv_asset.sha256) — installation cancelled."
     return 1
   fi
   want="$(awk '{print $1; exit}' "$sumfile")"
   if ! [[ "$want" =~ ^[0-9a-f]{64}$ ]]; then
-    warn "uv : somme sha256 illisible dans $uv_asset.sha256 — installation annulée."
+    warn "uv: unreadable sha256 in $uv_asset.sha256 — installation cancelled."
     return 1
   fi
   mkdir -p "$TMP/uvbin"
   fetch_verified "$base/$uv_asset" "$TMP/uv.tgz" "$want" "uv $OC_UV_VERSION" || return 1
   if ! tar -xzf "$TMP/uv.tgz" -C "$TMP/uvbin" --strip-components=1; then
-    warn "uv : extraction de l'archive impossible."; return 1
+    warn "uv: could not extract the archive."; return 1
   fi
   if [ ! -x "$TMP/uvbin/uv" ]; then
-    warn "uv : binaire \"uv\" absent de l'archive extraite."; return 1
+    warn "uv: binary \"uv\" missing from the extracted archive."; return 1
   fi
   echo "$TMP/uvbin/uv"
 }
 
-# Lancé via sudo : $HOME serait celui de root (config, outils et MemPalace installés au mauvais endroit)
+# Run via sudo: $HOME would be root's home (config, tools and MemPalace installed in the wrong place)
 if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$ALLOWROOT" != 1 ]; then
-  die "Ne lance pas ce script avec sudo (il installerait tout dans $HOME, pas chez $SUDO_USER). Relance simplement : ./install.sh"
+  die "Do not run this script with sudo (it would install everything into $HOME, not $SUDO_USER's home). Just run: ./install.sh"
 fi
 
 
-# MemPalace dans un venv dédié (évite les erreurs PEP 668 et les Python trop récents sans wheels onnxruntime)
+# MemPalace in a dedicated venv (avoids PEP 668 errors and Python versions too recent to have onnxruntime wheels)
 MEMVENV="$HOME/.mempalace/venv"
 setup_mempalace() {
   if [ ! -x "$MEMVENV/bin/python" ]; then
@@ -224,57 +224,57 @@ setup_mempalace() {
     mkdir -p "$HOME/.mempalace"
     if [ -n "$py" ]; then
       echo "   Python $py → venv $MEMVENV"
-      if "$py" -m venv "$MEMVENV" 2>/dev/null; then made=1; else rm -rf "$MEMVENV"; warn "venv impossible avec $py ($(pkg_hint venv)) : je passe par uv."; fi
+      if "$py" -m venv "$MEMVENV" 2>/dev/null; then made=1; else rm -rf "$MEMVENV"; warn "venv failed with $py ($(pkg_hint venv)): falling back to uv."; fi
     else
-      echo "   Aucun Python 3.10–3.13 trouvé ($(python3 --version 2>&1)) : j'utilise uv pour télécharger Python 3.12."
+      echo "   No Python 3.10–3.13 found ($(python3 --version 2>&1)): using uv to download Python 3.12."
     fi
     if [ "$made" = 0 ]; then
       local UV
-      UV="$(get_uv)" || { warn "uv indisponible : installe-le (https://docs.astral.sh/uv/) puis relance ./install.sh --memory-only"; return 1; }
-      # Le Python géré par uv est rangé AVEC le venv (~/.mempalace/python), pas dans le dossier par défaut d'uv :
-      # un « uv python prune » ne peut plus casser le venv.
+      UV="$(get_uv)" || { warn "uv unavailable: install it (https://docs.astral.sh/uv/) then rerun ./install.sh --memory-only"; return 1; }
+      # The uv-managed Python lives WITH the venv (~/.mempalace/python), not in uv's default directory:
+      # a "uv python prune" can no longer break the venv.
       UV_PYTHON_INSTALL_DIR="$HOME/.mempalace/python" "$UV" venv --seed --managed-python --python 3.12 "$MEMVENV" || return 1
     fi
   fi
-  # Version épinglée : pas de « -U » implicite, une réinstallation ne fait pas dériver la version.
+  # Pinned version: no implicit "-U", reinstalling does not drift to a newer version.
   "$MEMVENV/bin/python" -m pip install -q "mempalace==$OC_MEMPALACE_VERSION" || return 1
 
-  # Le palais se crée tout seul à la première sauvegarde, là où MemPalace le cherche (~/.config/mempalace/palace).
-  # Ancienne version de ce script : « mempalace init » sur ~/.mempalace/palace y laissait un mempalace.yaml orphelin.
+  # The palace creates itself on first save, where MemPalace looks for it (~/.config/mempalace/palace).
+  # Older version of this script: "mempalace init" on ~/.mempalace/palace left an orphan mempalace.yaml there.
   local orphan="$HOME/.mempalace/palace"
   if [ -f "$orphan/mempalace.yaml" ] && [ "$(find "$orphan" -mindepth 1 | wc -l)" -eq 1 ]; then
-    rm -rf "$orphan" && echo "🧹 Fichier orphelin retiré : $orphan (MemPalace utilise ~/.config/mempalace)"
+    rm -rf "$orphan" && echo "🧹 Orphan file removed: $orphan (MemPalace uses ~/.config/mempalace)"
   fi
 
-  # Repli pour le plugin : il sait retrouver le bon Python à partir du « shebang » de la commande mempalace du PATH
+  # Fallback for the plugin: it can find the right Python from the "shebang" of the mempalace command on PATH
   mkdir -p "$BIN"
   if [ ! -e "$BIN/mempalace" ] || [ -L "$BIN/mempalace" ]; then ln -sf "$MEMVENV/bin/mempalace" "$BIN/mempalace"; fi
-  echo "✅ MemPalace installé dans $MEMVENV (le plugin fixe lui-même MEMPALACE_ADAPTER_PYTHON ; commande : $BIN/mempalace)"
+  echo "✅ MemPalace installed in $MEMVENV (the plugin sets MEMPALACE_ADAPTER_PYTHON itself; command: $BIN/mempalace)"
 }
 
-# Plugin MemPalace : installé ici avec --legacy-peer-deps (le paquet déclare des peerDependencies
-# incompatibles entre elles : l'installation npm faite par OpenCode échoue en ERESOLVE), puis chargé
-# comme plugin local (dossier plugins/mempalace/ qui ré-exporte le paquet installé).
+# MemPalace plugin: installed here with --legacy-peer-deps (the package declares peerDependencies
+# that are incompatible with each other: the npm install done by OpenCode fails with ERESOLVE), then loaded
+# as a local plugin (plugins/mempalace/ directory that re-exports the installed package).
 MEMPLUGIN="$HOME/.mempalace/plugin"
 install_mempalace_plugin() {
-  need npm || { warn "npm introuvable : plugin MemPalace non installé. → $(pkg_hint node)"; return 1; }
+  need npm || { warn "npm not found: MemPalace plugin not installed. → $(pkg_hint node)"; return 1; }
   mkdir -p "$MEMPLUGIN"
   [ -f "$MEMPLUGIN/package.json" ] || echo '{"name":"mempalace-plugin-host","private":true}' > "$MEMPLUGIN/package.json"
   ( cd "$MEMPLUGIN" && npm install @rvboris/opencode-mempalace@2.0.1 --legacy-peer-deps --ignore-scripts --no-audit --no-fund --loglevel=error ) \
-    || { warn "npm install du plugin MemPalace échoué"; return 1; }
+    || { warn "npm install of the MemPalace plugin failed"; return 1; }
   local entry="$MEMPLUGIN/node_modules/@rvboris/opencode-mempalace/dist/plugin/index.js"
-  [ -f "$entry" ] || { warn "Plugin MemPalace introuvable après installation : $entry"; return 1; }
+  [ -f "$entry" ] || { warn "MemPalace plugin not found after installation: $entry"; return 1; }
   mkdir -p "$DEST/plugins/mempalace"
-  # Le plugin fixe lui-même MEMPALACE_ADAPTER_PYTHON (modèle libexec/mempalace-plugin.ts.tpl) : indépendant du shell de lancement
+  # The plugin sets MEMPALACE_ADAPTER_PYTHON itself (template libexec/mempalace-plugin.ts.tpl): independent of the launching shell
   sed -e "s|__ROOT__|$MEMPLUGIN|g" -e "s|__PYTHON__|$MEMVENV/bin/python|g" -e "s|__ENTRY__|$entry|g" \
     "$HERE/config/libexec/mempalace-plugin.ts.tpl" > "$DEST/plugins/mempalace/index.ts"
-  echo "✅ Plugin MemPalace chargé comme plugin local (plugins/mempalace)"
+  echo "✅ MemPalace plugin loaded as a local plugin (plugins/mempalace)"
 }
 
 drop_mempalace_plugin() {
-  # MemPalace indisponible : retire le plugin local pour qu'OpenCode démarre proprement
+  # MemPalace unavailable: remove the local plugin so OpenCode starts cleanly
   rm -rf "$DEST/plugins/mempalace"
-  warn "Plugin MemPalace non activé (relance ./install.sh --memory-only quand le problème sera réglé)."
+  warn "MemPalace plugin not enabled (rerun ./install.sh --memory-only once the problem is fixed)."
 }
 
 if [ "$MEMONLY" = 1 ]; then
@@ -282,21 +282,21 @@ if [ "$MEMONLY" = 1 ]; then
   mkdir -p "$DEST"
   chmod 700 "$DEST"
   if ! { setup_mempalace && install_mempalace_plugin; }; then
-    die "MemPalace n'a pas pu être installé."
+    die "MemPalace could not be installed."
   fi
-  # --memory-only ne recopie aucune configuration : il ne doit jamais écrire le repère
-  # .installed (doctor le prendrait pour une installation fraîche et signalerait à tort
-  # un OpenCode périmé).
+  # --memory-only copies no configuration: it must never write the .installed
+  # marker (doctor would take it for a fresh install and wrongly report
+  # an outdated OpenCode).
   exit 0
 fi
 
-# --- Module Android (option) : agents, skill, MCP, toolchain Podman. Mémorisé par un repère dans la config. ---
+# --- Android module (optional): agents, skill, MCP, Podman toolchain. Remembered by a marker in the config. ---
 ANDROID_MARKER="$DEST/.opencode-prerequisites.android"
 ANDROID_SHIM_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/oc-android/sdk"
 if [ "$ANDROID" = 0 ] && [ "$NOANDROID" = 0 ] && [ -f "$ANDROID_MARKER" ]; then ANDROID=1; fi
-if [ "$LITE" = 1 ] && [ "$ANDROID" = 1 ]; then warn "Le profil léger n'inclut pas le module Android : ignoré."; ANDROID=0; fi
+if [ "$LITE" = 1 ] && [ "$ANDROID" = 1 ]; then warn "The lightweight profile does not include the Android module: ignored."; ANDROID=0; fi
 
-# apply_block <fichier> <nom> <source> : (re)met un bloc balisé en fin de fichier, sans doublon
+# apply_block <file> <name> <source>: (re)append a tagged block at the end of a file, without duplicates
 apply_block() {
   local f="$1" name="$2" src="$3" tmp
   [ -f "$f" ] || return 0
@@ -308,7 +308,7 @@ apply_block() {
 
 install_android_addon() {
   local A="$HERE/addons/android"
-  need podman || warn "Podman introuvable : requis pour le module Android. → $(pkg_hint podman)"
+  need podman || warn "Podman not found: required for the Android module. → $(pkg_hint podman)"
   mkdir -p "$DEST/agents" "$DEST/skills" "$DEST/android" "$ANDROID_SHIM_ROOT/platform-tools"
   cp -a "$A/agents/." "$DEST/agents/"
   cp -a "$A/skills/." "$DEST/skills/"
@@ -319,7 +319,7 @@ install_android_addon() {
   apply_block "$DEST/agents/ceo.md" android "$A/ceo.android.md"
   : > "$ANDROID_MARKER"
   chmod 600 "$ANDROID_MARKER"
-  echo "✅ Module Android installé (agents android et mobile-tester, skill android-dev, oc-android, faux adb pour mobile-mcp)"
+  echo "✅ Android module installed (android and mobile-tester agents, android-dev skill, oc-android, fake adb for mobile-mcp)"
 }
 
 remove_android_addon() {
@@ -327,15 +327,15 @@ remove_android_addon() {
   rm -rf "$DEST/skills/android-dev" "$DEST/android" "$ANDROID_SHIM_ROOT"
 }
 
-# --- Outils pentest/appsec (option --pentest) : pour sécuriser TES PROPRES apps avant de les exposer.
-# Binaires téléchargés et vérifiés par sha256 (comme Trivy) ; aucun sudo lancé par ce script. ---
+# --- Pentest/appsec tools (--pentest option): to secure YOUR OWN apps before exposing them.
+# Binaries downloaded and sha256-verified (like Trivy); no sudo run by this script. ---
 PENTEST_MARKER="$DEST/.opencode-prerequisites.pentest"
-# Mémorisation : seulement pour une installation d'outils (TOOLS=1) ou un --pentest explicite.
-# --no-tools ne doit rien télécharger, même si le choix --pentest a été mémorisé.
+# Remembering: only for a tools install (TOOLS=1) or an explicit --pentest.
+# --no-tools must download nothing, even if the --pentest choice was remembered.
 if [ "$PENTEST" = 0 ] && [ "$NOPENTEST" = 0 ] && [ -f "$PENTEST_MARKER" ]; then
   if [ "$TOOLS" = 1 ] || [ "$PENTEST_EXPLICIT" = 1 ]; then PENTEST=1; fi
 fi
-if [ "$LITE" = 1 ] && [ "$PENTEST" = 1 ]; then warn "Le profil léger n'installe pas les outils pentest : ignoré."; PENTEST=0; fi
+if [ "$LITE" = 1 ] && [ "$PENTEST" = 1 ]; then warn "The lightweight profile does not install pentest tools: ignored."; PENTEST=0; fi
 
 extract_archive() {
   local archive="$1" dest="$2"
@@ -349,40 +349,40 @@ extract_archive() {
   esac
 }
 
-# install_binary_release <commande> <owner/repo> <modèle d'archive> [nom du binaire dans l'archive]
-# Sans le 4e argument (ou vide) : l'asset téléchargé EST le binaire (pas d'archive à extraire), ex. osv-scanner.
+# install_binary_release <command> <owner/repo> <archive template> [binary name inside the archive]
+# Without the 4th argument (or if empty): the downloaded asset IS the binary (no archive to extract), e.g. osv-scanner.
 install_binary_release() {
   local name="$1" repo="$2" template="$3" inner="${4:-}" info archive got
-  if need "$name"; then echo "✅ $name déjà installé ($(command -v "$name"))"; return 0; fi
+  if need "$name"; then echo "✅ $name already installed ($(command -v "$name"))"; return 0; fi
   if ! info="$(node "$HERE/scripts/pentest-discover.mjs" "$repo" "$template" 2>&1)"; then
-    warn "$name : découverte de la dernière version impossible — $(printf '%s' "$info" | tail -n 1)"; return 1
+    warn "$name: could not discover the latest version — $(printf '%s' "$info" | tail -n 1)"; return 1
   fi
-  eval "$info" # VERSION / URL / SHA256 / ASSET (noms fixes, échappés par pentest-discover.mjs)
+  eval "$info" # VERSION / URL / SHA256 / ASSET (fixed names, escaped by pentest-discover.mjs)
   archive="$TMP/$ASSET"
-  if ! curl -fsSL "$URL" -o "$archive"; then warn "$name : téléchargement échoué ($URL)"; return 1; fi
+  if ! curl -fsSL "$URL" -o "$archive"; then warn "$name: download failed ($URL)"; return 1; fi
   got="$(sha256_of "$archive")"
-  if [ -z "$got" ]; then warn "$name : ni sha256sum ni shasum, somme non vérifiable — installation annulée."; return 1; fi
-  if [ "$got" != "$SHA256" ]; then warn "$name : somme de contrôle invalide (attendu $SHA256, obtenu $got) — installation annulée."; return 1; fi
+  if [ -z "$got" ]; then warn "$name: neither sha256sum nor shasum available, checksum cannot be verified — installation cancelled."; return 1; fi
+  if [ "$got" != "$SHA256" ]; then warn "$name: invalid checksum (expected $SHA256, got $got) — installation cancelled."; return 1; fi
   if [ -z "$inner" ]; then
     install -m 0755 "$archive" "$BIN/$name"
   else
     mkdir -p "$TMP/$name-extract"
-    if ! extract_archive "$archive" "$TMP/$name-extract"; then warn "$name : extraction impossible (unzip/bsdtar manquant). → $(pkg_hint unzip)"; return 1; fi
-    if [ ! -f "$TMP/$name-extract/$inner" ]; then warn "$name : binaire \"$inner\" absent de l'archive téléchargée."; return 1; fi
+    if ! extract_archive "$archive" "$TMP/$name-extract"; then warn "$name: extraction failed (unzip/bsdtar missing). → $(pkg_hint unzip)"; return 1; fi
+    if [ ! -f "$TMP/$name-extract/$inner" ]; then warn "$name: binary \"$inner\" missing from the downloaded archive."; return 1; fi
     install -m 0755 "$TMP/$name-extract/$inner" "$BIN/$name"
   fi
-  echo "✅ $name $VERSION installé dans $BIN (sha256 vérifié sur la release GitHub)"
+  echo "✅ $name $VERSION installed in $BIN (sha256 verified against the GitHub release)"
 }
 
-# latest_git_tag <owner/repo> : dernier tag (triés par version, sans toucher à l'API GitHub : juste git ls-remote)
+# latest_git_tag <owner/repo>: latest tag (sorted by version, without touching the GitHub API: just git ls-remote)
 latest_git_tag() {
   git ls-remote --tags --refs --sort=-v:refname "https://github.com/$1.git" 2>/dev/null | head -n1 | sed 's#.*refs/tags/##'
 }
 
-# tag_commit_sha <owner/repo> <tag> : sha du COMMIT pointé par ce tag, qu'il soit annoté ou léger.
-# Un tag annoté a deux lignes dans `git ls-remote --tags` : refs/tags/<tag> (sha de l'OBJET tag, pas du commit)
-# et refs/tags/<tag>^{} (sha du commit, celui que `git clone`/`rev-parse HEAD` donnent réellement) : on préfère
-# toujours la ligne déréférencée (^{}) quand elle existe, sinon le tag est léger et sa seule ligne EST le commit.
+# tag_commit_sha <owner/repo> <tag>: sha of the COMMIT pointed to by this tag, whether annotated or lightweight.
+# An annotated tag has two lines in `git ls-remote --tags`: refs/tags/<tag> (sha of the TAG OBJECT, not the commit)
+# and refs/tags/<tag>^{} (sha of the commit, the one `git clone`/`rev-parse HEAD` actually returns): we always
+# prefer the dereferenced line (^{}) when it exists, otherwise the tag is lightweight and its only line IS the commit.
 tag_commit_sha() {
   local out peeled
   out="$(git ls-remote --tags "https://github.com/$1.git" 2>/dev/null)" || return 1
@@ -391,29 +391,29 @@ tag_commit_sha() {
   printf '%s\n' "$out" | awk -v t="refs/tags/$2" '$2==t{print $1; exit}'
 }
 
-# install_git_tool <commande> <owner/repo> <script d'entrée relatif> <dossier de destination>
-# Pas de release binaire chez cet outil (testssl.sh, nikto...) : on clone le dernier tag, PUIS on vérifie que le
-# commit obtenu est bien celui que GitHub annonce pour ce tag (évite un clone altéré en cours de route).
+# install_git_tool <command> <owner/repo> <relative entry script> <destination directory>
+# This tool has no binary release (testssl.sh, nikto...): clone the latest tag, THEN verify that the
+# resulting commit is the one GitHub announces for that tag (avoids a clone altered in transit).
 install_git_tool() {
   local name="$1" repo="$2" entry="$3" dest="$4" tag want got
-  if need "$name"; then echo "✅ $name déjà installé ($(command -v "$name"))"; return 0; fi
-  need git || { warn "$name : git requis pour l'installer. → $(pkg_hint git)"; return 1; }
+  if need "$name"; then echo "✅ $name already installed ($(command -v "$name"))"; return 0; fi
+  need git || { warn "$name: git required to install it. → $(pkg_hint git)"; return 1; }
   tag="$(latest_git_tag "$repo")"
-  if [ -z "$tag" ]; then warn "$name : aucun tag trouvé sur https://github.com/$repo (réseau ?)"; return 1; fi
+  if [ -z "$tag" ]; then warn "$name: no tag found on https://github.com/$repo (network?)"; return 1; fi
   want="$(tag_commit_sha "$repo" "$tag")"
   rm -rf "$dest"
   if ! git clone --quiet --depth 1 --branch "$tag" "https://github.com/$repo.git" "$dest" 2>/dev/null; then
-    warn "$name : clone échoué (https://github.com/$repo, tag $tag)"; return 1
+    warn "$name: clone failed (https://github.com/$repo, tag $tag)"; return 1
   fi
   got="$(git -C "$dest" rev-parse HEAD 2>/dev/null)"
   if [ -z "$want" ] || [ "$got" != "$want" ]; then
-    warn "$name : commit cloné ($got) différent du tag annoncé par GitHub ($want) — installation annulée."
+    warn "$name: cloned commit ($got) differs from the tag announced by GitHub ($want) — installation cancelled."
     rm -rf "$dest"; return 1
   fi
   chmod +x "$dest/$entry" 2>/dev/null || true
   printf '#!/usr/bin/env bash\nexec "%s/%s" "$@"\n' "$dest" "$entry" > "$BIN/$name"
   chmod +x "$BIN/$name"
-  echo "✅ $name $tag installé dans $dest (commit vérifié contre le tag GitHub), lanceur $BIN/$name"
+  echo "✅ $name $tag installed in $dest (commit verified against the GitHub tag), launcher $BIN/$name"
 }
 
 install_pentest_tools() {
@@ -423,104 +423,104 @@ install_pentest_tools() {
   gl_arch="x64"; [ "$amd" = arm64 ] && gl_arch="arm64"
   gittools="${XDG_DATA_HOME:-$HOME/.local/share}/oc-pentest"
 
-  # --- Sur ton code (toujours permis, aucune cible réseau) ---
-  # gitleaks (MIT) : secrets/clés oubliés dans le code ou l'historique git
+  # --- On your code (always allowed, no network target) ---
+  # gitleaks (MIT): secrets/keys forgotten in code or git history
   install_binary_release gitleaks "gitleaks/gitleaks" "gitleaks_{v}_${os}_${gl_arch}.tar.gz" gitleaks || true
-  # semgrep (SAST, LGPL-2.1/MIT) : CLI via uv tool install (même uv que MemPalace), pas de sudo
+  # semgrep (SAST, LGPL-2.1/MIT): CLI via uv tool install (same uv as MemPalace), no sudo
   if need semgrep; then
-    echo "✅ semgrep déjà installé ($(command -v semgrep))"
+    echo "✅ semgrep already installed ($(command -v semgrep))"
   elif UV="$(get_uv)" && "$UV" tool install "semgrep==$OC_SEMGREP_VERSION" --quiet; then
-    echo "✅ semgrep installé via uv (SAST, dans $BIN)"
+    echo "✅ semgrep installed via uv (SAST, in $BIN)"
   else
-    warn "Installation de semgrep échouée : installe uv (https://docs.astral.sh/uv/) puis relance ./install.sh --pentest"
+    warn "semgrep installation failed: install uv (https://docs.astral.sh/uv/) then rerun ./install.sh --pentest"
   fi
 
-  # --- Sur une cible que tu contrôles (app en local/staging, CTF, scope écrit) ---
-  # nuclei/httpx utilisent "macOS" (majuscule) pour Darwin, pas "darwin" : attention si tu réutilises ce modèle.
+  # --- On a target you control (app in local/staging, CTF, written scope) ---
+  # nuclei/httpx use "macOS" (capitalized) for Darwin, not "darwin": beware if you reuse this template.
   install_binary_release nuclei "projectdiscovery/nuclei" "nuclei_{v}_${os_pd}_${amd}.zip" nuclei || true
   install_binary_release httpx  "projectdiscovery/httpx"  "httpx_{v}_${os_pd}_${amd}.zip"  httpx  || true
   install_binary_release ffuf   "ffuf/ffuf"                "ffuf_{v}_${os_pd}_${amd}.tar.gz" ffuf  || true
-  # osv-scanner (Google, Apache-2.0) : vulnérabilités connues dans les dépendances (base OSV, complète Trivy).
-  # Asset non versionné et non compressé : le binaire téléchargé EST osv-scanner (pas de 4e argument).
+  # osv-scanner (Google, Apache-2.0): known vulnerabilities in dependencies (OSV database, complements Trivy).
+  # Unversioned and uncompressed asset: the downloaded binary IS osv-scanner (no 4th argument).
   install_binary_release osv-scanner "google/osv-scanner" "osv-scanner_${os}_${amd}" || true
 
-  # testssl.sh (GPLv2) et nikto (GPLv2) : pas de release binaire chez ces deux-là, clone du dernier tag
-  # vérifié contre le commit annoncé par GitHub (voir install_git_tool). Nikto a besoin de Perl (presque
-  # toujours présent) ; testssl.sh n'a besoin de rien d'autre que bash + openssl.
+  # testssl.sh (GPLv2) and nikto (GPLv2): no binary release for these two, clone the latest tag
+  # verified against the commit announced by GitHub (see install_git_tool). Nikto needs Perl (almost
+  # always present); testssl.sh needs nothing but bash + openssl.
   install_git_tool testssl.sh "testssl/testssl.sh" testssl.sh "$gittools/testssl.sh" || true
   if [ "${OC_PENTEST_NO_PERL:-0}" != 1 ] && need perl; then
     install_git_tool nikto "sullo/nikto" program/nikto.pl "$gittools/nikto" || true
   else
-    warn "perl absent : nikto non installé. → $(pkg_hint perl)"
+    warn "perl missing: nikto not installed. → $(pkg_hint perl)"
   fi
 
-  # nmap / sqlmap : paquets système courants, jamais installés avec sudo par ce script
-  need nmap   || warn "nmap absent (ports ouverts, services exposés de ton app). → $(pkg_hint nmap)"
-  need sqlmap || warn "sqlmap absent (test d'injection SQL ciblé sur ton app). → $(pkg_hint sqlmap)"
+  # nmap / sqlmap: common system packages, never installed with sudo by this script
+  need nmap   || warn "nmap missing (open ports, exposed services in your app). → $(pkg_hint nmap)"
+  need sqlmap || warn "sqlmap missing (targeted SQL injection test on your app). → $(pkg_hint sqlmap)"
 
   : > "$PENTEST_MARKER"
   chmod 600 "$PENTEST_MARKER"
-  echo "✅ Outils pentest/appsec pour sécuriser tes apps (téléchargement vérifié) : gitleaks, semgrep, nuclei, httpx, ffuf, osv-scanner, testssl.sh, nikto ; nmap/sqlmap via le gestionnaire de paquets si absents."
+  echo "✅ Pentest/appsec tools to secure your apps (verified downloads): gitleaks, semgrep, nuclei, httpx, ffuf, osv-scanner, testssl.sh, nikto; nmap/sqlmap via the package manager if missing."
 }
 
 remove_pentest_tools() {
   rm -f "$PENTEST_MARKER"
 }
 
-# --- Trivy : binaire de release épinglé + checksums.txt, jamais le script contrib/install.sh de « main ». ---
+# --- Trivy: pinned release binary + checksums.txt, never the contrib/install.sh script from "main". ---
 install_trivy() {
-  local plat trivy_asset base sums want
-  if need trivy; then echo "✅ trivy déjà installé ($(command -v trivy))"; return 0; fi
+  local platform trivy_asset base sums want
+  if need trivy; then echo "✅ trivy already installed ($(command -v trivy))"; return 0; fi
   case "$(uname -s)-$(uname -m)" in
-    Linux-x86_64)              plat="Linux-64bit" ;;
-    Linux-aarch64|Linux-arm64) plat="Linux-ARM64" ;;
-    Darwin-x86_64)             plat="macOS-64bit" ;;
-    Darwin-arm64)              plat="macOS-ARM64" ;;
-    *) warn "trivy : plateforme non supportée ($(uname -s)-$(uname -m)) — installation annulée."; return 1 ;;
+    Linux-x86_64)              platform="Linux-64bit" ;;
+    Linux-aarch64|Linux-arm64) platform="Linux-ARM64" ;;
+    Darwin-x86_64)             platform="macOS-64bit" ;;
+    Darwin-arm64)              platform="macOS-ARM64" ;;
+    *) warn "trivy: unsupported platform ($(uname -s)-$(uname -m)) — installation cancelled."; return 1 ;;
   esac
-  trivy_asset="trivy_${OC_TRIVY_VERSION}_${plat}.tar.gz"
+  trivy_asset="trivy_${OC_TRIVY_VERSION}_${platform}.tar.gz"
   base="https://github.com/aquasecurity/trivy/releases/download/v${OC_TRIVY_VERSION}"
   sums="$TMP/trivy-checksums.txt"
   if ! curl -fsSL --retry 2 --connect-timeout 15 "$base/trivy_${OC_TRIVY_VERSION}_checksums.txt" -o "$sums"; then
-    warn "trivy $OC_TRIVY_VERSION : checksums.txt introuvable ($base/trivy_${OC_TRIVY_VERSION}_checksums.txt) — installation annulée."
+    warn "trivy $OC_TRIVY_VERSION: checksums.txt not found ($base/trivy_${OC_TRIVY_VERSION}_checksums.txt) — installation cancelled."
     return 1
   fi
   want="$(awk -v a="$trivy_asset" '$2==a{print $1; exit}' "$sums")"
   if ! [[ "$want" =~ ^[0-9a-f]{64}$ ]]; then
-    warn "trivy : asset \"$trivy_asset\" absent des sommes de la version v$OC_TRIVY_VERSION — installation annulée (version ou plateforme non publiée ?)."
+    warn "trivy: asset \"$trivy_asset\" missing from the checksums for version v$OC_TRIVY_VERSION — installation cancelled (version or platform not published?)."
     return 1
   fi
   fetch_verified "$base/$trivy_asset" "$TMP/trivy.tgz" "$want" "trivy $OC_TRIVY_VERSION" || return 1
   mkdir -p "$TMP/trivy-extract"
   if ! tar -xzf "$TMP/trivy.tgz" -C "$TMP/trivy-extract" trivy 2>/dev/null; then
-    warn "trivy : archive illisible ou binaire \"trivy\" absent."; return 1
+    warn "trivy: unreadable archive or binary \"trivy\" missing."; return 1
   fi
   if [ ! -f "$TMP/trivy-extract/trivy" ]; then
-    warn "trivy : binaire \"trivy\" absent de l'archive extraite."; return 1
+    warn "trivy: binary \"trivy\" missing from the extracted archive."; return 1
   fi
   install -m 0755 "$TMP/trivy-extract/trivy" "$BIN/trivy"
-  echo "✅ trivy $OC_TRIVY_VERSION installé dans $BIN (sha256 vérifié sur checksums.txt)"
+  echo "✅ trivy $OC_TRIVY_VERSION installed in $BIN (sha256 verified against checksums.txt)"
 }
 
-# --- Obscura : version épinglée ; sha256 pris dans l'API GitHub (digest de l'asset) ou dans un
-# fichier de sommes publié. Aucun asset « latest », aucune installation sans somme. ---
+# --- Obscura: pinned version; sha256 taken from the GitHub API (asset digest) or from a published
+# checksums file. No "latest" asset, no installation without a checksum. ---
 install_obscura() {
-  local plat rel obscura_asset obscura_asset_nr meta url sha sums_url sums want f src
+  local platform rel obscura_asset obscura_asset_nr meta url sha sums_url sums want f src
   case "$(uname -s)-$(uname -m)" in
-    Linux-x86_64)              plat="x86_64-linux" ;;
-    Linux-aarch64|Linux-arm64) plat="aarch64-linux" ;;
-    Darwin-arm64)              plat="aarch64-macos" ;;
-    Darwin-x86_64)             plat="x86_64-macos" ;;
-    *) warn "obscura : plateforme non supportée ($(uname -s)-$(uname -m)) (sous Windows, utilise WSL)."; return 1 ;;
+    Linux-x86_64)              platform="x86_64-linux" ;;
+    Linux-aarch64|Linux-arm64) platform="aarch64-linux" ;;
+    Darwin-arm64)              platform="aarch64-macos" ;;
+    Darwin-x86_64)             platform="x86_64-macos" ;;
+    *) warn "obscura: unsupported platform ($(uname -s)-$(uname -m)) (on Windows, use WSL)."; return 1 ;;
   esac
   rel="$TMP/obscura-release.json"
   if ! curl -fsSL --retry 2 --connect-timeout 15 "https://api.github.com/repos/h4ckf0r0day/obscura/releases/tags/v${OC_OBSCURA_VERSION}" -o "$rel"; then
-    warn "obscura $OC_OBSCURA_VERSION : release introuvable — installation annulée."
+    warn "obscura $OC_OBSCURA_VERSION: release not found — installation cancelled."
     return 1
   fi
-  obscura_asset="obscura-$plat.tar.gz"
-  obscura_asset_nr="obscura-$plat-no-render.tar.gz"
-  # shellcheck disable=SC2016  # script JS entre apostrophes : aucune expansion shell voulue
+  obscura_asset="obscura-$platform.tar.gz"
+  obscura_asset_nr="obscura-$platform-no-render.tar.gz"
+  # shellcheck disable=SC2016  # JS script in single quotes: no shell expansion intended
   mapfile -t meta < <(node -e '
 const fs = require("fs");
 const [file, ...names] = process.argv.slice(1);
@@ -528,7 +528,7 @@ const assets = JSON.parse(fs.readFileSync(file, "utf8")).assets || [];
 let found;
 for (const n of names) { found = assets.find((a) => a.name === n); if (found) break; }
 if (!found) {
-  console.error(`assets absents (${names.join(" ou ")}) ; disponibles : ${assets.map((a) => a.name).join(", ")}`);
+  console.error(`assets missing (${names.join(" or ")}); available: ${assets.map((a) => a.name).join(", ")}`);
   process.exit(1);
 }
 const sums = assets.find((a) => /checksums|sha256sums/i.test(a.name) && !/\.sig(st|store)?/i.test(a.name));
@@ -538,75 +538,75 @@ console.log(sums ? sums.browser_download_url : "");
 ' "$rel" "$obscura_asset" "$obscura_asset_nr")
   url="${meta[0]:-}"; sha="${meta[1]:-}"; sums_url="${meta[2]:-}"
   if [ -z "$url" ]; then
-    warn "obscura : asset \"$obscura_asset\" ou \"$obscura_asset_nr\" absent de la release v$OC_OBSCURA_VERSION — installation annulée."
+    warn "obscura: asset \"$obscura_asset\" or \"$obscura_asset_nr\" missing from release v$OC_OBSCURA_VERSION — installation cancelled."
     return 1
   fi
   if [ -z "$sha" ] && [ -n "$sums_url" ]; then
     sums="$TMP/obscura-checksums.txt"
     if ! curl -fsSL --retry 2 --connect-timeout 15 "$sums_url" -o "$sums"; then
-      warn "obscura : fichier de sommes introuvable ($sums_url) — installation annulée."
+      warn "obscura: checksums file not found ($sums_url) — installation cancelled."
       return 1
     fi
     want="$(awk -v a="$(basename "$url")" '$2==a{print $1; exit}' "$sums")"
     sha="$want"
   fi
   if ! [[ "$sha" =~ ^[0-9a-f]{64}$ ]]; then
-    warn "obscura : aucun sha256 publié pour \"$(basename "$url")\" — installation annulée."
+    warn "obscura: no sha256 published for \"$(basename "$url")\" — installation cancelled."
     return 1
   fi
   fetch_verified "$url" "$TMP/obscura.tgz" "$sha" "obscura $OC_OBSCURA_VERSION" || return 1
   mkdir -p "$TMP/obscura-extract"
   if ! tar -xzf "$TMP/obscura.tgz" -C "$TMP/obscura-extract"; then
-    warn "obscura : archive illisible."; return 1
+    warn "obscura: unreadable archive."; return 1
   fi
   for f in obscura obscura-worker; do
     src="$(find "$TMP/obscura-extract" -type f -name "$f" | head -n 1)"
     if [ -z "$src" ]; then
-      if [ "$f" = obscura ]; then warn "obscura : binaire \"obscura\" absent de l'archive."; return 1; fi
+      if [ "$f" = obscura ]; then warn "obscura: binary \"obscura\" missing from the archive."; return 1; fi
       continue
     fi
     if ! install -m 0755 "$src" "$BIN/.$f.new" || ! mv -f "$BIN/.$f.new" "$BIN/$f"; then
-      warn "obscura : installation de $f impossible."; return 1
+      warn "obscura: could not install $f."; return 1
     fi
   done
   if "$BIN/obscura" --help >/dev/null 2>&1; then
-    echo "✅ obscura $OC_OBSCURA_VERSION installé dans $BIN (sha256 vérifié)"
+    echo "✅ obscura $OC_OBSCURA_VERSION installed in $BIN (sha256 verified)"
   else
-    warn "obscura ne répond pas à --help : vérifie-le à la main (MCP obscura à désactiver sinon)."
+    warn "obscura does not answer --help: check it manually (disable the obscura MCP otherwise)."
   fi
 }
 
-# Mode bibliothèque pour scripts/test-supply-chain.mjs : charge les fonctions (fetch_verified,
-# get_uv, install_trivy, install_obscura) sans rien copier ni installer.
+# Library mode for scripts/test-supply-chain.mjs: loads the functions (fetch_verified,
+# get_uv, install_trivy, install_obscura) without copying or installing anything.
 if [ "${OC_INSTALL_LIB:-0}" = 1 ]; then
   [ "${BASH_SOURCE[0]}" != "$0" ] && return 0
   exit 0
 fi
 
-need node || die "Node.js est requis (validation, profil léger, MCP). → $(pkg_hint node)"
-need opencode || warn "opencode introuvable. Installe-le : curl -fsSL https://opencode.ai/install | bash"
+need node || die "Node.js is required (validation, lightweight profile, MCPs). → $(pkg_hint node)"
+need opencode || warn "opencode not found. Install it: curl -fsSL https://opencode.ai/install | bash"
 
-# 1. Validation du kit avant toute copie
-node "$HERE/scripts/validate-kit.mjs" || die "Le kit est invalide : rien n'a été installé."
+# 1. Validate the kit before copying anything
+node "$HERE/scripts/validate-kit.mjs" || die "The kit is invalid: nothing was installed."
 
-# 2. Sauvegarde + phase de configuration transactionnelle --------------------------------
-# Tout ce qui touche la configuration (copie, profil léger, module Android, modèles, MCP)
-# s'exécute dans une seule phase : au premier échec, l'état d'avant est restauré et le
-# repère .installed n'est pas écrit. Les outils réseau (section 5) restent best-effort.
+# 2. Backup + transactional configuration phase --------------------------------
+# Everything that touches the configuration (copy, lightweight profile, Android module, models, MCPs)
+# runs in a single phase: on the first failure, the previous state is restored and the
+# .installed marker is not written. Network tools (section 5) remain best-effort.
 
 MANIFEST="$DEST/.opencode-prerequisites.manifest"
 MCP_STATE="$HERE/scripts/lib/mcp-state.mjs"
 
-# secure_tree <dossier> : dossiers 700, fichiers 600, exécutables 700. Retire tous les
-# droits groupe/autres sans perdre le bit exécutable du propriétaire.
+# secure_tree <directory>: directories 700, files 600, executables 700. Removes all group/other
+# permissions without losing the owner's executable bit.
 secure_tree() {
   local d="$1"
   [ -d "$d" ] || return 0
   chmod -R go-rwx "$d" 2>/dev/null || true
 }
 
-# manifest_hash <manifeste> <chemin> : hash sha256 enregistré pour ce fichier, vide si
-# absent ou si le manifeste est au format historique (liste de chemins sans hash).
+# manifest_hash <manifest> <path>: sha256 hash recorded for this file, empty if
+# missing or if the manifest uses the legacy format (list of paths without hashes).
 manifest_hash() {
   local man="$1" want="$2" line h p
   [ -f "$man" ] || return 0
@@ -620,7 +620,7 @@ manifest_hash() {
   done < "$man"
 }
 
-# manifest_paths <manifeste> : chemins, quel que soit le format (hash<TAB>chemin ou chemin seul).
+# manifest_paths <manifest>: paths, whatever the format (hash<TAB>path or path alone).
 manifest_paths() {
   local man="$1" line p
   [ -f "$man" ] || return 0
@@ -633,18 +633,18 @@ manifest_paths() {
   done < "$man"
 }
 
-# manifest_has_hashes <manifeste> : vrai si au moins une empreinte sha256 est présente.
-# Un manifeste historique (chemins nus) ne permet pas de détecter les personnalisations.
+# manifest_has_hashes <manifest>: true if at least one sha256 fingerprint is present.
+# A legacy manifest (bare paths) cannot detect customizations.
 manifest_has_hashes() {
   [ -f "$1" ] && grep -Eq $'^[0-9a-f]{64}\t' "$1"
 }
 
-# is_modified <chemin relatif> : le fichier installé diffère-t-il du hash du manifeste ?
+# is_modified <relative path>: does the installed file differ from the manifest hash?
 is_modified() {
   local rel="$1" old cur
   old="$(manifest_hash "$MANIFEST" "$rel")"
-  [ -n "$old" ] || return 1          # pas de hash connu (premier passage/ancien manifeste)
-  [ -f "$DEST/$rel" ] || return 1    # absent : rien à préserver
+  [ -n "$old" ] || return 1          # no known hash (first run/legacy manifest)
+  [ -f "$DEST/$rel" ] || return 1    # missing: nothing to preserve
   cur="$(sha256_of "$DEST/$rel")"
   [ -n "$cur" ] && [ "$cur" != "$old" ]
 }
@@ -660,23 +660,23 @@ if [ -n "$(ls -A "$DEST" 2>/dev/null)" ]; then
   BAK="$(unique_path "$DEST.bak-$STAMP")"
   cp -a "$DEST" "$BAK"
   secure_tree "$BAK"
-  echo "💾 Sauvegarde : $BAK"
+  echo "💾 Backup: $BAK"
 fi
 
-# Sans empreintes fiables, impossible de distinguer un fichier du kit d'une personnalisation :
-# on prévient AVANT la copie au lieu de laisser croire à une préservation qui n'aura pas lieu.
-# La sauvegarde complète, elle, contient toujours la version de l'utilisateur.
+# Without reliable fingerprints, a kit file cannot be distinguished from a customization:
+# warn BEFORE copying instead of implying a preservation that will not happen.
+# The full backup always contains the user's version.
 MANIFEST_EXISTED=0
 if [ -f "$MANIFEST" ]; then MANIFEST_EXISTED=1; fi
 if [ -n "$BAK" ]; then
   if [ "$MANIFEST_EXISTED" = 1 ] && ! manifest_has_hashes "$MANIFEST"; then
-    warn "Ancien manifeste sans empreintes : impossible de détecter tes modifications ; sauvegarde complète dans $BAK. Vérifie opencode.jsonc et AGENTS.md, ou utilise --force-config."
+    warn "Legacy manifest without fingerprints: cannot detect your modifications; full backup in $BAK. Check opencode.jsonc and AGENTS.md, or use --force-config."
   elif [ "$MANIFEST_EXISTED" = 0 ]; then
-    warn "Configuration OpenCode préexistante sans manifeste : impossible de détecter tes modifications ; sauvegarde complète dans $BAK. Vérifie opencode.jsonc et AGENTS.md, ou utilise --force-config."
+    warn "Existing OpenCode configuration without a manifest: cannot detect your modifications; full backup in $BAK. Check opencode.jsonc and AGENTS.md, or use --force-config."
   fi
 fi
 
-# Sauvegarde des lanceurs que cette installation peut remplacer ou supprimer (rollback).
+# Back up the launchers this install may replace or remove (rollback).
 mkdir -p "$TMP/bin.saved"
 {
   for f in "$SRC"/bin/*; do [ -e "$f" ] && basename "$f"; done
@@ -694,7 +694,7 @@ while IFS= read -r name; do
   fi
 done < "$TMP/bin.names"
 
-# Faux adb du module Android (hors $DEST) : sauvegardé pour un rollback exact.
+# Fake adb from the Android module (outside $DEST): backed up for an exact rollback.
 ANDROID_ADB="$ANDROID_SHIM_ROOT/platform-tools/adb"
 ANDROID_ADB_EXISTED=0
 if [ -e "$ANDROID_ADB" ] || [ -L "$ANDROID_ADB" ]; then
@@ -707,7 +707,7 @@ restore_bin_state() {
   [ -f "$TMP/bin.state" ] || return 0
   while IFS=$'\t' read -r name state; do
     case "$state" in
-      present) cp -a "$TMP/bin.saved/$name" "$BIN/$name" 2>/dev/null || warn "Rollback : $BIN/$name n'a pas pu être restauré." ;;
+      present) cp -a "$TMP/bin.saved/$name" "$BIN/$name" 2>/dev/null || warn "Rollback: $BIN/$name could not be restored." ;;
       absent) rm -f "$BIN/$name" ;;
     esac
   done < "$TMP/bin.state"
@@ -717,7 +717,7 @@ restore_bin_state() {
 restore_android_adb() {
   if [ "$ANDROID_ADB_EXISTED" = 1 ]; then
     mkdir -p "$ANDROID_SHIM_ROOT/platform-tools"
-    cp -a "$TMP/adb.saved" "$ANDROID_ADB" 2>/dev/null || warn "Rollback : $ANDROID_ADB n'a pas pu être restauré."
+    cp -a "$TMP/adb.saved" "$ANDROID_ADB" 2>/dev/null || warn "Rollback: $ANDROID_ADB could not be restored."
   else
     rm -f "$ANDROID_ADB"
     rmdir "$ANDROID_SHIM_ROOT/platform-tools" "$ANDROID_SHIM_ROOT" 2>/dev/null || true
@@ -729,23 +729,23 @@ rollback_config() {
     rm -rf "$DEST"
     if cp -a "$BAK" "$DEST"; then
       secure_tree "$DEST"
-      warn "État précédent restauré depuis $BAK"
+      warn "Previous state restored from $BAK"
     else
-      warn "Rollback incomplet : la sauvegarde reste disponible dans $BAK."
+      warn "Incomplete rollback: the backup is still available in $BAK."
     fi
   elif [ "$DEST_EXISTED" = 1 ]; then
     find "$DEST" -mindepth 1 -delete 2>/dev/null || true
     chmod 700 "$DEST"
-    warn "Fichiers créés retirés ($DEST était vide avant l'installation)"
+    warn "Created files removed ($DEST was empty before installation)"
   else
     rm -rf "$DEST"
-    warn "Fichiers créés retirés ($DEST n'existait pas avant l'installation)"
+    warn "Created files removed ($DEST did not exist before installation)"
   fi
   restore_bin_state
   restore_android_adb
 }
 
-# Liste des fichiers du kit + détection des personnalisations AVANT toute copie.
+# List of kit files + customization detection BEFORE any copy.
 ( cd "$SRC" && find . -type f ! -path './bin/*' | sed 's|^\./||' | sort ) > "$TMP/new.paths"
 : > "$TMP/preserved.paths"
 mkdir -p "$TMP/preserved" "$TMP/kitfinal"
@@ -757,14 +757,14 @@ while IFS= read -r rel; do
   fi
 done < "$TMP/new.paths"
 
-# Tout ce bloc tourne sous set -e dans un sous-shell : la première erreur annule la phase.
+# This whole block runs under set -e in a subshell: the first error cancels the phase.
 config_phase() {
   local rel f oldh curh h mode
   cp -a "$SRC/." "$DEST/"
 
-  # Retire les fichiers que le kit installait avant et qui n'existent plus (ex. plugins/auto-compact.js),
-  # sans toucher aux fichiers personnels : on se base sur la liste des fichiers déjà installés par le kit.
-  # La liste « legacy » n'est appliquée qu'à partir de la 2e installation (manifeste présent).
+  # Remove files the kit used to install and that no longer exist (e.g. plugins/auto-compact.js),
+  # without touching personal files: based on the list of files already installed by the kit.
+  # The "legacy" list is only applied from the 2nd install onward (manifest present).
   : > "$TMP/old.paths"
   if [ -f "$MANIFEST" ]; then
     { manifest_paths "$MANIFEST"; printf "%s\n" "plugins/auto-compact.js" "plugins/guard.js" "plugins/notify.js"; } | sort -u > "$TMP/old.paths"
@@ -775,9 +775,9 @@ config_phase() {
     oldh="$(manifest_hash "$MANIFEST" "$f")"
     curh="$(sha256_of "$DEST/$f")"
     if [ -n "$oldh" ] && [ -n "$curh" ] && [ "$oldh" != "$curh" ]; then
-      warn "Fichier modifié conservé (n'existe plus dans le kit) : $f"
+      warn "Modified file preserved (no longer in the kit): $f"
     else
-      rm -f "$DEST/$f" && echo "🧹 Retiré (n'existe plus dans le kit) : $f"
+      rm -f "$DEST/$f" && echo "🧹 Removed (no longer in the kit): $f"
     fi
   done
 
@@ -786,12 +786,12 @@ config_phase() {
   mkdir -p "$DEST/templates"
   cp -a "$HERE/templates/." "$DEST/templates/"
 
-  # Profil léger
+  # Lightweight profile
   if [ "$LITE" = 1 ]; then
     node "$HERE/scripts/make-lite.mjs" "$DEST"
   fi
 
-  # Module Android (option) — idempotent dans les deux sens
+  # Android module (optional) — idempotent in both directions
   if [ "$ANDROID" = 1 ]; then
     install_android_addon
   else
@@ -799,17 +799,17 @@ config_phase() {
   fi
 
   if [ "$NOPENTEST" = 1 ]; then
-    remove_pentest_tools   # retire seulement le repère : les binaires déjà posés restent
+    remove_pentest_tools   # removes the marker only: binaries already installed stay
   fi
 
-  # Tes choix de modèles (oc-models set ...) survivent aux mises à jour
+  # Your model choices (oc-models set ...) survive updates
   if [ -f "$DEST/oc-models.json" ]; then
-    OPENCODE_CONFIG_DIR="$DEST" node "$DEST/libexec/oc-models.mjs" apply && echo "✅ Modèles personnalisés réappliqués ($DEST/oc-models.json)"
+    OPENCODE_CONFIG_DIR="$DEST" node "$DEST/libexec/oc-models.mjs" apply && echo "✅ Custom models reapplied ($DEST/oc-models.json)"
   fi
 
-  # État des MCP conditionnels : helper Node (portable macOS/Linux, pas de sed -i), idempotent,
-  # conserve les commentaires et vérifie que le fichier reste du JSONC valide.
-  mcp_state() {  # disable|enable <serveur> [raison] — code 2 : serveur absent du fichier
+  # State of conditional MCPs: Node helper (macOS/Linux portable, no sed -i), idempotent,
+  # preserves comments and checks that the file remains valid JSONC.
+  mcp_state() {  # disable|enable <server> [reason] — exit code 2: server missing from the file
     local action="$1" server="$2" why="${3:-}"
     case "$action" in
       disable) node "$MCP_STATE" disable "$DEST/opencode.jsonc" "$server" "$why" ;;
@@ -818,70 +818,70 @@ config_phase() {
     esac
   }
 
-  # Kubernetes : le serveur MCP quitte au démarrage s'il n'y a aucun contexte kubectl
+  # Kubernetes: the MCP server exits at startup if there is no kubectl context
   if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ]; then
     kc="${KUBECONFIG:-$HOME/.kube/config}"
     if grep -qs '^current-context: *[^ ]' "${kc%%:*}"; then
       if mcp_state enable kubernetes; then
-        echo "✅ MCP kubernetes activé (contexte kubectl détecté)"
+        echo "✅ kubernetes MCP enabled (kubectl context detected)"
       fi
-    elif mcp_state disable kubernetes "aucun contexte kubectl : retire cette ligne quand tu auras un cluster"; then
-      echo "ℹ️  MCP kubernetes désactivé (aucun contexte kubectl dans ${kc%%:*}) : retire la ligne \"disabled\" de opencode.jsonc quand tu auras un cluster."
+    elif mcp_state disable kubernetes "no kubectl context: remove this line once you have a cluster"; then
+      echo "ℹ️  kubernetes MCP disabled (no kubectl context in ${kc%%:*}): remove the \"disabled\" line from opencode.jsonc once you have a cluster."
     else
-      warn "MCP kubernetes : opencode.jsonc n'a pas pu être mis à jour (bloc introuvable ou JSONC invalide)."
+      warn "kubernetes MCP: opencode.jsonc could not be updated (block missing or invalid JSONC)."
     fi
   fi
 
-  # REA exige Node >= 26.12.1 (ou 24.22.1 / 22.23.4) ; sinon on le désactive proprement
+  # REA requires Node >= 26.12.1 (or 24.22.1 / 22.23.4); otherwise disable it cleanly
   if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"rea": {' "$DEST/opencode.jsonc"; then
     if rea_msg="$("$BIN/oc-rea-mcp" --check 2>&1)"; then
       if mcp_state enable rea; then
-        echo "✅ MCP rea (REA 6.8.0) activé : Node ${OC_REA_NODE_VERSION:-$(node -p 'process.versions.node')} convient"
+        echo "✅ rea MCP (REA 6.8.0) enabled: Node ${OC_REA_NODE_VERSION:-$(node -p 'process.versions.node')} is suitable"
       fi
     else
-      if mcp_state disable rea "Node trop ancien pour REA : retire cette ligne après avoir mis Node à jour"; then
-        echo "ℹ️  MCP rea désactivé : $(printf '%s' "$rea_msg" | head -n 1)"
+      if mcp_state disable rea "Node too old for REA: remove this line after updating Node"; then
+        echo "ℹ️  rea MCP disabled: $(printf '%s' "$rea_msg" | head -n 1)"
       fi
-      echo "    Mets Node à jour (mise use -g node@26.12.1) puis relance ./install.sh --no-tools : l'agent reverse-engineer utilisera la CLI en attendant."
+      echo "    Update Node (mise use -g node@26.12.1) then rerun ./install.sh --no-tools: the reverse-engineer agent will use the CLI meanwhile."
     fi
   fi
 
-  # MCP mobile : actif seulement avec le module Android (et Podman)
+  # mobile MCP: active only with the Android module (and Podman)
   if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"mobile": {' "$DEST/opencode.jsonc"; then
     if [ "$ANDROID" = 1 ] && "$BIN/oc-mobile-mcp" --check >/dev/null 2>&1; then
       if mcp_state enable mobile; then
-        echo "✅ MCP mobile (mobile-mcp 1.0.15) activé (adb de l'émulateur Podman)"
+        echo "✅ mobile MCP (mobile-mcp 1.0.15) enabled (adb from the Podman emulator)"
       fi
     else
-      if mcp_state disable mobile "module Android non installé (./install.sh --android) ou Podman absent"; then :; fi
-      if [ "$ANDROID" = 1 ]; then warn "MCP mobile désactivé : Podman introuvable. → $(pkg_hint podman)"; fi
+      if mcp_state disable mobile "Android module not installed (./install.sh --android) or Podman missing"; then :; fi
+      if [ "$ANDROID" = 1 ]; then warn "mobile MCP disabled: Podman not found. → $(pkg_hint podman)"; fi
     fi
   fi
 
-  # MCP semgrep : exige uv (uvx) ou pipx ; sinon désactivé proprement.
-  # --check est une VRAIE poignée de main MCP (elle peut télécharger ~50 Mo au premier lancement) :
-  # réservée à l'installation d'outils. Avec --no-tools, --check-quick constate seulement la présence
-  # de uvx/pipx, sans lancer de processus ni toucher au réseau.
+  # semgrep MCP: requires uv (uvx) or pipx; otherwise disabled cleanly.
+  # --check is a REAL MCP handshake (it may download ~50 MB on first run):
+  # reserved for tools installation. With --no-tools, --check-quick only checks for
+  # uvx/pipx without starting a process or touching the network.
   if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"semgrep": {' "$DEST/opencode.jsonc"; then
     if [ "$TOOLS" = 1 ]; then semgrep_check=--check; else semgrep_check=--check-quick; fi
     if "$BIN/oc-semgrep-mcp" "$semgrep_check" >/dev/null 2>&1; then
       if mcp_state enable semgrep; then
         if [ "$TOOLS" = 1 ]; then
-          echo "✅ MCP semgrep activé (serveur vérifié au démarrage)"
+          echo "✅ semgrep MCP enabled (server verified at startup)"
         else
-          echo "✅ MCP semgrep activé (uvx/pipx détecté ; démarrage vérifié à la prochaine installation complète)"
+          echo "✅ semgrep MCP enabled (uvx/pipx detected; startup verified on the next full install)"
         fi
       fi
     else
-      if mcp_state disable semgrep "uv (uvx) et pipx absents : retire cette ligne après avoir installé un des deux"; then
-        echo "ℹ️  MCP semgrep désactivé : installe uv (curl -LsSf https://astral.sh/uv/install.sh | sh), déjà requis pour MemPalace."
+      if mcp_state disable semgrep "uv (uvx) and pipx missing: remove this line after installing either one"; then
+        echo "ℹ️  semgrep MCP disabled: install uv (curl -LsSf https://astral.sh/uv/install.sh | sh), already required for MemPalace."
       fi
     fi
   fi
 
-  # Personnalisations : on garde la version de l'utilisateur et on dépose la version du kit
-  # finale (après profil léger / Android / MCP) en .new. Le manifeste enregistre cette version
-  # du kit, pas celle de l'utilisateur, pour continuer à détecter ses modifications.
+  # Customizations: keep the user's version and write the final kit version
+  # (after lightweight profile / Android / MCPs) to .new. The manifest records this kit
+  # version, not the user's, so their changes can still be detected.
   while IFS= read -r rel; do
     [ -n "$rel" ] || continue
     mkdir -p "$TMP/kitfinal/$(dirname "$rel")"
@@ -890,13 +890,13 @@ config_phase() {
     if [ -f "$TMP/kitfinal/$rel" ]; then
       mode=0600; [ -x "$TMP/kitfinal/$rel" ] && mode=0700
       install -m "$mode" "$TMP/kitfinal/$rel" "$DEST/$rel.new"
-      warn "Fichier modifié conservé, nouvelle version dans $rel.new"
+      warn "Modified file preserved, new version in $rel.new"
     else
-      warn "Fichier modifié conservé : aucune version du kit dans ce profil pour $rel"
+      warn "Modified file preserved: no kit version in this profile for $rel"
     fi
   done < "$TMP/preserved.paths"
 
-  # Manifeste : hash de l'état final installé (ou de la version du kit pour un fichier préservé).
+  # Manifest: hash of the final installed state (or of the kit version for a preserved file).
   : > "$MANIFEST"
   while IFS= read -r rel; do
     if grep -Fxq "$rel" "$TMP/preserved.paths"; then
@@ -918,52 +918,52 @@ set +e
 CFG_RC=$?
 set -e
 if [ "$CFG_RC" -ne 0 ]; then
-  warn "Phase de configuration en échec (code $CFG_RC) : aucune modification partielle ne sera conservée."
+  warn "Configuration phase failed (code $CFG_RC): no partial changes will be kept."
   rollback_config
-  die "Installation annulée : aucun changement partiel n'a été conservé."
+  die "Installation cancelled: no partial changes were kept."
 fi
 
-# La configuration est complète : c'est ce que vérifie doctor. Le repère est écrit ici,
-# avant les outils : ceux-ci sont best-effort et ne conditionnent pas l'installation de la config.
+# The configuration is complete: this is what doctor checks. The marker is written here,
+# before the tools: those are best-effort and do not condition the config installation.
 : > "$DEST/.opencode-prerequisites.installed"
 chmod 600 "$DEST/.opencode-prerequisites.installed"
 secure_tree "$DEST"
-echo "✅ Config installée dans $DEST ; lanceurs (agent-wt, oc-new-rust, oc-models, oc-playwright-mcp, oc-terraform-mcp, oc-rea-mcp, oc-semgrep-mcp, oc-versions) dans $BIN"
+echo "✅ Config installed in $DEST; launchers (agent-wt, oc-new-rust, oc-new-android, oc-models, oc-deps, oc-playwright-mcp, oc-terraform-mcp, oc-rea-mcp, oc-semgrep-mcp, oc-versions) in $BIN"
 
-# 4. Outils pentest/appsec (option --pentest) — best-effort, comme les autres outils.
+# 4. Pentest/appsec tools (--pentest option) — best-effort, like the other tools.
 if [ "$PENTEST" = 1 ]; then
-  install_pentest_tools || warn "Outils pentest : installation partielle (voir les messages ci-dessus)."
+  install_pentest_tools || warn "Pentest tools: partial installation (see messages above)."
 fi
 
-# 5. Outils (profil complet seulement)
+# 5. Tools (full profile only)
 if [ "$TOOLS" = 1 ]; then
-  need npx || die "npx (Node.js) est requis pour context7/playwright."
+  need npx || die "npx (Node.js) is required for context7/playwright."
   SYSBROWSER=""
   for c in chromium chromium-browser google-chrome-stable google-chrome brave-browser brave; do
     if need "$c"; then SYSBROWSER="$(command -v "$c")"; break; fi
   done
   if [ -n "$SYSBROWSER" ]; then
-    echo "✅ Navigateur système détecté ($SYSBROWSER) : le MCP Playwright l'utilisera, pas de téléchargement."
+    echo "✅ System browser detected ($SYSBROWSER): the Playwright MCP will use it, no download needed."
   else
-    echo "⬇️  Playwright : installation de Chromium (aucun navigateur système trouvé)..."
-    npx -y "playwright@$OC_PLAYWRIGHT_VERSION" install chromium || warn "Chromium non installé. Sur ${DISTRO} : $(pkg_hint chromium)"
+    echo "⬇️  Playwright: installing Chromium (no system browser found)..."
+    npx -y "playwright@$OC_PLAYWRIGHT_VERSION" install chromium || warn "Chromium not installed. On ${DISTRO}: $(pkg_hint chromium)"
     case "$PM" in
-      apt) echo "   Si Chromium ne démarre pas (bibliothèques manquantes) : sudo npx playwright install-deps chromium" ;;
-      pacman|dnf) echo "   Playwright ne supporte pas officiellement ${DISTRO} : le plus simple est le Chromium du système → $(pkg_hint chromium)" ;;
+      apt) echo "   If Chromium does not start (missing libraries): sudo npx playwright install-deps chromium" ;;
+      pacman|dnf) echo "   Playwright does not officially support ${DISTRO}: the simplest option is the system Chromium → $(pkg_hint chromium)" ;;
     esac
   fi
 
   echo "⬇️  Obscura $OC_OBSCURA_VERSION..."
-  install_obscura || warn "Obscura non installé (téléchargement ou vérification impossible)."
+  install_obscura || warn "Obscura not installed (download or verification failed)."
 
   echo "⬇️  Trivy $OC_TRIVY_VERSION..."
-  install_trivy || warn "Trivy non installé : https://trivy.dev/latest/getting-started/installation/"
+  install_trivy || warn "Trivy not installed: https://trivy.dev/latest/getting-started/installation/"
   if PATH="$BIN:$PATH" command -v trivy >/dev/null 2>&1; then
     if ! PATH="$BIN:$PATH" trivy plugin install "github.com/aquasecurity/trivy-plugin-mcp@$OC_TRIVY_MCP_VERSION"; then
-      warn "plugin Trivy MCP $OC_TRIVY_MCP_VERSION non installé : relance « trivy plugin install » à la main."
+      warn "Trivy MCP plugin $OC_TRIVY_MCP_VERSION not installed: rerun \"trivy plugin install\" manually."
     fi
   else
-    warn "plugin Trivy MCP non installé : trivy absent."
+    warn "Trivy MCP plugin not installed: trivy missing."
   fi
 
   echo "⬇️  MemPalace..."
@@ -972,40 +972,40 @@ if [ "$TOOLS" = 1 ]; then
   fi
 fi
 
-# --no-tools : copie la config seulement, aucun téléchargement/installation (ni binaires pentest,
-# ni plugin MemPalace). --memory-only reste le moyen explicite de (ré)installer MemPalace.
+# --no-tools: copy the config only, no download/installation (no pentest binaries,
+# no MemPalace plugin). --memory-only remains the explicit way to (re)install MemPalace.
 
-echo "ℹ️  Système : $DISTRO (gestionnaire : ${PM:-aucun reconnu})"
+echo "ℹ️  System: $DISTRO (package manager: ${PM:-none recognized})"
 if ! need docker && ! need podman; then
-  warn "Ni Docker ni Podman : requis pour le MCP terraform (ou mets \"enabled\": false). → $(pkg_hint docker)"
+  warn "Neither Docker nor Podman: required for the terraform MCP (or set \"enabled\": false). → $(pkg_hint docker)"
 fi
-need gh || warn "gh (GitHub CLI) introuvable : requis pour /pr et la recherche GitHub. → $(pkg_hint gh)"
-[ "$BIN" = "$HOME/.local/bin" ] || warn "Les MCP playwright et terraform pointent vers \$HOME/.local/bin (lanceurs oc-*) : copie-les depuis $BIN ou garde le dossier par défaut."
-case ":$PATH:" in *":$BIN:"*) ;; *) warn "Ajoute $BIN à ton PATH : export PATH=\"$BIN:\$PATH\"" ;; esac
+need gh || warn "gh (GitHub CLI) not found: required for /pr and GitHub search. → $(pkg_hint gh)"
+[ "$BIN" = "$HOME/.local/bin" ] || warn "The playwright and terraform MCPs point to \$HOME/.local/bin (oc-* launchers): copy them from $BIN or keep the default directory."
+case ":$PATH:" in *":$BIN:"*) ;; *) warn "Add $BIN to your PATH: export PATH=\"$BIN:\$PATH\"" ;; esac
 
-# Variables d'environnement dans le shell (opt-in). Bloc balisé, remplacé à chaque exécution (pas de doublon).
-# - ~/.local/bin est ajouté EN FIN de PATH, jamais en tête (en tête, il peut faire boucler les shims mise/asdf).
-# - Le bloc est écrit TOUT EN HAUT de ~/.bashrc (avant le « return » des shells non interactifs) et dans ~/.zshenv pour zsh
-#   (lu par tous les zsh, contrairement à ~/.zshrc) : il est ainsi visible des commandes lancées sans terminal.
-# - Un service lancé par systemd ne lit aucun de ces fichiers : le plugin MemPalace fixe donc lui-même son Python.
-strip_env_block() {  # fichier → stdout, sans notre bloc (balisé, ou ancien format sans balises)
+# Shell environment variables (opt-in). Tagged block, replaced on every run (no duplicates).
+# - ~/.local/bin is added at the END of PATH, never first (first, it can make mise/asdf shims loop).
+# - The block is written at the TOP of ~/.bashrc (before the "return" of non-interactive shells) and in ~/.zshenv for zsh
+#   (read by all zsh, unlike ~/.zshrc): it is thus visible to commands started without a terminal.
+# - A systemd service reads none of these files: the MemPalace plugin therefore sets its Python itself.
+strip_env_block() {  # file → stdout, without our block (tagged, or old untagged format)
   awk '
     /^# >>> opencode-prerequisites >>>$/ { skip=1; next }
     /^# <<< opencode-prerequisites <<<$/ { skip=0; afterend=1; next }
     skip==1 { next }
-    afterend==1 && /^$/ { afterend=0; next }   # la ligne vide que le bloc ajoute après lui
+    afterend==1 && /^$/ { afterend=0; next }   # the empty line the block adds after itself
     /^# opencode-prerequisites$/ { old=1; next }
     old==1 && /^export (PATH|MEMPALACE_ADAPTER_PYTHON)=/ { next }
     { old=0; afterend=0; print }
   ' "$1"
 }
-write_env_block() {  # fichier
+write_env_block() {  # file
   local rc="$1" first head_line=""
   if [ -e "$rc" ] && [ ! -e "$rc.bak-opencode-prerequisites" ]; then cp -p "$rc" "$rc.bak-opencode-prerequisites"; fi
   if [ -f "$rc" ]; then strip_env_block "$rc" > "$TMP/rc.rest"; else : > "$TMP/rc.rest"; fi
   first="$(head -n 1 "$TMP/rc.rest")"
   case "$first" in
-    "#!"*) head_line="$first"; tail -n +2 "$TMP/rc.rest" > "$TMP/rc.tail" ;;   # un éventuel shebang reste en première ligne
+    "#!"*) head_line="$first"; tail -n +2 "$TMP/rc.rest" > "$TMP/rc.tail" ;;   # a shebang, if any, stays on the first line
     *) cp "$TMP/rc.rest" "$TMP/rc.tail" ;;
   esac
   {
@@ -1017,47 +1017,47 @@ write_env_block() {  # fichier
     echo ""
     cat "$TMP/rc.tail"
   } > "$TMP/rc.out"
-  cat "$TMP/rc.out" > "$rc"   # cat > : conserve les droits et les liens symboliques (dotfiles)
-  echo "✅ Bloc PATH (en fin) + MEMPALACE_ADAPTER_PYTHON écrit en haut de $rc"
+  cat "$TMP/rc.out" > "$rc"   # cat >: preserves permissions and symlinks (dotfiles)
+  echo "✅ PATH block (at the end) + MEMPALACE_ADAPTER_PYTHON written at the top of $rc"
 }
 if [ "$SHELLENV" = 1 ]; then
   if [ -f "$HOME/.bashrc" ]; then write_env_block "$HOME/.bashrc"; fi
   if [ -f "$HOME/.zshrc" ] || [ -f "$HOME/.zshenv" ]; then
     write_env_block "$HOME/.zshenv"
-    # nettoie d'anciens blocs laissés dans ~/.zshrc (non lu hors terminal interactif)
+    # clean up old blocks left in ~/.zshrc (not read outside interactive terminals)
     if [ -f "$HOME/.zshrc" ] && grep -q 'opencode-prerequisites' "$HOME/.zshrc"; then
       strip_env_block "$HOME/.zshrc" > "$TMP/zshrc.clean" && cat "$TMP/zshrc.clean" > "$HOME/.zshrc"
     fi
   fi
-  echo "   (ouvre un nouveau terminal ; sauvegardes : <fichier>.bak-opencode-prerequisites)"
+  echo "   (open a new terminal; backups: <file>.bak-opencode-prerequisites)"
 fi
 
-# 5. Skills de Matt Pocock (optionnel)
+# 5. Matt Pocock skills (optional)
 if [ "$MATT" = 1 ]; then
-  npx -y "skills@$OC_SKILLS_VERSION" add mattpocock/skills -a opencode || warn "Échec : voir le README du dépôt mattpocock/skills."
+  npx -y "skills@$OC_SKILLS_VERSION" add mattpocock/skills -a opencode || warn "Failed: see the README of the mattpocock/skills repository."
 fi
 
 if [ "$ANDROID" = 1 ]; then
   cat <<MSG
 
-Module Android — dernières étapes :
-  1. Podman rootless : oc-android doctor
-  2. Construire l'image (plusieurs Go, 10 à 20 min ; tu acceptes les licences du SDK Android) :
+Android module — final steps:
+  1. Rootless Podman: oc-android doctor
+  2. Build the image (several GB, 10 to 20 min; you accept the Android SDK licenses):
        oc-android build-image --accept-licenses
-  3. Émulateur (exige /dev/kvm ; groupe kvm) : depuis ton projet, oc-android emulator start --wait
+  3. Emulator (requires /dev/kvm; kvm group): from your project, oc-android emulator start --wait
 MSG
 fi
 
 cat <<'MSG'
 
-Si OpenCode tourne déjà (y compris son service en arrière-plan), REDÉMARRE-LE : un serveur déjà lancé ne relit
-ni les plugins ni l'environnement (d'après ton retour : opencode service restart ; sinon ferme toutes les fenêtres OpenCode).
+If OpenCode is already running (including its background service), RESTART IT: an already running server
+does not reload plugins or the environment (per your feedback: opencode service restart; otherwise close all OpenCode windows).
 
-Étapes suivantes :
-  1. Lance `opencode`, puis /connect → OpenCode Go → colle ta clé (console OpenCode).
-     Console › Settings › Privacy › Regions : choisis « Global » (requis pour les modèles DeepSeek).
-  2. ./doctor.sh   (vérifie la config, les outils et les MCP ; /models pour les IDs de modèles)
-  3. (optionnel) export CONTEXT7_API_KEY=...   # clé gratuite sur context7.com
-  4. Nouveau projet Rust : oc-new-rust <nom>.  Projet existant : skill project-onboarding.
-  5. Annuler : ./uninstall.sh
+Next steps:
+  1. Run `opencode`, then /connect → OpenCode Go → paste your key (OpenCode console).
+     Console › Settings › Privacy › Regions: choose "Global" (required for DeepSeek models).
+  2. ./doctor.sh   (checks the config, tools and MCPs; /models for model IDs)
+  3. (optional) export CONTEXT7_API_KEY=...   # free key at context7.com
+  4. New Rust project: oc-new-rust <name>.  Existing project: project-onboarding skill.
+  5. Undo: ./uninstall.sh
 MSG

@@ -1,27 +1,27 @@
 #!/usr/bin/env node
-// État des serveurs MCP dans opencode.jsonc, sans sed : portable (Linux/macOS), idempotent,
-// et respectueux des commentaires / de la mise en forme du fichier.
+// State of the MCP servers in opencode.jsonc, without sed: portable (Linux/macOS), idempotent,
+// and respectful of the file's comments and formatting.
 //
-//   node scripts/lib/mcp-state.mjs disable <opencode.jsonc> <serveur> [raison]
-//   node scripts/lib/mcp-state.mjs enable  <opencode.jsonc> <serveur>
+//   node scripts/lib/mcp-state.mjs disable <opencode.jsonc> <server> [reason]
+//   node scripts/lib/mcp-state.mjs enable  <opencode.jsonc> <server>
 //
-// disable : ajoute « "disabled": true, // install.sh: <raison> » en tête du bloc (jamais deux fois).
-// enable  : retire la ligne « "disabled": true » (et son commentaire) du bloc.
-// Codes de sortie : 0 = fait (ou déjà dans l'état demandé), 1 = erreur, 2 = serveur absent du fichier.
+// disable: adds `"disabled": true, // install.sh: <reason>` at the top of the block (never twice).
+// enable:  removes the `"disabled": true` line (and its comment) from the block.
+// Exit codes: 0 = done (or already in the requested state), 1 = error, 2 = server absent from the file.
 import fs from "node:fs"
 import { parseJsonc } from "./jsonc.mjs"
 
 const [action, file, name, ...reasonParts] = process.argv.slice(2)
-const usage = "usage : node scripts/lib/mcp-state.mjs <disable|enable> <opencode.jsonc> <serveur> [raison]"
+const usage = "usage: node scripts/lib/mcp-state.mjs <disable|enable> <opencode.jsonc> <server> [reason]"
 if (!["disable", "enable"].includes(action) || !file || !name) {
   console.error(usage)
   process.exit(1)
 }
-const reason = (reasonParts.join(" ") || "désactivé par install.sh").replace(/\s+/g, " ").trim()
+const reason = (reasonParts.join(" ") || "disabled by install.sh").replace(/\s+/g, " ").trim()
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
-// Compte les accolades d'une ligne JSONC en ignorant chaînes, // et /* */ (état conservé entre lignes).
+// Counts braces on a JSONC line, ignoring strings, // and /* */ (state kept across lines).
 function braceDelta(line, st) {
   let delta = 0, inStr = false
   for (let i = 0; i < line.length; i++) {
@@ -37,7 +37,7 @@ function braceDelta(line, st) {
   return delta
 }
 
-// Retourne { open, close, indent } (index de lignes) ou { error } ou null si le serveur est absent.
+// Returns { open, close, indent } (line indexes) or { error } or null if the server is absent.
 function findBlock(lines, server) {
   const openRe = new RegExp(`^(\\s*)"${escapeRe(server)}"\\s*:\\s*\\{`)
   for (let i = 0; i < lines.length; i++) {
@@ -45,13 +45,13 @@ function findBlock(lines, server) {
     if (!m) continue
     const st = { block: false }
     let depth = braceDelta(lines[i], st)
-    if (depth <= 0) return { error: `bloc "${server}" sur une seule ligne : édition non gérée` }
+    if (depth <= 0) return { error: `block "${server}" is on a single line: unsupported edit` }
     for (let j = i + 1; j < lines.length; j++) {
       depth += braceDelta(lines[j], st)
       if (depth === 0) return { open: i, close: j, indent: m[1] }
-      if (depth < 0) return { error: `accolades déséquilibrées dans le bloc "${server}"` }
+      if (depth < 0) return { error: `unbalanced braces in block "${server}"` }
     }
-    return { error: `bloc "${server}" non terminé` }
+    return { error: `block "${server}" not terminated` }
   }
   return null
 }
@@ -63,11 +63,11 @@ if (withNewline) lines.pop()
 
 const block = findBlock(lines, name)
 if (block === null) {
-  console.error(`mcp-state : serveur "${name}" absent de ${file}`)
+  console.error(`mcp-state: server "${name}" not found in ${file}`)
   process.exit(2)
 }
 if (block.error) {
-  console.error(`mcp-state : ${block.error}`)
+  console.error(`mcp-state: ${block.error}`)
   process.exit(1)
 }
 
@@ -106,7 +106,7 @@ const next = lines.join("\n") + (withNewline ? "\n" : "")
 try {
   parseJsonc(next)
 } catch (e) {
-  console.error(`mcp-state : le résultat ne serait plus du JSONC valide (${e.message}) — fichier inchangé`)
+  console.error(`mcp-state: the result would no longer be valid JSONC (${e.message}) — file unchanged`)
   process.exit(1)
 }
 if (changed) fs.writeFileSync(file, next)

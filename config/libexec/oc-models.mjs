@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// oc-models : choisir le modèle de chaque agent, sans éditer de fichier à la main.
-// Tes choix sont gardés dans <config>/oc-models.json et ré-appliqués à chaque ./install.sh.
+// oc-models: choose each agent's model without editing files by hand.
+// Your choices are stored in <config>/oc-models.json and reapplied on every ./install.sh.
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -19,18 +19,18 @@ const writeStore = (s) => {
   fs.writeFileSync(STORE, JSON.stringify(s, null, 2) + "\n")
 }
 const agentNames = () => (fs.existsSync(AGENTS) ? fs.readdirSync(AGENTS).filter((f) => f.endsWith(".md")).map((f) => f.slice(0, -3)).sort() : [])
-const normalize = (id) => { const m = id.includes("/") ? id : `${PROVIDER}/${id}`; if (!ID_RE.test(m)) die(`Identifiant de modèle invalide : "${id}" (attendu : fournisseur/modèle, ex. ${PROVIDER}/deepseek-v4.1-flash)`); return m }
+const normalize = (id) => { const m = id.includes("/") ? id : `${PROVIDER}/${id}`; if (!ID_RE.test(m)) die(`Invalid model identifier: "${id}" (expected: provider/model, e.g. ${PROVIDER}/deepseek-v4.1-flash)`); return m }
 
-// --- lecture / écriture des fichiers de config ---
+// --- reading / writing config files ---
 function cfgValue(key) {
   if (!fs.existsSync(CFG)) return undefined
   return fs.readFileSync(CFG, "utf8").match(new RegExp(`^\\s*"${key}"\\s*:\\s*"([^"]*)"`, "m"))?.[1]
 }
 function setCfgValue(key, value) {
-  if (!fs.existsSync(CFG)) die(`${CFG} introuvable : lance ./install.sh d'abord`)
+  if (!fs.existsSync(CFG)) die(`${CFG} not found: run ./install.sh first`)
   const t = fs.readFileSync(CFG, "utf8")
   const re = new RegExp(`^(\\s*"${key}"\\s*:\\s*)"[^"]*"`, "m")
-  if (!re.test(t)) die(`clé "${key}" introuvable dans ${CFG}`)
+  if (!re.test(t)) die(`key "${key}" not found in ${CFG}`)
   fs.writeFileSync(CFG, t.replace(re, `$1"${value}"`))
 }
 function agentModel(name) {
@@ -42,13 +42,13 @@ function setAgentModel(name, model) {
   const f = path.join(AGENTS, `${name}.md`)
   const t = fs.readFileSync(f, "utf8")
   const m = t.match(/^---\n([\s\S]*?)\n---\n/)
-  if (!m) die(`${f} : frontmatter introuvable`)
+  if (!m) die(`${f}: frontmatter not found`)
   const lines = m[1].split("\n").filter((l) => !/^model:\s*/.test(l))
   if (model) { const i = lines.findIndex((l) => /^mode:/.test(l)); lines.splice(i >= 0 ? i + 1 : lines.length, 0, `model: ${model}`) }
   fs.writeFileSync(f, t.replace(m[0], `---\n${lines.join("\n")}\n---\n`))
 }
 
-// --- vérification (facultative) auprès de la liste en ligne ---
+// --- optional check against the online list ---
 async function knownModels() {
   if (process.env.OC_MODELS_OFFLINE) return null
   try {
@@ -60,39 +60,39 @@ async function knownModels() {
 async function warnIfUnknown(model) {
   if (!model.startsWith(`${PROVIDER}/`)) return
   const known = await knownModels()
-  if (known && !known.has(model)) console.log(`⚠️  ${model} n'apparaît pas dans la liste OpenCode Go (vérifie avec : oc-models available). Appliqué quand même.`)
+  if (known && !known.has(model)) console.log(`⚠️  ${model} is not in the OpenCode Go list (check with: oc-models available). Applied anyway.`)
 }
 
-// --- application de oc-models.json sur les fichiers installés ---
+// --- applying oc-models.json to the installed files ---
 function apply() {
   const s = readStore()
   const names = agentNames()
   if (s.default) setCfgValue("model", s.default)
   if (s.small) setCfgValue("small_model", s.small)
   for (const [agent, model] of Object.entries(s.agents ?? {})) {
-    if (!names.includes(agent)) { console.log(`ℹ️  agent "${agent}" absent de cette installation (profil léger ?) : réglage ignoré`); continue }
+    if (!names.includes(agent)) { console.log(`ℹ️  agent "${agent}" not in this installation (lite profile?): setting ignored`); continue }
     setAgentModel(agent, model)
   }
 }
 
-// --- commandes ---
+// --- commands ---
 function list() {
-  const def = cfgValue("model") ?? "(non défini)"
-  const small = cfgValue("small_model") ?? "(non défini)"
+  const def = cfgValue("model") ?? "(not set)"
+  const small = cfgValue("small_model") ?? "(not set)"
   const s = readStore()
-  console.log(`Modèle par défaut : ${def}${s.default ? "  (réglé par toi)" : ""}`)
-  console.log(`Petit modèle      : ${small}${s.small ? "  (réglé par toi)" : ""}\n`)
+  console.log(`Default model: ${def}${s.default ? "  (set by you)" : ""}`)
+  console.log(`Small model  : ${small}${s.small ? "  (set by you)" : ""}\n`)
   const names = agentNames()
   const w = Math.max(...names.map((n) => n.length), 5)
   for (const n of names) {
     const own = agentModel(n)
-    console.log(`  ${n.padEnd(w)}  ${own ?? def}${own ? "   ◀ modèle propre" : ""}`)
+    console.log(`  ${n.padEnd(w)}  ${own ?? def}${own ? "   ◀ own model" : ""}`)
   }
-  console.log(`\nChanger : oc-models set <agent|default|small|all> <modèle>   ·   Annuler : oc-models reset <agent|all>`)
+  console.log(`\nChange: oc-models set <agent|default|small|all> <model>   ·   Undo: oc-models reset <agent|all>`)
 }
 
 async function set(target, raw) {
-  if (!target || !raw) die("usage : oc-models set <agent|default|small|all> <modèle>")
+  if (!target || !raw) die("usage: oc-models set <agent|default|small|all> <model>")
   const model = normalize(raw)
   await warnIfUnknown(model)
   const s = readStore(); s.agents ??= {}
@@ -100,30 +100,30 @@ async function set(target, raw) {
   else if (target === "small") { s.small = model }
   else if (target === "all") { s.default = model; s.small = model; s.agents = {}; for (const n of agentNames()) setAgentModel(n, null) }
   else {
-    if (!agentNames().includes(target)) die(`agent inconnu : "${target}". Agents : ${agentNames().join(", ")}`)
+    if (!agentNames().includes(target)) die(`unknown agent: "${target}". Agents: ${agentNames().join(", ")}`)
     s.agents[target] = model
   }
   writeStore(s); apply()
-  console.log(`✅ ${target} → ${model}${target === "all" ? " (tous les agents, plus aucun modèle propre)" : ""}`)
-  console.log("   Redémarre OpenCode pour que ce soit pris en compte.")
+  console.log(`✅ ${target} → ${model}${target === "all" ? " (all agents, no per-agent model left)" : ""}`)
+  console.log("   Restart OpenCode for this to take effect.")
 }
 
 function reset(target) {
-  if (!target) die("usage : oc-models reset <agent|all>")
+  if (!target) die("usage: oc-models reset <agent|all>")
   const s = readStore(); s.agents ??= {}
   if (target === "all") { s.agents = {}; delete s.default; delete s.small; for (const n of agentNames()) setAgentModel(n, null) }
   else if (target === "default" || target === "small") { delete s[target] }
   else {
-    if (!agentNames().includes(target)) die(`agent inconnu : "${target}"`)
+    if (!agentNames().includes(target)) die(`unknown agent: "${target}"`)
     delete s.agents[target]; setAgentModel(target, null)
   }
   writeStore(s)
-  console.log(`✅ ${target} : réglage retiré (le modèle par défaut du kit s'applique à nouveau après ./install.sh --no-tools)`)
+  console.log(`✅ ${target}: setting removed (the kit default model applies again after ./install.sh --no-tools)`)
 }
 
 async function available() {
   const known = await knownModels()
-  if (!known) die("liste indisponible (réseau ?)")
+  if (!known) die("list unavailable (network?)")
   console.log([...known].sort().join("\n"))
 }
 
@@ -133,4 +133,4 @@ else if (cmd === "set") await set(args[0], args[1])
 else if (cmd === "reset") reset(args[0])
 else if (cmd === "apply") apply()
 else if (cmd === "available") await available()
-else die(`commande inconnue : ${cmd}\nUsage : oc-models [list | set <agent|default|small|all> <modèle> | reset <agent|all> | available]`)
+else die(`unknown command: ${cmd}\nUsage: oc-models [list | set <agent|default|small|all> <model> | reset <agent|all> | available]`)

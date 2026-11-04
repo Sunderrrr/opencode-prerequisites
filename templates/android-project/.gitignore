@@ -1,0 +1,20 @@
+# Gradle / Android
+.gradle/
+build/
+local.properties
+.kotlin/
+captures/
+.externalNativeBuild/
+.cxx/
+*.iml
+.idea/
+
+# Signing: never in the repository
+*.jks
+*.keystore
+keystore.properties
+
+# Misc
+.env
+.worktrees/
+.DS_Store

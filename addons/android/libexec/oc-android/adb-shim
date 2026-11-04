@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Faux « adb » installé dans ~/.local/share/oc-android/sdk/platform-tools/adb : redirige chaque appel vers l'adb du conteneur
-# émulateur (oc-android-emu). mobile-mcp l'utilise via ANDROID_HOME, sans SDK installé sur la machine.
+# Fake "adb" installed at ~/.local/share/oc-android/sdk/platform-tools/adb: forwards every call to the adb of the
+# emulator container (oc-android-emu). mobile-mcp uses it through ANDROID_HOME, with no SDK installed on the machine.
 set -u
 EMU="${OC_ANDROID_EMU:-oc-android-emu}"
 PODMAN="${OC_PODMAN:-podman}"
 MOUNTS="${XDG_DATA_HOME:-$HOME/.local/share}/oc-android/mounts"
 
-# Le répertoire courant n'est utilisable dans le conteneur que s'il y a été monté (liste écrite par « emulator start »)
+# The current directory is usable in the container only if it was mounted there (list written by "emulator start")
 in_mounts() {
   local m
   [ -f "$MOUNTS" ] || return 1
@@ -24,6 +24,6 @@ if in_mounts; then args+=(-w "$PWD"); fi
 "$PODMAN" "${args[@]}" "$EMU" adb "$@"
 rc=$?
 if [ "$rc" -eq 125 ]; then
-  echo "oc-android : conteneur « $EMU » introuvable ou arrêté. Démarre l'émulateur : oc-android emulator start" >&2
+  echo "oc-android: container $EMU not found or stopped. Start the emulator: oc-android emulator start" >&2
 fi
 exit "$rc"

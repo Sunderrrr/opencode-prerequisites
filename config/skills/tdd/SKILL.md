@@ -1,9 +1,9 @@
 ---
 name: tdd
-description: Développement piloté par les tests (rouge, vert, refactor) par petites tranches verticales. À utiliser pour ajouter une fonctionnalité ou corriger un bug.
+description: Test-driven development (red, green, refactor) in small vertical slices. Use to add a feature or fix a bug.
 ---
-1. Choisis UNE petite tranche de comportement observable.
-2. Rouge : écris un test qui échoue pour la bonne raison ; lance-le et montre l'échec.
-3. Vert : écris le code minimal qui le fait passer ; lance-le.
-4. Refactor : nettoie en gardant les tests verts.
-5. Répète pour la tranche suivante. Teste le comportement, pas l'implémentation.
+1. Pick ONE small slice of observable behavior.
+2. Red: write a test that fails for the right reason; run it and show the failure.
+3. Green: write the minimal code that makes it pass; run it.
+4. Refactor: clean up while keeping the tests green.
+5. Repeat for the next slice. Test behavior, not implementation.

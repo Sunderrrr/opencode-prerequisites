@@ -1,12 +1,12 @@
 ---
-description: Mémorise une préférence ou une procédure durable dans MemPalace (scope user)
+description: Store a durable preference or procedure in MemPalace (user scope)
 ---
-Enregistre ce que je viens de te dire dans ma mémoire utilisateur MemPalace :
+Save what I just told you in my MemPalace user memory:
 
 $ARGUMENTS
 
-Appelle `mempalace_memory` mode `save` avec `scope: "user"` et :
-- room `preferences` si c'est un goût, une contrainte ou une préférence durable ;
-- room `workflow` sinon (méthode, procédure, outil).
+Call `mempalace_memory` mode `save` with `scope: "user"` and:
+- room `preferences` if it is a taste, a constraint or a durable preference;
+- room `workflow` otherwise (method, procedure, tool).
 
-Règles : texte court et daté (AAAA-MM-JJ), factuel ; reformule en une phrase claire si mon texte est ambigu. N'enregistre jamais de clé, token, mot de passe, adresse ou donnée personnelle : si le texte en contient, retire-le et signale-le. Ne modifie aucun fichier. Confirme en UNE ligne (room + résumé), sans recopier tout le souvenir.
+Rules: short dated text (YYYY-MM-DD), factual; rephrase in one clear sentence if my text is ambiguous. Never store a key, token, password, address or personal data: if the text contains any, remove it and flag it. Do not modify any file. Confirm in ONE line (room + summary), without copying the whole memory.

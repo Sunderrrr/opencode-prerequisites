@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tests hermétiques de oc-versions : fixtures locales, aucun accès réseau.
+// Hermetic oc-versions tests: local fixtures, no network access.
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -31,7 +31,7 @@ const run = (args, { ttl, fixtures = FIX, cache = CACHE } = {}) => {
   return spawnSync(process.execPath, [TOOL, ...args], { encoding: "utf8", env, timeout: 20_000 })
 }
 
-// Même transformation que l'outil : / et : deviennent __.
+// Same transformation as the tool: / and : become __.
 const fixKey = (key) => key.replace(/[\\/:]/g, "__").replace(/[^A-Za-z0-9._@-]/g, "_").replace(/\.{2,}/g, "_")
 const put = (eco, key, data, ext = "json") => {
   const file = path.join(FIX, eco, `${fixKey(key)}.${ext}`)
@@ -52,7 +52,7 @@ ${versions.map((v) => `      <version>${v}</version>`).join("\n")}
 </metadata>
 `
 
-// --- fixtures : des versions volontairement fausses (si le réseau était appelé, le test échouerait) ---
+// --- fixtures: deliberately fake versions (the test would fail if the network were called) ---
 put("npm", "@playwright/mcp", { name: "@playwright/mcp", "dist-tags": { latest: "0.0.99-test" } })
 put("pypi", "semgrep-mcp", { info: { version: "9.9.9-test" } })
 put("crates", "serde", { crate: { max_stable_version: "9.9.9-test", max_version: "10.0.0-test" } })
@@ -67,103 +67,103 @@ put("android", "androidx.compose:compose-bom",
 put("android", "androidx.activity:activity-compose",
   metadata("androidx.activity", "activity-compose", ["1.13.0", "1.14.0-alpha03"]), "xml")
 
-// --- un écosystème à la fois ---
+// --- one ecosystem at a time ---
 let r = run(["npm", "@playwright/mcp"])
-check("npm : version affichée avec cache et source",
-  r.status === 0 && /^@playwright\/mcp\s+0\.0\.99-test\s+\(cache: frais, fixture\)$/m.test(r.stdout), r.stderr)
-check("npm : cache écrit (npm.json)", fs.existsSync(path.join(CACHE, "npm.json")))
+check("npm: version shown with cache and source",
+  r.status === 0 && /^@playwright\/mcp\s+0\.0\.99-test\s+\(cache: fresh, fixture\)$/m.test(r.stdout), r.stderr)
+check("npm: cache written (npm.json)", fs.existsSync(path.join(CACHE, "npm.json")))
 
 r = run(["pypi", "semgrep-mcp"])
-check("pypi : info.version lue", r.status === 0 && r.stdout.includes("9.9.9-test"), r.stderr)
+check("pypi: info.version read", r.status === 0 && r.stdout.includes("9.9.9-test"), r.stderr)
 
 r = run(["crates", "serde"])
-check("crates : max_stable_version prioritaire sur max_version",
+check("crates: max_stable_version takes precedence over max_version",
   r.status === 0 && r.stdout.includes("9.9.9-test") && !r.stdout.includes("10.0.0-test"), r.stderr)
 
 r = run(["github", "Sunderrrr/opencode-prerequisites"])
-check("github : tag de la dernière release", r.status === 0 && r.stdout.includes("v9.9.9-test"), r.stderr)
+check("github: latest release tag", r.status === 0 && r.stdout.includes("v9.9.9-test"), r.stderr)
 
 r = run(["maven", "com.google.guava:guava"])
-check("maven : latestVersion de search.maven.org", r.status === 0 && r.stdout.includes("9.9.9-test"), r.stderr)
+check("maven: latestVersion from search.maven.org", r.status === 0 && r.stdout.includes("9.9.9-test"), r.stderr)
 
 r = run(["android"])
-check("android : 4 artefacts résolus",
+check("android: 4 artifacts resolved",
   r.status === 0 && /^AGP\s+9\.5\.0\s/m.test(r.stdout) && /^Kotlin\s+2\.2\.20\s/m.test(r.stdout)
   && /^Compose BOM\s+2026\.09\.00\s/m.test(r.stdout) && /^activity-compose\s+1\.13\.0\s/m.test(r.stdout),
   r.stdout + r.stderr)
-check("android : alpha/beta/RC ignorés",
+check("android: alpha/beta/RC ignored",
   !/9\.6\.0-alpha02|2\.3\.0-RC2|1\.14\.0-alpha03/.test(r.stdout))
 
-// --- paquet inconnu : code 1, sans bloquer les autres ---
-r = run(["npm", "@playwright/mcp", "paquet-inexistant-oc-versions"])
-check("paquet inconnu : code 1 mais les autres paquets sont rendus",
-  r.status === 1 && r.stdout.includes("0.0.99-test") && /fixture introuvable/.test(r.stderr), r.stdout + r.stderr)
+// --- unknown package: exit 1, without blocking the others ---
+r = run(["npm", "@playwright/mcp", "missing-package-oc-versions"])
+check("unknown package: exit 1 but other packages are still rendered",
+  r.status === 1 && r.stdout.includes("0.0.99-test") && /fixture not found/.test(r.stderr), r.stdout + r.stderr)
 
-// --- cache frais : plus aucune source disponible, la 2e lecture doit venir du cache ---
+// --- fresh cache: no source left, the 2nd read must come from the cache ---
 put("npm", "@playwright/mcp", { name: "@playwright/mcp", "dist-tags": { latest: "0.0.100-test" } })
 fs.rmSync(FIX, { recursive: true, force: true })
 r = run(["npm", "@playwright/mcp"])
-check("cache frais : 2e appel sans source (fixtures supprimées), version du cache servie",
-  r.status === 0 && r.stdout.includes("0.0.99-test") && r.stdout.includes("(cache: frais"), r.stderr)
+check("fresh cache: 2nd call without source (fixtures removed), cached version served",
+  r.status === 0 && r.stdout.includes("0.0.99-test") && r.stdout.includes("(cache: fresh"), r.stderr)
 
-// --- cache expiré : TTL 0 force la réinterrogation, qui voit la nouvelle fixture ---
+// --- expired cache: TTL 0 forces a new query, which sees the new fixture ---
 put("npm", "@playwright/mcp", { name: "@playwright/mcp", "dist-tags": { latest: "0.0.100-test" } })
 r = run(["--json", "npm", "@playwright/mcp"], { ttl: 0 })
 let payload = jsonOf(r.stdout)
-check("cache expiré (TTL 0) : source réinterrogée et cache marqué non servi",
+check("expired cache (TTL 0): source queried again and cache marked as not served",
   r.status === 0 && payload?.results?.[0]?.version === "0.0.100-test"
   && payload.results[0].cached === false && payload.results[0].expired === false, r.stdout + r.stderr)
 
-// --- --refresh : ignore un cache pourtant frais ---
+// --- --refresh: ignores an otherwise fresh cache ---
 put("npm", "@playwright/mcp", { name: "@playwright/mcp", "dist-tags": { latest: "0.0.101-test" } })
 r = run(["npm", "@playwright/mcp"])
-check("sans --refresh : le cache frais reste servi",
+check("without --refresh: fresh cache is still served",
   r.status === 0 && r.stdout.includes("0.0.100-test") && !r.stdout.includes("0.0.101-test"), r.stderr)
 r = run(["--refresh", "npm", "@playwright/mcp"])
-check("--refresh : force la source et met le cache à jour",
-  r.status === 0 && r.stdout.includes("0.0.101-test") && r.stdout.includes("(cache: frais, fixture)"), r.stderr)
+check("--refresh: forces the source and updates the cache",
+  r.status === 0 && r.stdout.includes("0.0.101-test") && r.stdout.includes("(cache: fresh, fixture)"), r.stderr)
 
-// --- source injoignable + cache expiré : version conservée, état « expiré » visible ---
+// --- unreachable source + expired cache: version kept, "expired" state visible ---
 fs.rmSync(FIX, { recursive: true, force: true })
 r = run(["--json", "npm", "@playwright/mcp"], { ttl: 0 })
 payload = jsonOf(r.stdout)
-check("cache expiré sans source : dernière version conservée et marquée expirée",
+check("expired cache without source: last version kept and marked expired",
   r.status === 0 && payload?.results?.[0]?.version === "0.0.101-test"
-  && payload.results[0].expired === true && /cache expiré/.test(r.stderr), r.stdout + r.stderr)
+  && payload.results[0].expired === true && /cache expired/.test(r.stderr), r.stdout + r.stderr)
 
-// --- sortie --json exploitable par une machine ---
+// --- --json output usable by a machine ---
 put("pypi", "semgrep-mcp", { info: { version: "9.9.9-test" } })
 r = run(["--json", "pypi", "semgrep-mcp"])
 payload = jsonOf(r.stdout)
-check("--json : écosystème, résultat, source et erreurs vides",
+check("--json: ecosystem, result, source and empty errors",
   r.status === 0 && payload?.ecosystem === "pypi" && payload.results?.[0]?.package === "semgrep-mcp"
   && payload.results[0].version === "9.9.9-test" && payload.results[0].source === "fixture"
   && Array.isArray(payload.errors) && payload.errors.length === 0, r.stdout + r.stderr)
 
-r = run(["--json", "pypi", "paquet-absent"])
+r = run(["--json", "pypi", "missing-package"])
 payload = jsonOf(r.stdout)
-check("--json : paquet inconnu = erreur structurée + code 1",
-  r.status === 1 && payload?.results?.length === 0 && payload?.errors?.[0]?.package === "paquet-absent", r.stdout + r.stderr)
+check("--json: unknown package = structured error + exit 1",
+  r.status === 1 && payload?.results?.length === 0 && payload?.errors?.[0]?.package === "missing-package", r.stdout + r.stderr)
 
-// --- usage, lanceur, entrées invalides ---
+// --- usage, launcher, invalid input ---
 r = spawnSync(process.execPath, [TOOL, "--help"], { encoding: "utf8", env: baseEnv })
-check("--help : code 0 et variables documentées",
-  r.status === 0 && r.stdout.includes("Usage :") && r.stdout.includes("OC_VERSIONS_FIXTURES"), r.stderr)
+check("--help: exit 0 and documented variables",
+  r.status === 0 && r.stdout.includes("Usage:") && r.stdout.includes("OC_VERSIONS_FIXTURES"), r.stderr)
 
 r = spawnSync(LAUNCHER, ["--help"], { encoding: "utf8", env: baseEnv })
-check("lanceur config/bin/oc-versions : câblé sur le Node ESM",
-  r.status === 0 && r.stdout.includes("Usage :"), r.stderr)
+check("launcher config/bin/oc-versions: wired to the Node ESM",
+  r.status === 0 && r.stdout.includes("Usage:"), r.stderr)
 
 r = run(["rubygems", "rails"])
-check("écosystème inconnu : code 2", r.status === 2 && /écosystème inconnu/.test(r.stderr), r.stderr)
+check("unknown ecosystem: exit 2", r.status === 2 && /unknown ecosystem/.test(r.stderr), r.stderr)
 
 r = run(["npm", "x"], { ttl: "abc" })
-check("OC_VERSIONS_TTL invalide : code 2", r.status === 2 && /OC_VERSIONS_TTL invalide/.test(r.stderr), r.stderr)
+check("invalid OC_VERSIONS_TTL: exit 2", r.status === 2 && /invalid OC_VERSIONS_TTL/.test(r.stderr), r.stderr)
 
-r = run(["maven", "pas-de-deux-points"])
-check("maven : coordonnée invalide signalée, code 1",
+r = run(["maven", "no-colon-here"])
+check("maven: invalid coordinate reported, exit 1",
   r.status === 1 && /groupId:artifactId/.test(r.stderr), r.stderr)
 
 fs.rmSync(TMP, { recursive: true, force: true })
-console.log(failed ? `\n❌ ${failed} contrôle(s) en échec sur ${checks}` : `\n✅ oc-versions OK — ${checks} contrôles`)
+console.log(failed ? `\n❌ ${failed} check(s) failed out of ${checks}` : `\n✅ oc-versions OK — ${checks} checks`)
 process.exitCode = failed ? 1 : 0

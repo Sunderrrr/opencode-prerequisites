@@ -1,16 +1,16 @@
 {
-  // Réglages du plugin opencode-mempalace (lues dans ~/.config/opencode/mempalace.jsonc).
-  // Attention : le plugin ne retire que les commentaires en début de ligne, pas les commentaires en fin de ligne.
+  // Settings for the opencode-mempalace plugin (read from ~/.config/opencode/mempalace.jsonc).
+  // Warning: inline // comments break the plugin's JSON.parse (it only strips comments at the start of a line).
   "autosaveEnabled": true,
   "retrievalEnabled": true,
   "keywordSaveEnabled": true,
-  // Limite le contexte injecté (économise le quota Go).
+  // Limits the injected context (saves Go quota).
   "maxInjectedItems": 6,
   "retrievalQueryLimit": 5,
-  // Masque les secrets avant sauvegarde.
+  // Masks secrets before saving.
   "privacyRedactionEnabled": true,
-  // Déclenche l'autosave sur ces mots (regex \b…\b, insensible à la casse : « Retiens ça » marche aussi).
-  // La liste REMPLACE les motifs par défaut du plugin : on garde donc les anglais.
+  // Triggers autosave on these words (regex \b...\b, case-insensitive, so the French variants match too).
+  // The list REPLACES the plugin's default patterns: the English ones are kept for that reason.
   "keywordPatterns": [
     "remember",
     "save this",

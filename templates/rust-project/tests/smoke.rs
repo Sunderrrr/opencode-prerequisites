@@ -1,4 +1,4 @@
-//! Test d'intégration : vérifie l'API publique comme le ferait un utilisateur.
+//! Integration test: exercises the public API as a user would.
 
 #[test]
 fn greeting_uses_given_name() {

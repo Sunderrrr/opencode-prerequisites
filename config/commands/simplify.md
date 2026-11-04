@@ -1,4 +1,4 @@
 ---
-description: Lance le sous-agent code-simplifier sur les changements récents
+description: Run the code-simplifier subagent on recent changes
 ---
-Utilise @code-simplifier sur le diff actuel et rapporte le résultat.
+Use @code-simplifier on the current diff and report the result.

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Point d'entrée du conteneur émulateur : crée l'AVD « oc » au premier lancement, ouvre un serveur adb joignable
-# depuis les autres conteneurs du réseau, puis lance l'émulateur sans fenêtre.
+# Emulator container entrypoint: creates the "oc" AVD on first start, opens an adb server reachable from the
+# other containers on the network, then starts the emulator headless.
 set -Eeuo pipefail
 
-API="${OC_ANDROID_API:?variable OC_ANDROID_API manquante (image mal construite)}"
+API="${OC_ANDROID_API:?OC_ANDROID_API is not set (badly built image)}"
 export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-/avd}"
 mkdir -p "$ANDROID_AVD_HOME"
 
 if [ ! -d "$ANDROID_AVD_HOME/oc.avd" ]; then
-  echo "Création de l'AVD « oc » (API ${API})…"
+  echo "Creating the \"oc\" AVD (API ${API})…"
   echo no | avdmanager create avd -n oc -k "system-images;android-${API};google_apis;x86_64" -d pixel_6 --force
 fi
 

@@ -1,5 +1,5 @@
 ---
 name: handoff
-description: Résume la session en un document pour reprendre dans une nouvelle session ou passer à un autre agent. À utiliser quand le contexte est long ou en fin de journée.
+description: Summarizes the session into a document to resume in a new session or hand off to another agent. Use when the context is long or at the end of the day.
 ---
-Écris `HANDOFF.md` (ou affiche-le) avec : objectif, ce qui est fait, ce qui reste, décisions prises et pourquoi, fichiers clés, commandes pour vérifier, pièges rencontrés. Maximum 40 lignes, faits uniquement.
+Write `HANDOFF.md` (or display it) with: objective, what is done, what remains, decisions made and why, key files, commands to verify, pitfalls encountered. Maximum 40 lines, facts only.

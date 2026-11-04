@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# oc-deps: drift of the versions pinned by the kit (read-only, no updates).
+#   oc-deps check
+#   oc-deps check --only trivy --json
+# See "oc-deps --help".
+set -Eeuo pipefail
+
+here="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+config="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+
+command -v node >/dev/null 2>&1 || {
+  printf '❌ oc-deps: node not found in PATH\n' >&2
+  exit 127
+}
+
+# From the repository: ../libexec/oc-deps.mjs; installed: <config>/libexec/oc-deps.mjs.
+if [ -f "$here/../libexec/oc-deps.mjs" ]; then
+  exec node "$here/../libexec/oc-deps.mjs" "$@"
+fi
+if [ -f "$config/libexec/oc-deps.mjs" ]; then
+  exec node "$config/libexec/oc-deps.mjs" "$@"
+fi
+
+printf '❌ oc-deps: oc-deps.mjs not found (neither %s nor %s)\n' \
+  "$here/../libexec" "$config/libexec" >&2
+exit 127

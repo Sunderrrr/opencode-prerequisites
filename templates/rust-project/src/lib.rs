@@ -1,9 +1,9 @@
-//! Bibliothèque de `{{name}}` : la logique vit ici pour rester testable.
+//! Library for `{{name}}`: the logic lives here to stay testable.
 
-/// Construit le message d'accueil.
+/// Builds the greeting message.
 #[must_use]
 pub fn greet(name: &str) -> String {
-    format!("Bonjour, {name} !")
+    format!("Hello, {name}!")
 }
 
 #[cfg(test)]
@@ -12,6 +12,6 @@ mod tests {
 
     #[test]
     fn greets_by_name() {
-        assert_eq!(greet("Maël"), "Bonjour, Maël !");
+        assert_eq!(greet("Maël"), "Hello, Maël!");
     }
 }

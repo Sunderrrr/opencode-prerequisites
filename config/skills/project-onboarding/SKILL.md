@@ -1,10 +1,10 @@
 ---
 name: project-onboarding
-description: Découvre un projet inconnu (stack, commandes build/test, structure) et prépare un AGENTS.md de projet. À utiliser en arrivant sur un nouveau dépôt.
+description: Discovers an unknown project (stack, build/test commands, structure) and prepares a project AGENTS.md. Use when arriving on a new repository.
 ---
-## Étapes
-1. Liste la racine et lis README, package.json / pyproject.toml / Cargo.toml / Makefile.
-2. Identifie : langage, framework, gestionnaire de paquets, commandes install/build/test/lint.
-3. Repère la structure des dossiers et les conventions (nommage, formatage, CI dans `.github/`).
-4. Écris ou améliore `AGENTS.md` à la racine : sections Commandes, Structure, Conventions, Pièges connus. Maximum ~40 lignes, uniquement des faits vérifiés.
-5. Ne modifie aucun autre fichier.
+## Steps
+1. List the root and read README, package.json / pyproject.toml / Cargo.toml / Makefile.
+2. Identify: language, framework, package manager, install/build/test/lint commands.
+3. Map the folder structure and conventions (naming, formatting, CI in `.github/`).
+4. Write or improve `AGENTS.md` at the root: Commands, Structure, Conventions, Known pitfalls sections. Maximum ~40 lines, verified facts only.
+5. Do not modify any other file.

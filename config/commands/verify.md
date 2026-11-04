@@ -1,4 +1,4 @@
 ---
-description: Vérification de bout en bout avant de finir
+description: End-to-end verification before finishing
 ---
-Utilise @verify-app pour vérifier réellement le travail qui vient d'être fait. Contexte : $ARGUMENTS
+Use @verify-app to actually verify the work just done. Context: $ARGUMENTS

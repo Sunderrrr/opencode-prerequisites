@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Lance le MCP mobile-mcp (mobile-next, Apache-2.0) : piloter l'émulateur Android du module (Podman), un téléphone
-# USB, ou (macOS) un simulateur iOS. Version épinglée, télémétrie désactivée.
-#   oc-mobile-mcp            serveur MCP (stdio), utilisé par OpenCode
-#   oc-mobile-mcp --check    vérifie seulement qu'un adb est utilisable (code 0/1)
-# adb : par défaut le faux adb du module (~/.local/share/oc-android/sdk/platform-tools/adb) qui parle au conteneur
-# émulateur ; si ANDROID_HOME est défini, ce SDK-là est utilisé (adb réel, téléphone branché en USB).
-# Variables : OC_MOBILE_VERSION (version du paquet), MOBILEMCP_DISABLE_TELEMETRY=0 pour réactiver la télémétrie.
+# Runs the mobile-mcp MCP server (mobile-next, Apache-2.0): drives the module's Android emulator (Podman), a USB
+# phone, or (macOS) an iOS simulator. Pinned version, telemetry disabled.
+#   oc-mobile-mcp            MCP server (stdio), used by OpenCode
+#   oc-mobile-mcp --check    only checks that a usable adb exists (exit code 0/1)
+# adb: by default the module's fake adb (~/.local/share/oc-android/sdk/platform-tools/adb), which talks to the emulator
+# container; if ANDROID_HOME is set, that SDK is used instead (real adb, phone plugged in over USB).
+# Variables: OC_MOBILE_VERSION (package version), MOBILEMCP_DISABLE_TELEMETRY=0 to re-enable telemetry.
 set -Eeuo pipefail
 MOBILE_VERSION="${OC_MOBILE_VERSION:-1.0.15}"
 SHIM_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/oc-android/sdk"
@@ -16,7 +16,7 @@ fi
 
 adb_ok=0
 if [ -n "${ANDROID_HOME:-}" ] && [ -x "$ANDROID_HOME/platform-tools/adb" ]; then
-  # Faux adb du module : il a besoin de Podman
+  # The module's fake adb needs Podman
   if [ "$ANDROID_HOME" = "$SHIM_ROOT" ]; then command -v "${OC_PODMAN:-podman}" >/dev/null 2>&1 && adb_ok=1; else adb_ok=1; fi
   [ "$adb_ok" = 1 ] && export PATH="$PATH:$ANDROID_HOME/platform-tools"
 elif command -v adb >/dev/null 2>&1; then
@@ -24,7 +24,7 @@ elif command -v adb >/dev/null 2>&1; then
 fi
 
 if [ "$adb_ok" != 1 ]; then
-  echo "adb introuvable : installe le module Android (./install.sh --android, Podman requis) ou définis ANDROID_HOME vers un SDK." >&2
+  echo "adb not found: install the Android module (./install.sh --android, Podman required) or point ANDROID_HOME at an SDK." >&2
   exit 1
 fi
 [ "${1:-}" = "--check" ] && exit 0

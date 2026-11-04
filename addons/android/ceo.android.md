@@ -1,7 +1,7 @@
-## Module Android (installé)
-| Spécialiste | Quand l'appeler |
+## Android module (installed)
+| Specialist | When to call it |
 |---|---|
-| `@android` | application Android : Kotlin, Jetpack Compose, Gradle, tests ; commandes via `oc-android` (Podman) |
-| `@mobile-tester` | vérifier l'application sur l'émulateur (parcours, crashs) ; lecture seule |
+| `@android` | Android app: Kotlin, Jetpack Compose, Gradle, tests; commands through `oc-android` (Podman) |
+| `@mobile-tester` | verify the app on the emulator (user flows, crashes); read-only |
 
-- **Application Android** → `@android` pour construire et tester, puis `@mobile-tester` pour vérifier l'interface sur l'émulateur (`oc-android emulator start --wait`), puis `@verify-app`. Pas de Rust pour une app Android : Kotlin.
+- **Android app** → `@android` to build and test, then `@mobile-tester` to check the UI on the emulator (`oc-android emulator start --wait`), then `@verify-app`. No Rust for an Android app: Kotlin.

@@ -1,7 +1,7 @@
-# Kubernetes MCP : lecture seule (voir https://github.com/containers/kubernetes-mcp-server)
+# Kubernetes MCP: read-only (see https://github.com/containers/kubernetes-mcp-server)
 read_only = true
 
-# Ne jamais exposer les Secrets à l'agent
+# Never expose Secrets to the agent
 denied_resources = [
   { group = "", version = "v1", kind = "Secret" },
 ]

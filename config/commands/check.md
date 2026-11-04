@@ -1,6 +1,6 @@
 ---
-description: Lance lint + tests + build du projet et résume les échecs
+description: Run the project's lint + tests + build and summarize failures
 ---
-Détecte les commandes lint, test et build du projet (package.json, Makefile, pyproject…).
-Lance-les dans cet ordre, puis donne un résumé : ✅/❌ par étape et, pour chaque échec, la cause probable.
-Ne corrige rien sans me demander.
+Detect the project's lint, test and build commands (package.json, Makefile, pyproject…).
+Run them in that order, then give a summary: ✅/❌ per step and, for each failure, the likely cause.
+Do not fix anything without asking me.

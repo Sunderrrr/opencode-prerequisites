@@ -1,5 +1,5 @@
 ---
-description: Intègre le travail des agents et ouvre une PR (mode PR de l'intégrateur)
+description: Integrate the agents' work and open a PR (integrator PR mode)
 ---
-Utilise @integrator en mode PR pour : $ARGUMENTS
-Il crée la branche d'intégration depuis origin/main, fusionne les branches agent/*, rebase sur origin/main, lance la suite de tests complète, pousse et ouvre la PR avec gh. Donne-moi le lien de la PR et le résultat des tests.
+Use @integrator in PR mode to: $ARGUMENTS
+It creates the integration branch from origin/main, merges the agent/* branches, rebases on origin/main, runs the full test suite, pushes and opens the PR with gh. Give me the PR link and the test result.

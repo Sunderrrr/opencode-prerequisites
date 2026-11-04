@@ -1,5 +1,5 @@
 ---
-description: Ajoute la leçon de l'erreur qu'on vient de corriger dans AGENTS.md du projet
+description: Add the lesson from the mistake just fixed to the project's AGENTS.md
 ---
-Résume en UNE règle courte et vérifiable ce que tu as mal fait dans cette session (ou : $ARGUMENTS).
-Montre-moi la ligne, puis après mon accord ajoute-la à la section « Leçons » de l'AGENTS.md du projet (crée-la si besoin). Pas de doublon.
+Summarize in ONE short, verifiable rule what you did wrong in this session (or: $ARGUMENTS).
+Show me the line, then after my approval add it to the "Lessons" section of the project's AGENTS.md (create it if needed). No duplicates.

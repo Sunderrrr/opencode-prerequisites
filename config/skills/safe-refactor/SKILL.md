@@ -1,11 +1,11 @@
 ---
 name: safe-refactor
-description: Refactor par petites étapes avec tests verts à chaque étape. À utiliser pour renommer, extraire, simplifier ou déplacer du code existant.
+description: Refactor in small steps with green tests at every step. Use to rename, extract, simplify or move existing code.
 ---
-## Étapes
-1. Lance les tests existants : ils doivent passer avant de commencer (sinon, signale-le et arrête).
-2. S'il n'y a pas de test couvrant la zone, propose d'en écrire un minimal d'abord.
-3. Un seul type de changement à la fois (renommer OU extraire OU déplacer).
-4. Relance les tests après chaque étape ; en cas d'échec, annule l'étape et analyse.
-5. Ne change pas le comportement : un refactor n'ajoute pas de fonctionnalité.
-6. Termine par un résumé : ce qui a bougé, résultat des tests.
+## Steps
+1. Run the existing tests: they must pass before you start (otherwise, flag it and stop).
+2. If no test covers the area, suggest writing a minimal one first.
+3. One type of change at a time (rename OR extract OR move).
+4. Rerun the tests after each step; on failure, revert the step and analyze.
+5. Do not change behavior: a refactor does not add features.
+6. Finish with a summary: what moved, test result.

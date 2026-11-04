@@ -1,0 +1,104 @@
+name: CI macOS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# One run per ref: closely spaced pushes cancel the previous one.
+concurrency:
+  group: ci-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: macOS (bash 3.2, Homebrew)
+    runs-on: macos-latest
+    timeout-minutes: 25
+    # /bin/bash on macOS stayed at 3.2: it is enforced on every "run" step.
+    # A script using mapfile, associative arrays or ${var,,} fails here.
+    defaults:
+      run:
+        shell: /bin/bash --noprofile --norc -eo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      - name: Versions (Node 26 and system bash)
+        run: |
+          node --version
+          npm --version
+          /bin/bash --version | head -n 1
+
+      - name: ShellCheck via Homebrew (no sudo)
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+          HOMEBREW_NO_INSTALL_CLEANUP: 1
+          HOMEBREW_NO_ENV_HINTS: 1
+        run: |
+          brew install shellcheck
+          shellcheck --version | head -n 2
+
+      - name: Validate the kit (config, agents, skills, plugins, secrets)
+        run: node scripts/validate-kit.mjs
+
+      - name: Local plugins (fake OpenCode v2 context; notify ignored on macOS)
+        run: node scripts/test-plugins.mjs
+
+      - name: oc-models (per-agent model selection, survives updates)
+        run: node scripts/test-models.mjs
+
+      - name: oc-versions (latest real versions, cache and fixtures without network)
+        run: node scripts/test-versions.mjs
+
+      - name: "Supply chain (pinned versions, checksums, rejection of tampered assets)"
+        run: node scripts/test-supply-chain.mjs
+
+      - name: "agent-wt (real worktrees: task, list --porcelain, registry, conflicts)"
+        run: node scripts/test-agent-wt.mjs
+
+      - name: "MCP state (idempotent JSONC, comments preserved, exit codes 1/2)"
+        run: node scripts/test-mcp-state.mjs
+
+      - name: "Lite profile (12 agents, MCP, plugins, skills, commands, CEO prose)"
+        run: node scripts/test-lite.mjs
+
+      - name: "Offline diagnostic (exit codes 0/1, no network requests)"
+        run: node scripts/test-doctor.mjs
+
+      - name: "Android project generator (hermetic: template, substitutions, git, overwrite refusal)"
+        run: node scripts/test-new-android.mjs
+
+      - name: bash 3.2 syntax (installer, uninstaller, diagnostic, launchers)
+        run: /bin/bash -n install.sh uninstall.sh doctor.sh config/bin/*
+
+      - name: ShellCheck (same files as the Linux CI)
+        run: shellcheck install.sh uninstall.sh doctor.sh scripts/*.sh config/bin/* addons/android/bin/* addons/android/libexec/oc-android/*.sh addons/android/libexec/oc-android/adb-shim
+
+      - name: Full dry-run installation (no tools, bash 3.2)
+        env:
+          OPENCODE_CONFIG_DIR: ${{ runner.temp }}/oc-full
+          OBSCURA_BIN_DIR: ${{ runner.temp }}/oc-bin
+        run: |
+          /bin/bash ./install.sh --no-tools
+          test -f "$OPENCODE_CONFIG_DIR/opencode.jsonc"
+          test "$(ls "$OPENCODE_CONFIG_DIR/agents" | wc -l | tr -d ' ')" -eq 27
+          test -f "$OPENCODE_CONFIG_DIR/skills/tdd/SKILL.md"
+          test ! -e "$OPENCODE_CONFIG_DIR/agents/android.md"
+
+      - name: Dry-run installation of the lite profile (12 agents, bash 3.2)
+        env:
+          OPENCODE_CONFIG_DIR: ${{ runner.temp }}/oc-lite
+          OBSCURA_BIN_DIR: ${{ runner.temp }}/oc-bin
+        run: |
+          /bin/bash ./install.sh --lite
+          test -f "$OPENCODE_CONFIG_DIR/opencode.jsonc"
+          test "$(ls "$OPENCODE_CONFIG_DIR/agents" | wc -l | tr -d ' ')" -eq 12

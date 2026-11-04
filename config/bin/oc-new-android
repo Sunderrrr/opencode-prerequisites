@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# oc-new-android: creates an Android Kotlin + Jetpack Compose project ready for OpenCode.
+#   oc-new-android <name> [parent-dir]
+# The template comes from the repository (templates/android-project) or from the installation
+# (${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/templates/android-project).
+set -Eeuo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: oc-new-android <name> [parent-dir]
+
+Creates <parent-dir>/<name> from the Android template (Kotlin + Jetpack Compose):
+  - package com.example.<name> ("-" replaced by "_")
+  - app name and title derived from the name
+  - Gradle wrapper 9.8.2, debug build, JVM unit test
+  - git repository initialized with an "Initial commit"
+
+Arguments:
+  name        lowercase letters, digits, "-" and "_"; starts with a letter
+  parent-dir  default: current directory (created if missing)
+
+Options:
+  -h, --help  this help
+
+Variables:
+  OPENCODE_CONFIG_DIR      installation to use (default: ~/.config/opencode)
+  OC_NEW_ANDROID_TEMPLATE  force another template directory (tests)
+
+Examples:
+  oc-new-android my-app
+  oc-new-android my-app ~/AndroidStudioProjects
+EOF
+}
+
+die() { printf '❌ %s\n' "$*" >&2; exit 1; }
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
+
+if [ "$#" -lt 1 ] || [ -z "${1:-}" ]; then
+  usage >&2
+  exit 1
+fi
+if [ "$#" -gt 2 ]; then
+  printf '❌ Too many arguments (expected: <name> [parent-dir])\n' >&2
+  usage >&2
+  exit 1
+fi
+
+name="$1"
+parent="${2:-.}"
+
+[[ "$name" =~ ^[a-z][a-z0-9_-]*$ ]] || die "Invalid name: \"$name\" (lowercase letters, digits, \"-\" and \"_\", starts with a letter)"
+
+# --- template: repository first (development), then installation ---
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+tpl=""
+for candidate in \
+  "${OC_NEW_ANDROID_TEMPLATE:-}" \
+  "$here/../../templates/android-project" \
+  "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/templates/android-project"
+do
+  [ -n "$candidate" ] || continue
+  if [ -f "$candidate/settings.gradle.kts" ] && [ -f "$candidate/gradle/wrapper/gradle-wrapper.jar" ]; then
+    tpl="$candidate"
+    break
+  fi
+done
+[ -n "$tpl" ] || die "Template not found (templates/android-project): rerun ./install.sh or set OC_NEW_ANDROID_TEMPLATE"
+
+# --- destination: refuse to overwrite ---
+if [ -e "$parent" ] && [ ! -d "$parent" ]; then
+  die "Parent path is not a directory: $parent"
+fi
+[ -d "$parent" ] || mkdir -p "$parent" || die "Cannot create parent directory: $parent"
+
+dest="$parent/$name"
+if [ -e "$dest" ] || [ -L "$dest" ]; then
+  die "$dest already exists"
+fi
+
+cp -a "$tpl" "$dest"
+# Check the template before making it executable (otherwise chmod fails without a clear message).
+[ -f "$dest/gradlew" ] || die "Incomplete template: gradlew missing in $tpl"
+[ -f "$dest/gradle/wrapper/gradle-wrapper.jar" ] || die "Incomplete template: gradle-wrapper.jar missing in $tpl"
+# The wrapper must stay executable even if the template lost its permissions.
+chmod +x "$dest/gradlew"
+
+# --- substitutions ---
+slug="$(printf '%s' "$name" | tr '-' '_')"
+pkg="com.example.$slug"
+
+words="$(printf '%s' "$name" | tr '_-' '  ' | tr -s ' ')"
+words="${words# }"
+words="${words% }"
+first="$(printf '%s' "${words:0:1}" | tr '[:lower:]' '[:upper:]')"
+title="$first${words:1}"
+
+if grep -rIlq '{{' "$dest"; then
+  grep -rIl '{{' "$dest" | while IFS= read -r file; do
+    sed -i.bak \
+      -e "s/{{app_title}}/$title/g" \
+      -e "s/{{package}}/$pkg/g" \
+      -e "s/{{name}}/$name/g" \
+      "$file"
+    rm -f "$file.bak"
+  done
+fi
+
+# --- move the example package sources to com/example/<slug> ---
+for root in "$dest/app/src/main/java/com/example" "$dest/app/src/test/java/com/example"; do
+  if [ -d "$root/app" ] && [ "$slug" != "app" ]; then
+    mkdir -p "$root/$slug"
+    mv "$root/app/"* "$root/$slug/"
+    rmdir "$root/app"
+  fi
+done
+
+# --- initial git repository ---
+command -v git >/dev/null 2>&1 || die "git not found: the project is created in $dest but without a repository"
+git -C "$dest" init -q -b main 2>/dev/null || git -C "$dest" init -q
+git -C "$dest" add -A
+git -C "$dest" \
+  -c user.name="${GIT_AUTHOR_NAME:-$(git config user.name 2>/dev/null || echo dev)}" \
+  -c user.email="${GIT_AUTHOR_EMAIL:-$(git config user.email 2>/dev/null || echo dev@localhost)}" \
+  commit -q -m "Initial commit"
+
+abs="$(cd "$dest" && pwd -P)"
+printf '✅ Android project created: %s\n' "$abs"
+printf '   package : %s\n' "$pkg"
+printf '   build   : cd %s && oc-android gradle assembleDebug\n' "$abs"
+printf '   tests   : oc-android gradle testDebugUnitTest\n'
+printf '   APK     : app/build/outputs/apk/debug/app-debug.apk\n'
+printf '   emulator: oc-android emulator start --wait && oc-android gradle installDebug\n'

@@ -1,7 +1,7 @@
-# Origine
+# Origin
 
-Skill fourni par le projet **REA (Reverse Engineer Anything)** — https://github.com/morluto/rea — licence MIT (voir `LICENSE`, © 2026 morluto).
-Copie du dossier `skills/reverse-engineer-anything` du paquet npm `rea-agents@6.8.0`, **non modifiée**.
+Skill provided by the **REA (Reverse Engineer Anything)** project — https://github.com/morluto/rea — MIT license (see `LICENSE`, © 2026 morluto).
+Copy of the `skills/reverse-engineer-anything` folder from the npm package `rea-agents@6.8.0`, **unmodified**.
 
-Garde ce skill à la même version que le serveur MCP (`REA_VERSION` dans `config/bin/oc-rea-mcp`) : le skill décrit les outils de cette version.
-Usage légal uniquement : voir le DISCLAIMER du projet (https://github.com/morluto/rea/blob/main/DISCLAIMER.md).
+Keep this skill at the same version as the MCP server (`REA_VERSION` in `config/bin/oc-rea-mcp`): the skill describes the tools of that version.
+Legal use only: see the project DISCLAIMER (https://github.com/morluto/rea/blob/main/DISCLAIMER.md).

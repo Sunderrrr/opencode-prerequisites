@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Lance le MCP Playwright (Microsoft) avec le navigateur du système s'il existe
-# (Arch/Omarchy, Fedora, Debian, Ubuntu...), sinon avec le Chromium téléchargé par Playwright.
-#   OC_PLAYWRIGHT_HEADED=1   fenêtre visible (sinon : headless quand on utilise le navigateur système)
-#   OC_PLAYWRIGHT_BROWSER=/chemin/vers/navigateur   force un navigateur précis
+# Starts the Playwright MCP server (Microsoft) with the system browser when one exists
+# (Arch/Omarchy, Fedora, Debian, Ubuntu...), otherwise with the Chromium downloaded by Playwright.
+#   OC_PLAYWRIGHT_HEADED=1   visible window (otherwise: headless when using the system browser)
+#   OC_PLAYWRIGHT_BROWSER=/path/to/browser   force a specific browser
 set -Eeuo pipefail
 
 exe="${OC_PLAYWRIGHT_BROWSER:-}"
@@ -12,18 +12,18 @@ if [ -z "$exe" ]; then
   done
 fi
 
-# Version épinglée (dernière stable vérifiée : 0.0.84) : pas de @latest surprise au démarrage.
+# Pinned version (last verified stable: 0.0.84): no surprise @latest at startup.
 pkg="@playwright/mcp@0.0.84"
 
-# Sans navigateur système, args resterait vide : en bash 3.2 (macOS), "${args[@]}" avec set -u
-# échoue (« unbound variable »). On lance donc npx dans deux branches distinctes.
+# Without a system browser, args would stay empty: in bash 3.2 (macOS), "${args[@]}" with set -u
+# fails ("unbound variable"). So npx runs in two distinct branches.
 if [ -z "$exe" ]; then
   exec npx -y "$pkg" "$@"
 fi
 
 args=(--executable-path "$exe")
 [ "${OC_PLAYWRIGHT_HEADED:-0}" = 1 ] || args+=(--headless)
-# Navigateur lancé en root (conteneur) : le sandbox Chromium est impossible
+# Browser running as root (container): the Chromium sandbox is impossible
 [ "$(id -u)" -ne 0 ] || args+=(--no-sandbox)
 
 exec npx -y "$pkg" "${args[@]}" "$@"

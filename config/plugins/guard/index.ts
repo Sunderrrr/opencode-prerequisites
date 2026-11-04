@@ -1,35 +1,35 @@
-// Garde-fous appliqués par code (un prompt n'est qu'un conseil, un hook est une barrière).
-// Plugin OpenCode v2 : dossier + export par défaut Plugin.define({ id, setup }).
+// Guardrails enforced in code (a prompt is only advice, a hook is a barrier).
+// OpenCode v2 plugin: folder + default Plugin.define({ id, setup }) export.
 //
-// LIMITE ASSUMÉE : c'est un garde-fou textuel sur la commande, pas une barrière.
-// Il ne voit ni les alias, ni les variables, ni le contenu des scripts, et peut être
-// contourné (encodage, script externe, sous-shell, commande construite). Il ne remplace
-// ni une revue de sécurité ni un scan de secrets (gitleaks, trivy).
+// ASSUMED LIMITATION: this is a textual guardrail on the command, not a barrier.
+// It sees neither aliases, nor variables, nor script contents, and can be
+// bypassed (encoding, external script, subshell, constructed command). It does not replace
+// a security review or a secret scan (gitleaks, trivy).
 import { Plugin } from "@opencode/plugin"
 
-// Fichiers dont la lecture/écriture directe est refusée par les outils fichier.
+// Files whose direct read/write is refused by the file tools.
 const SECRET_FILES = /(^|\/)(\.env(\..+)?|\.npmrc|\.git-credentials|\.aws\/credentials|id_(rsa|dsa|ecdsa|ed25519)|credentials\.json|.*\.pem)$/i
 
-// Motifs historiques, gardés en défense en profondeur (testés sur la commande brute).
+// Legacy patterns, kept for defense in depth (tested against the raw command).
 const DANGEROUS = [
   /\brm\s+-rf?\s+(\/|~|\$HOME)(\s|$)/,
   /\bgit\s+push\b.*--force(?!-with-lease)/,
   /\bgit\s+reset\s+--hard\b.*origin/,
   /\b(DROP|TRUNCATE)\s+(TABLE|DATABASE)\b/i,
   /\bcurl\b[^|]*\|\s*(ba)?sh\b/,
-  /\bgit\s+stash\b/, // la pile de stash est partagée entre worktrees
+  /\bgit\s+stash\b/, // the stash stack is shared between worktrees
   /\bgit\s+clean\s+-[a-z]*f[a-z]*x/,
 ]
 
-// Le nom de l'outil shell est "shell" en v2 ("bash" en v1) : on accepte les deux.
+// The shell tool name is "shell" in v2 ("bash" in v1): both are accepted.
 const SHELL_TOOLS = new Set(["shell", "bash"])
 const FILE_TOOLS = new Set(["read", "edit", "write", "apply_patch", "patch"])
 
-// Les guillemets sont retirés pour attraper rm -rf "$HOME" ou cat ".env".
+// Quotes are stripped to catch rm -rf "$HOME" or cat ".env".
 const unquote = (s) => s.replace(/["']/g, "")
 const segments = (s) => unquote(s).split(/[;&|\n]+/)
 
-// Chemins de secrets cités dans une commande (hors .env.example).
+// Secret paths mentioned in a command (except .env.example).
 const SECRET_PATH = [
   /(?:^|[\s=:(])(?:[^\s;&|<>()]*\/)?\.env(?:\.[\w-]+)?(?=$|[\s;&|<>()])/i,
   /(?:^|[\s=:(])(?:[^\s;&|<>()]*\/)?\.ssh\/id_(?:rsa|dsa|ecdsa|ed25519)\b(?!\.pub)/i,
@@ -40,13 +40,13 @@ const SECRET_PATH = [
 const SECRET_EXAMPLE = /[^\s;&|<>()]*\.env\.example\b/gi
 const hasSecretPath = (s) => SECRET_PATH.some((re) => re.test(s.replace(SECRET_EXAMPLE, "")))
 
-// Lecture/exfiltration : outil de copie ou d'encodage + fichier de secrets dans le même segment.
+// Read/exfiltration: copy or encoding tool + secret file in the same segment.
 const SECRET_READ_TOOLS = /\b(cat|cp|mv|base64|xxd|strings|tar|zip|scp|rsync)\b/i
-// cp .env.example .env initialise une config locale : autorisé.
+// cp .env.example .env bootstraps a local config: allowed.
 const SECRET_READ_EXEMPT = /^(?:(?:sudo|command)\s+)*(?:cp|mv)\s+(?:-[\w-]+\s+)*[^\s;&|]*\.env\.example\s+[^\s;&|]*\.env(?:\.[\w.-]+)?(?:\s+(?:#.*|[012]?>\s*\S+|2>&1))?$/i
 const isSecretRead = (command) => segments(command).some((seg) => SECRET_READ_TOOLS.test(seg) && hasSecretPath(seg) && !SECRET_READ_EXEMPT.test(seg.trim()))
 
-// Suppression destructrice : rm récursif + forcé sur /, ~, $HOME, .config, .ssh ou .git.
+// Destructive deletion: recursive + forced rm on /, ~, $HOME, .config, .ssh or .git.
 const DESTRUCTIVE_TARGETS = new Set(["/", "/*", "~", "~/*", "$HOME", "$HOME/*", "${HOME}", "${HOME}/*", "~/.config", "~/.config/*", "~/.ssh", "~/.ssh/*", "$HOME/.config", "$HOME/.config/*", "${HOME}/.config", "${HOME}/.config/*", "$HOME/.ssh", "$HOME/.ssh/*", "${HOME}/.ssh", "${HOME}/.ssh/*"])
 const isDestructiveRm = (command) => segments(command).some((seg) => {
   const m = seg.match(/\brm\b(.*)$/i)
@@ -63,7 +63,7 @@ const isDestructiveRm = (command) => segments(command).some((seg) => {
   })
 })
 
-// Git destructeur : push forcé, reset --hard, filter-branch, clean -f avec -d/-x.
+// Destructive git: forced push, reset --hard, filter-branch, clean -f with -d/-x.
 const isDangerousGit = (command) => segments(command).some((seg) => {
   const s = seg.trim()
   if (/\bgit\s+push\b/.test(s)) {
@@ -81,7 +81,7 @@ const isDangerousGit = (command) => segments(command).some((seg) => {
   return false
 })
 
-// Téléchargement puis exécution (pipe, fichier + shell, eval/source de substitution).
+// Download then execute (pipe, file + shell, eval/source of a substitution).
 const DOWNLOAD_EXEC = [
   /\b(?:curl|wget)\b[^|]*\|\s*(?:(?:sudo|env)\s+(?:-\S+\s+)*)*(?:ba)?sh\b/,
   /\bcurl\b[^;&|]*?(?:\s-o\s+|\s--output[=\s]+|\s-O\b|\s>)[^;&|]*?(?:&&|;|\n)[^;&|]*\b(?:ba)?sh\b/,
@@ -100,12 +100,12 @@ export default Plugin.define({
       const input = event.input ?? {}
       const file = String(input.filePath ?? input.path ?? "").replace(/\\/g, "/")
       if (FILE_TOOLS.has(event.tool) && file && SECRET_FILES.test(file) && !file.endsWith(".env.example")) {
-        throw new Error(`Accès refusé à un fichier de secrets : ${file}`)
+        throw new Error(`Blocked by guard: secret file ${file}`)
       }
       const command = String(input.command ?? input.cmd ?? "")
       if (SHELL_TOOLS.has(event.tool) && command) {
         if (DANGEROUS.some((re) => re.test(command)) || isSecretRead(command) || isDestructiveRm(command) || isDangerousGit(command) || isDownloadExec(command)) {
-          throw new Error(`Commande bloquée par guard : ${command}`)
+          throw new Error(`Blocked by guard: ${command}`)
         }
       }
     })
