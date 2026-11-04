@@ -1,9 +1,13 @@
-// Notification quand une session est terminée ou attend (utile avec plusieurs sessions en parallèle).
+// Notification quand une session rend la main (utile avec plusieurs sessions en parallèle).
 // Plugin OpenCode v2 : dossier + export par défaut Plugin.define({ id, setup }).
 import { Plugin } from "@opencode/plugin"
 import { execFile } from "node:child_process"
 
-const MESSAGE = "OpenCode a fini / attend ta réponse"
+// Message volontairement neutre : `session.idle` marque la fin d'un TOUR, pas la fin du travail.
+// Le CEO délègue en arrière-plan et rend la main toutes les ~2 min alors que des sous-agents
+// tournent encore ; l'événement ne permet pas de distinguer de façon fiable le tour d'une session
+// parente de la fin d'une tâche. Annoncer « a fini » serait donc faux : on informe sans conclure.
+const MESSAGE = "Tour rendu (vérifie les tâches en cours)"
 const MIN_GAP_MS = 8000 // les sous-agents terminent aussi : on évite une notification par sous-agent
 
 function notify() {

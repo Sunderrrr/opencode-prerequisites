@@ -9,6 +9,7 @@
 - L'agent par défaut est `ceo` : il cadre, découpe, délègue et valide, sans écrire de code. Petite tâche = un seul spécialiste.
 - Spécialistes de domaine : `architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`, `reverse-engineer`. Par langage/outil : `rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`. Contrôle : `review`, `code-simplifier`, `verify-app`. Git : `integrator`.
 - Le CEO découpe au maximum (un sous-agent par module/fichier/test, plusieurs `rust` en parallèle si les fichiers diffèrent) et lance les spécialistes en arrière-plan (`subagent` avec `background: true`) : il reste joignable pendant qu'ils travaillent et traite mes messages tout de suite. Son tour rend la main en moins de ~2 minutes ; les tâches longues sont découpées en vagues courtes et il répond à mes messages à tout moment, même quand des sous-agents tournent.
+- Le CEO ne bloque jamais son tour pour une implémentation : contrat, tests, corrections et validations partent en arrière-plan ; seul le plan court reste en foreground.
 - Un sous-agent démarre sans historique : le brief du CEO donne objectif, contexte, fichiers, critère de réussite, interdits. Il n'interroge jamais l'utilisateur : il avance sur sa meilleure hypothèse et la note dans son rapport court (fait / preuves / reste / questions).
 - `security` est obligatoire pour auth, données personnelles, secrets, réseau et dépendances.
 - Agents d'analyse = lecture seule, sans sous-délégation ; agents d'action = bash autorisé.
@@ -26,14 +27,14 @@
 - Un worktree par tâche parallèle (`agent-wt new <tâche>` → `.worktrees/<tâche>`, branche `agent/<tâche>`) ; un fichier = un propriétaire ; même fichier pour deux tâches = séquentiel ; fichiers chauds (registres, schéma, manifestes, lockfiles, CI) = un seul propriétaire.
 - Les spécialistes commitent localement et ne poussent jamais. Seul `@integrator` fusionne (un à la fois, tests complets après chaque fusion, lockfiles régénérés, jamais fusionnés à la main).
 - Mode PR (sur ma demande) : branche `integration/<nom>` depuis `origin/main`, rebase + tests juste avant le push, `gh pr create`, re-sync si `main` avance (3 fois max). `--force-with-lease` seulement sur `integration/*`.
-- Interdits : `git stash`, `git reset --hard`, `git clean -fdx`, changer de branche dans le dépôt principal. Ne commit/push que si je le demande.
+- Interdits : `git stash`, `git reset --hard`, `git clean -fdx`, changer de branche dans le dépôt principal. Les spécialistes commitent localement dans leur worktree (obligatoire pour que l'intégration fonctionne) ; le CEO ne pousse jamais sans ma demande explicite.
 
 ## Outils
 - Doc de librairie : `context7` avant d'écrire du code. Exemples de code réels : `grep_app`. Internet : `websearch`/`webfetch` ou `@web-researcher`. GitHub : `gh search`, `gh repo view`, `gh api`.
 - Rétro-ingénierie : `@reverse-engineer` (skill `reverse-engineer-anything`, MCP `rea`), uniquement dans un cadre légal : ses propres logiciels, CTF, malware en analyse défensive, interopérabilité, recherche autorisée. Jamais pour contourner licence, DRM ou anti-triche.
 - IaC/infra : MCP `terraform` (docs du registre), `kubernetes` (lecture seule), `trivy` (scan images, IaC, secrets).
 - Navigateur : `playwright` (tests de page) ou `obscura` (lecture/scraping léger), jamais les deux ensemble. Ne scrape que ce que je demande, dans le respect des conditions d'utilisation.
-- Gros travail de lecture : délègue à `@explore`/`@researcher`. Charge un skill quand sa description correspond.
+- Gros travail de lecture : le CEO délègue à `@explore`/`@researcher`. Charge un skill quand sa description correspond.
 
 ## Sécurité
 - Jamais de clé, token ou mot de passe dans le code ni dans un commit.
