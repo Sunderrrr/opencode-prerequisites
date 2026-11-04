@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Tests de l'installateur côté machine : bloc d'environnement (bash/zsh, shells non interactifs), désinstallation sans trace,
-// MemPalace (fichier orphelin, lien « mempalace », plus de « init »), détection d'un OpenCode lancé avant l'installation,
-// et MCP semgrep (--check réel vs --check-quick sans processus ni téléchargement).
+// installation transactionnelle (échec make-lite → rollback exact, repère .installed), --memory-only, personnalisations
+// préservées (.new, --force-config), permissions (umask 077), MemPalace (fichier orphelin, lien « mempalace », plus de
+// « init »), détection d'un OpenCode lancé avant l'installation, et MCP semgrep (--check réel vs --check-quick).
+import crypto from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -15,6 +17,24 @@ let failed = 0
 const check = (name, cond, detail = "") => { if (!cond) failed++; console.log(`${cond ? "✅" : "❌"} ${name}${cond || !detail ? "" : ` — ${detail}`}`) }
 const sh = (cmd, args, env, cwd = ROOT) => spawnSync(cmd, args, { encoding: "utf8", cwd, env: { ...process.env, ...env } })
 const write = (f, t, mode) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, t, mode ? { mode } : undefined) }
+const sha256 = (data) => crypto.createHash("sha256").update(data).digest("hex")
+// Empreinte récursive du CONTENU (noms, types, liens et octets), pas des permissions :
+// sert à prouver qu'un rollback rend exactement l'arborescence d'avant (le durcissement
+// des droits, lui, est vérifié séparément).
+const treeDigest = (dir) => {
+  const h = crypto.createHash("sha256")
+  const walk = (d, rel = "") => {
+    for (const name of fs.readdirSync(d).sort()) {
+      const full = path.join(d, name), r = rel ? `${rel}/${name}` : name, st = fs.lstatSync(full)
+      if (st.isDirectory()) { h.update(`D\0${r}\0`); walk(full, r) }
+      else if (st.isSymbolicLink()) h.update(`L\0${r}\0${fs.readlinkSync(full)}\0`)
+      else h.update(`F\0${r}\0${sha256(fs.readFileSync(full))}\0`)
+    }
+  }
+  walk(dir)
+  return h.digest("hex")
+}
+const mode = (f) => fs.statSync(f).mode & 0o777
 
 // PATH hermétique partagé : tous les binaires réels sauf uv/uvx/pipx. Aucun test ne doit
 // déclencher de téléchargement ni de compilation ; Node est un lanceur vers le vrai binaire.
@@ -210,6 +230,143 @@ check("uninstall : restaure la sauvegarde la plus récente (suffixe de même sec
   fs.existsSync(path.join(cfg5, "apres-premier-install.txt")) && fs.existsSync(path.join(cfg5, "personnel.txt")), r4.stdout + r4.stderr)
 check("uninstall : config actuelle déplacée sans imbrication",
   removed5.length === 1 && !fs.existsSync(path.join(h5, removed5[0], "cfg")), removed5.join(", "))
+
+// ---------- 1c. échec de make-lite : la phase config est annulée et TOUT est rendu à l'identique ----------
+const h6 = path.join(tmp, "home6"), cfg6 = path.join(h6, "cfg"), bin6 = path.join(h6, ".local/bin")
+write(path.join(cfg6, "temoin.txt"), "témoin d'avant installation\n")
+const fakeLiteDir = path.join(tmp, "fakenode-lite")
+write(path.join(fakeLiteDir, "node"), `#!/bin/sh
+case "$*" in
+  *make-lite.mjs*) printf 'make-lite : échec simulé\\n' >&2; exit 42 ;;
+esac
+exec "${process.execPath}" "$@"
+`, 0o755)
+const digest6 = treeDigest(cfg6)
+const r6 = sh("./install.sh", ["--lite"], {
+  HOME: h6, OPENCODE_CONFIG_DIR: cfg6, OBSCURA_BIN_DIR: bin6,
+  XDG_DATA_HOME: path.join(h6, ".local/share"), PATH: `${fakeLiteDir}:${noUv}`,
+})
+check("échec make-lite : code non nul et installation annoncée comme annulée",
+  r6.status !== 0 && /Installation annulée/.test(r6.stdout + r6.stderr), `code ${r6.status} | ${r6.stdout}${r6.stderr}`)
+check("échec make-lite : $DEST strictement identique (hash récursif avant/après)",
+  treeDigest(cfg6) === digest6, `avant ${digest6.slice(0, 12)} après ${treeDigest(cfg6).slice(0, 12)}`)
+check("échec make-lite : repère .opencode-prerequisites.installed absent",
+  !fs.existsSync(path.join(cfg6, ".opencode-prerequisites.installed")))
+check("échec make-lite : aucun lanceur résiduel dans $BIN",
+  !fs.existsSync(bin6) || fs.readdirSync(bin6).length === 0, fs.existsSync(bin6) ? fs.readdirSync(bin6).join(", ") : "BIN absent")
+
+// ---------- 1d. --memory-only : ne touche jamais au repère .installed ----------
+const hMem = path.join(tmp, "home-mem"), memCfg = path.join(hMem, "cfg"), memBin = path.join(hMem, ".local/bin")
+const memVenv = path.join(hMem, ".mempalace/venv/bin"), memFake = path.join(tmp, "fake-npm-mem")
+write(path.join(memVenv, "python"), "#!/bin/sh\nexit 0\n", 0o755)
+write(path.join(memVenv, "mempalace"), "#!/bin/sh\nexit 0\n", 0o755)
+write(path.join(memFake, "npm"), `#!/bin/sh
+mkdir -p node_modules/@rvboris/opencode-mempalace/dist/plugin
+printf 'export default {}\\n' > node_modules/@rvboris/opencode-mempalace/dist/plugin/index.js
+`, 0o755)
+const envMem = { HOME: hMem, OPENCODE_CONFIG_DIR: memCfg, OBSCURA_BIN_DIR: memBin, XDG_DATA_HOME: path.join(hMem, ".local/share"), PATH: `${memFake}:${noUv}` }
+write(path.join(memCfg, "config-perso.txt"), "garde\n")
+const memMarker = path.join(memCfg, ".opencode-prerequisites.installed")
+let rMem = sh("./install.sh", ["--memory-only"], envMem)
+check("memory-only sans repère : exécution OK, repère toujours absent, config personnelle intacte",
+  rMem.status === 0 && !fs.existsSync(memMarker) && fs.readFileSync(path.join(memCfg, "config-perso.txt"), "utf8") === "garde\n"
+  && fs.existsSync(path.join(memCfg, "plugins/mempalace/index.ts")), `code ${rMem.status} | ${rMem.stdout}${rMem.stderr}`)
+fs.writeFileSync(memMarker, "repère existant\n")
+const markerDate = new Date("2021-02-03T04:05:06Z")
+fs.utimesSync(memMarker, markerDate, markerDate)
+const markerMtime = fs.statSync(memMarker).mtimeMs
+rMem = sh("./install.sh", ["--memory-only"], envMem)
+check("memory-only avec repère : contenu et mtime du repère inchangés",
+  rMem.status === 0 && fs.readFileSync(memMarker, "utf8") === "repère existant\n" && fs.statSync(memMarker).mtimeMs === markerMtime,
+  `code ${rMem.status} | mtime ${markerMtime} → ${fs.statSync(memMarker).mtimeMs}`)
+
+// ---------- 1e. personnalisation conservée (.new) puis --force-config ----------
+const h7 = path.join(tmp, "home7"), cfg7 = path.join(h7, "cfg"), bin7 = path.join(h7, ".local/bin")
+const env7 = { HOME: h7, OPENCODE_CONFIG_DIR: cfg7, OBSCURA_BIN_DIR: bin7, XDG_DATA_HOME: path.join(h7, ".local/share"), PATH: noUv }
+sh("./install.sh", ["--no-tools"], env7)
+const userFile = path.join(cfg7, "opencode.jsonc"), newFile = `${userFile}.new`
+const kitJson = fs.readFileSync(userFile, "utf8"), kitHash = sha256(kitJson)
+const persoJson = kitJson.replace("{", '{\n  "x_perso_test": true,')
+fs.writeFileSync(userFile, persoJson)
+const persoHash = sha256(persoJson)
+let r7 = sh("./install.sh", ["--no-tools"], env7)
+check("personnalisation : fichier utilisateur conservé à l'octet près à la réinstallation",
+  r7.status === 0 && sha256(fs.readFileSync(userFile, "utf8")) === persoHash, `code ${r7.status} | ${r7.stdout}${r7.stderr}`)
+check("personnalisation : opencode.jsonc.new contient la version du kit (sans la clé utilisateur)",
+  fs.existsSync(newFile) && sha256(fs.readFileSync(newFile, "utf8")) === kitHash && !fs.readFileSync(newFile, "utf8").includes("x_perso_test"))
+check("personnalisation : avertissement explicite dans la sortie",
+  /Fichier modifié conservé, nouvelle version dans opencode\.jsonc\.new/.test(r7.stdout + r7.stderr), r7.stdout + r7.stderr)
+check("personnalisation : aucun avertissement « impossible de détecter » avec un manifeste à empreintes",
+  !/impossible de détecter/.test(r7.stdout + r7.stderr), r7.stdout + r7.stderr)
+r7 = sh("./install.sh", ["--no-tools", "--force-config"], env7)
+// Comportement constaté et voulu : --force-config écrase le fichier utilisateur. Le .new de la
+// passe précédente n'est pas supprimé par install.sh, mais il est identique au fichier du kit :
+// il ne peut donc plus contenir la personnalisation (aucune restauration trompeuse).
+check("--force-config : opencode.jsonc écrasé par la version du kit (clé utilisateur perdue)",
+  r7.status === 0 && sha256(fs.readFileSync(userFile, "utf8")) === kitHash, `code ${r7.status} | ${r7.stdout}${r7.stderr}`)
+check("--force-config : .new obsolète absent ou identique au kit, jamais la version utilisateur",
+  !fs.existsSync(newFile) || (sha256(fs.readFileSync(newFile, "utf8")) === kitHash && !fs.readFileSync(newFile, "utf8").includes("x_perso_test")),
+  fs.existsSync(newFile) ? "reste en place (identique au kit)" : "absent")
+
+// ---------- 1e-bis. config préexistante sans manifeste / ancien manifeste sans empreintes ----------
+// Sans empreintes, une personnalisation ne peut pas être détectée : l'installateur doit le dire
+// explicitement avant d'écraser, et la sauvegarde complète doit rester exploitable.
+const h9 = path.join(tmp, "home9"), cfg9 = path.join(h9, "cfg"), bin9 = path.join(h9, ".local/bin")
+const env9 = { HOME: h9, OPENCODE_CONFIG_DIR: cfg9, OBSCURA_BIN_DIR: bin9, XDG_DATA_HOME: path.join(h9, ".local/share"), PATH: noUv }
+const kitJson9 = fs.readFileSync(path.join(ROOT, "config/opencode.jsonc"), "utf8")
+const perso9 = kitJson9.replace("{", '{\n  "x_perso_premier_install": true,')
+write(path.join(cfg9, "opencode.jsonc"), perso9)
+const back9 = () => fs.readdirSync(h9).filter((n) => n.startsWith("cfg.bak-")).map((n) => path.join(h9, n))
+const r9 = sh("./install.sh", ["--no-tools"], env9)
+const out9 = r9.stdout + r9.stderr, bak9 = back9()
+check("sans manifeste : avertissement « impossible de détecter » et sauvegarde annoncée",
+  r9.status === 0 && /Configuration OpenCode préexistante sans manifeste : impossible de détecter tes modifications ; sauvegarde complète dans \S+/.test(out9),
+  `code ${r9.status} | ${out9}`)
+check("sans manifeste : opencode.jsonc personnalisé écrasé par la version du kit",
+  !fs.readFileSync(path.join(cfg9, "opencode.jsonc"), "utf8").includes("x_perso_premier_install"))
+check("sans manifeste : la sauvegarde contient la personnalisation à l'octet près",
+  bak9.length === 1 && fs.readFileSync(path.join(bak9[0], "opencode.jsonc"), "utf8") === perso9,
+  bak9.join(", "))
+
+// Ancien manifeste : liste de chemins nus, comme avant l'ajout des empreintes.
+const manifest9 = path.join(cfg9, ".opencode-prerequisites.manifest")
+fs.writeFileSync(manifest9, fs.readFileSync(manifest9, "utf8").split("\n").filter(Boolean).map((l) => l.slice(l.indexOf("\t") + 1)).join("\n") + "\n")
+check("legacy : manifeste réécrit sans aucune empreinte", !/[0-9a-f]{64}\t/.test(fs.readFileSync(manifest9, "utf8")))
+const persoLegacy9 = fs.readFileSync(path.join(cfg9, "opencode.jsonc"), "utf8").replace("{", '{\n  "x_perso_legacy": true,')
+const agentsPerso9 = "# AGENTS.md personnalisé (legacy)\n"
+fs.writeFileSync(path.join(cfg9, "opencode.jsonc"), persoLegacy9)
+fs.writeFileSync(path.join(cfg9, "AGENTS.md"), agentsPerso9)
+const r9b = sh("./install.sh", ["--no-tools"], env9)
+const out9b = r9b.stdout + r9b.stderr
+const bak9b = back9().filter((b) => fs.existsSync(path.join(b, "opencode.jsonc")) && fs.readFileSync(path.join(b, "opencode.jsonc"), "utf8") === persoLegacy9)
+check("legacy : avertissement explicite « Ancien manifeste sans empreintes »",
+  r9b.status === 0 && /Ancien manifeste sans empreintes : impossible de détecter tes modifications/.test(out9b), `code ${r9b.status} | ${out9b}`)
+check("legacy : sauvegarde complète avec opencode.jsonc ET AGENTS.md personnalisés",
+  bak9b.length === 1 && fs.readFileSync(path.join(bak9b[0], "AGENTS.md"), "utf8") === agentsPerso9, bak9b.join(", "))
+check("legacy : fichiers du kit appliqués (personnalisations écrasées)",
+  !fs.readFileSync(path.join(cfg9, "opencode.jsonc"), "utf8").includes("x_perso_legacy")
+  && fs.readFileSync(path.join(cfg9, "AGENTS.md"), "utf8") === fs.readFileSync(path.join(ROOT, "config/AGENTS.md"), "utf8"))
+check("legacy : la nouvelle installation rétablit les empreintes",
+  /^[0-9a-f]{64}\t/m.test(fs.readFileSync(manifest9, "utf8")))
+
+// ---------- 1f. permissions : umask 077 et durcissement de l'arborescence ----------
+const h8 = path.join(tmp, "home8"), cfg8 = path.join(h8, "cfg"), bin8 = path.join(h8, ".local/bin")
+write(path.join(cfg8, "mon-fichier.txt"), "contenu utilisateur\n", 0o644)
+const env8 = { HOME: h8, OPENCODE_CONFIG_DIR: cfg8, OBSCURA_BIN_DIR: bin8, XDG_DATA_HOME: path.join(h8, ".local/share"), PATH: noUv }
+const r8 = sh("./install.sh", ["--no-tools"], env8)
+const bak8 = fs.readdirSync(h8).filter((n) => n.startsWith("cfg.bak-")).map((n) => path.join(h8, n))
+const perso8 = path.join(cfg8, "mon-fichier.txt")
+check("permissions : $DEST en 700 et sauvegarde $DEST.bak-* en 700",
+  r8.status === 0 && mode(cfg8) === 0o700 && bak8.length === 1 && mode(bak8[0]) === 0o700,
+  `DEST ${mode(cfg8).toString(8)} | bak ${bak8.map((b) => mode(b).toString(8)).join(",")}`)
+check("permissions : opencode.jsonc en 600, repère .installed en 600",
+  mode(path.join(cfg8, "opencode.jsonc")) === 0o600 && mode(path.join(cfg8, ".opencode-prerequisites.installed")) === 0o600,
+  `${mode(path.join(cfg8, "opencode.jsonc")).toString(8)} / ${mode(path.join(cfg8, ".opencode-prerequisites.installed")).toString(8)}`)
+check("permissions : lanceur $BIN/oc-models en 755",
+  mode(path.join(bin8, "oc-models")) === 0o755, mode(path.join(bin8, "oc-models")).toString(8))
+check("permissions : fichier personnel préservé, lisible par son propriétaire, fermé aux autres",
+  fs.readFileSync(perso8, "utf8") === "contenu utilisateur\n" && (mode(perso8) & 0o400) !== 0 && (mode(perso8) & 0o077) === 0,
+  `mode ${mode(perso8).toString(8)}`)
 
 // ---------- 2. MemPalace : plus de « init », fichier orphelin retiré, lien « mempalace » ----------
 const h2 = path.join(tmp, "home2"), venv = path.join(h2, ".mempalace/venv/bin"), fake = path.join(tmp, "fake"), calls = path.join(tmp, "calls.log")

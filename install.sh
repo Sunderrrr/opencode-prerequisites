@@ -6,6 +6,10 @@
 #   ./install.sh --lite         profil léger : 12 agents, MCP context7 + grep_app, sans outils lourds
 #   ./install.sh --no-tools     copie la config seulement (aucun téléchargement/installation d'outil)
 #   ./install.sh --memory-only  (re)tente seulement l'installation de MemPalace, sans rien recopier
+#   ./install.sh --force-config écrase les fichiers du kit que tu as modifiés (sinon, à partir de la
+#                               première installation qui écrit les empreintes sha256, ils sont conservés
+#                               et la version du kit est déposée en <fichier>.new ; un ancien manifeste
+#                               sans empreintes est signalé avant la copie)
 #   ./install.sh --shell-env    ajoute PATH et MEMPALACE_ADAPTER_PYTHON à ~/.bashrc / ~/.zshrc (une seule fois)
 #   ./install.sh --with-matt    + skills complets de Matt Pocock
 #   ./install.sh --android      module Android (option) : agents android et mobile-tester, MCP mobile, toolchain Podman
@@ -19,6 +23,9 @@
 #   (ne lance pas ce script avec sudo : tout irait dans /root au lieu de ton dossier personnel)
 #   OPENCODE_CONFIG_DIR=...     autre dossier de destination ; OBSCURA_BIN_DIR=... dossier des binaires
 set -Eeuo pipefail
+# La config peut contenir des noms de serveurs, des chemins et des choix personnels :
+# rien de ce que crée ce script ne doit être lisible par les autres comptes locaux.
+umask 077
 
 # --- Versions épinglées des outils téléchargés : aucune URL « latest » ni « main ».
 # Surchargeables (OC_*_VERSION) pour suivre une release précise ou pour les tests hermétiques.
@@ -32,12 +39,13 @@ OC_SEMGREP_VERSION="${OC_SEMGREP_VERSION:-1.183.0}"
 OC_PLAYWRIGHT_VERSION="${OC_PLAYWRIGHT_VERSION:-1.64.1}"
 OC_SKILLS_VERSION="${OC_SKILLS_VERSION:-1.7.6}"
 
-LITE=0; TOOLS=1; MATT=0; MEMONLY=0; ALLOWROOT=0; SHELLENV=0; ANDROID=0; NOANDROID=0; PENTEST=0; NOPENTEST=0; PENTEST_EXPLICIT=0
+LITE=0; TOOLS=1; MATT=0; MEMONLY=0; ALLOWROOT=0; SHELLENV=0; ANDROID=0; NOANDROID=0; PENTEST=0; NOPENTEST=0; PENTEST_EXPLICIT=0; FORCE_CONFIG=0
 for a in "$@"; do
   case "$a" in
     --lite) LITE=1; TOOLS=0 ;;
     --no-tools) TOOLS=0 ;;
     --memory-only) MEMONLY=1 ;;
+    --force-config) FORCE_CONFIG=1 ;;
     --allow-root) ALLOWROOT=1 ;;
     --android) ANDROID=1 ;;
     --no-android) NOANDROID=1 ;;
@@ -71,6 +79,7 @@ done
 sha256_of() {
   if need sha256sum; then sha256sum "$1" | awk '{print $1}'
   elif need shasum; then shasum -a 256 "$1" | awk '{print $1}'
+  elif need node; then node -e 'const c=require("node:crypto"),f=require("node:fs");process.stdout.write(c.createHash("sha256").update(f.readFileSync(process.argv[1])).digest("hex"))' "$1"
   else echo ""; fi
 }
 
@@ -271,10 +280,13 @@ drop_mempalace_plugin() {
 if [ "$MEMONLY" = 1 ]; then
   echo "⬇️  MemPalace..."
   mkdir -p "$DEST"
+  chmod 700 "$DEST"
   if ! { setup_mempalace && install_mempalace_plugin; }; then
     die "MemPalace n'a pas pu être installé."
   fi
-  : > "$DEST/.opencode-prerequisites.installed"
+  # --memory-only ne recopie aucune configuration : il ne doit jamais écrire le repère
+  # .installed (doctor le prendrait pour une installation fraîche et signalerait à tort
+  # un OpenCode périmé).
   exit 0
 fi
 
@@ -306,6 +318,7 @@ install_android_addon() {
   apply_block "$DEST/AGENTS.md" android "$A/AGENTS.android.md"
   apply_block "$DEST/agents/ceo.md" android "$A/ceo.android.md"
   : > "$ANDROID_MARKER"
+  chmod 600 "$ANDROID_MARKER"
   echo "✅ Module Android installé (agents android et mobile-tester, skill android-dev, oc-android, faux adb pour mobile-mcp)"
 }
 
@@ -446,6 +459,7 @@ install_pentest_tools() {
   need sqlmap || warn "sqlmap absent (test d'injection SQL ciblé sur ton app). → $(pkg_hint sqlmap)"
 
   : > "$PENTEST_MARKER"
+  chmod 600 "$PENTEST_MARKER"
   echo "✅ Outils pentest/appsec pour sécuriser tes apps (téléchargement vérifié) : gitleaks, semgrep, nuclei, httpx, ffuf, osv-scanner, testssl.sh, nikto ; nmap/sqlmap via le gestionnaire de paquets si absents."
 }
 
@@ -575,135 +589,353 @@ need opencode || warn "opencode introuvable. Installe-le : curl -fsSL https://op
 # 1. Validation du kit avant toute copie
 node "$HERE/scripts/validate-kit.mjs" || die "Le kit est invalide : rien n'a été installé."
 
-# 2. Sauvegarde + copie
+# 2. Sauvegarde + phase de configuration transactionnelle --------------------------------
+# Tout ce qui touche la configuration (copie, profil léger, module Android, modèles, MCP)
+# s'exécute dans une seule phase : au premier échec, l'état d'avant est restauré et le
+# repère .installed n'est pas écrit. Les outils réseau (section 5) restent best-effort.
+
+MANIFEST="$DEST/.opencode-prerequisites.manifest"
+MCP_STATE="$HERE/scripts/lib/mcp-state.mjs"
+
+# secure_tree <dossier> : dossiers 700, fichiers 600, exécutables 700. Retire tous les
+# droits groupe/autres sans perdre le bit exécutable du propriétaire.
+secure_tree() {
+  local d="$1"
+  [ -d "$d" ] || return 0
+  chmod -R go-rwx "$d" 2>/dev/null || true
+}
+
+# manifest_hash <manifeste> <chemin> : hash sha256 enregistré pour ce fichier, vide si
+# absent ou si le manifeste est au format historique (liste de chemins sans hash).
+manifest_hash() {
+  local man="$1" want="$2" line h p
+  [ -f "$man" ] || return 0
+  while IFS= read -r line; do
+    case "$line" in
+      *$'\t'*)
+        h="${line%%$'\t'*}"; p="${line#*$'\t'}"
+        if [ "$p" = "$want" ] && [[ "$h" =~ ^[0-9a-f]{64}$ ]]; then printf '%s\n' "$h"; return 0; fi
+        ;;
+    esac
+  done < "$man"
+}
+
+# manifest_paths <manifeste> : chemins, quel que soit le format (hash<TAB>chemin ou chemin seul).
+manifest_paths() {
+  local man="$1" line p
+  [ -f "$man" ] || return 0
+  while IFS= read -r line; do
+    case "$line" in
+      *$'\t'*) p="${line#*$'\t'}"; [ -n "$p" ] && printf '%s\n' "$p" ;;
+      "") ;;
+      *) printf '%s\n' "$line" ;;
+    esac
+  done < "$man"
+}
+
+# manifest_has_hashes <manifeste> : vrai si au moins une empreinte sha256 est présente.
+# Un manifeste historique (chemins nus) ne permet pas de détecter les personnalisations.
+manifest_has_hashes() {
+  [ -f "$1" ] && grep -Eq $'^[0-9a-f]{64}\t' "$1"
+}
+
+# is_modified <chemin relatif> : le fichier installé diffère-t-il du hash du manifeste ?
+is_modified() {
+  local rel="$1" old cur
+  old="$(manifest_hash "$MANIFEST" "$rel")"
+  [ -n "$old" ] || return 1          # pas de hash connu (premier passage/ancien manifeste)
+  [ -f "$DEST/$rel" ] || return 1    # absent : rien à préserver
+  cur="$(sha256_of "$DEST/$rel")"
+  [ -n "$cur" ] && [ "$cur" != "$old" ]
+}
+
+DEST_EXISTED=0; [ -d "$DEST" ] && DEST_EXISTED=1
+BIN_EXISTED=0; [ -d "$BIN" ] && BIN_EXISTED=1
 mkdir -p "$DEST"
+chmod 700 "$DEST"
+mkdir -p "$BIN"
+
+BAK=""
 if [ -n "$(ls -A "$DEST" 2>/dev/null)" ]; then
   BAK="$(unique_path "$DEST.bak-$STAMP")"
   cp -a "$DEST" "$BAK"
+  secure_tree "$BAK"
   echo "💾 Sauvegarde : $BAK"
 fi
-cp -a "$SRC/." "$DEST/"
-mkdir -p "$BIN"
-# Retire les fichiers que le kit installait avant et qui n'existent plus (ex. plugins/auto-compact.js),
-# sans toucher à tes propres fichiers : on se base sur la liste des fichiers déjà installés par le kit.
-# La liste « legacy » n'est appliquée qu'à partir de la 2e installation (manifeste du kit présent) :
-# au premier passage, un plugins/guard.js personnel ne doit jamais être supprimé.
-MANIFEST="$DEST/.opencode-prerequisites.manifest"
-( cd "$SRC" && find . -type f ! -path './bin/*' | sed 's|^\./||' | sort ) > "$TMP/new.manifest"
-: > "$TMP/old.manifest"
-if [ -f "$MANIFEST" ]; then
-  { cat "$MANIFEST"; printf "%s\n" "plugins/auto-compact.js" "plugins/guard.js" "plugins/notify.js"; } | sort -u > "$TMP/old.manifest"
-fi
-comm -23 "$TMP/old.manifest" "$TMP/new.manifest" | while IFS= read -r f; do
-  case "$f" in ""|*..*|/*) continue ;; esac
-  if [ -e "$DEST/$f" ]; then rm -f "$DEST/$f" && echo "🧹 Retiré (n'existe plus dans le kit) : $f"; fi
-done
-cp "$TMP/new.manifest" "$MANIFEST"
 
-for f in "$SRC"/bin/*; do install -m 0755 "$f" "$BIN/$(basename "$f")"; done
-install -m 0755 "$HERE/scripts/new-rust-project.sh" "$BIN/oc-new-rust"
-mkdir -p "$DEST/templates"
-cp -a "$HERE/templates/." "$DEST/templates/"
-echo "✅ Config installée dans $DEST ; lanceurs (agent-wt, oc-new-rust, oc-models, oc-playwright-mcp, oc-terraform-mcp, oc-rea-mcp, oc-semgrep-mcp) dans $BIN"
-
-# 3. Profil léger
-if [ "$LITE" = 1 ]; then
-  node "$HERE/scripts/make-lite.mjs" "$DEST"
+# Sans empreintes fiables, impossible de distinguer un fichier du kit d'une personnalisation :
+# on prévient AVANT la copie au lieu de laisser croire à une préservation qui n'aura pas lieu.
+# La sauvegarde complète, elle, contient toujours la version de l'utilisateur.
+MANIFEST_EXISTED=0
+if [ -f "$MANIFEST" ]; then MANIFEST_EXISTED=1; fi
+if [ -n "$BAK" ]; then
+  if [ "$MANIFEST_EXISTED" = 1 ] && ! manifest_has_hashes "$MANIFEST"; then
+    warn "Ancien manifeste sans empreintes : impossible de détecter tes modifications ; sauvegarde complète dans $BAK. Vérifie opencode.jsonc et AGENTS.md, ou utilise --force-config."
+  elif [ "$MANIFEST_EXISTED" = 0 ]; then
+    warn "Configuration OpenCode préexistante sans manifeste : impossible de détecter tes modifications ; sauvegarde complète dans $BAK. Vérifie opencode.jsonc et AGENTS.md, ou utilise --force-config."
+  fi
 fi
 
-# 2b. Module Android (option)
-if [ "$ANDROID" = 1 ]; then
-  install_android_addon
-else
-  remove_android_addon   # idempotent : nettoie aussi d'anciennes installations
+# Sauvegarde des lanceurs que cette installation peut remplacer ou supprimer (rollback).
+mkdir -p "$TMP/bin.saved"
+{
+  for f in "$SRC"/bin/*; do [ -e "$f" ] && basename "$f"; done
+  printf '%s\n' "oc-new-rust"
+  for f in "$HERE"/addons/android/bin/*; do [ -e "$f" ] && basename "$f"; done
+} | sort -u > "$TMP/bin.names"
+: > "$TMP/bin.state"
+while IFS= read -r name; do
+  case "$name" in ""|*/*|..|.) continue ;; esac
+  if [ -e "$BIN/$name" ] || [ -L "$BIN/$name" ]; then
+    cp -a "$BIN/$name" "$TMP/bin.saved/$name"
+    printf '%s\t%s\n' "$name" present >> "$TMP/bin.state"
+  else
+    printf '%s\t%s\n' "$name" absent >> "$TMP/bin.state"
+  fi
+done < "$TMP/bin.names"
+
+# Faux adb du module Android (hors $DEST) : sauvegardé pour un rollback exact.
+ANDROID_ADB="$ANDROID_SHIM_ROOT/platform-tools/adb"
+ANDROID_ADB_EXISTED=0
+if [ -e "$ANDROID_ADB" ] || [ -L "$ANDROID_ADB" ]; then
+  ANDROID_ADB_EXISTED=1
+  cp -a "$ANDROID_ADB" "$TMP/adb.saved"
 fi
 
-# 2c. Outils pentest/appsec (option --pentest)
-if [ "$PENTEST" = 1 ]; then
-  install_pentest_tools
-elif [ "$NOPENTEST" = 1 ]; then
-  remove_pentest_tools   # retire seulement le repère : les binaires déjà posés ne sont pas supprimés
-fi
-
-# 3a. Tes choix de modèles (oc-models set ...) survivent aux mises à jour : on les réapplique après la copie
-if [ -f "$DEST/oc-models.json" ]; then
-  OPENCODE_CONFIG_DIR="$DEST" node "$DEST/libexec/oc-models.mjs" apply && echo "✅ Modèles personnalisés réappliqués ($DEST/oc-models.json)"
-fi
-
-# 3b. État des MCP conditionnels : helper Node (portable macOS/Linux, pas de sed -i), idempotent,
-#     conserve les commentaires et vérifie que le fichier reste du JSONC valide.
-MCP_STATE="$HERE/scripts/lib/mcp-state.mjs"
-mcp_state() {  # disable|enable <serveur> [raison] — code 2 : serveur absent du fichier
-  local action="$1" server="$2" why="${3:-}"
-  case "$action" in
-    disable) node "$MCP_STATE" disable "$DEST/opencode.jsonc" "$server" "$why" ;;
-    enable)  node "$MCP_STATE" enable "$DEST/opencode.jsonc" "$server" ;;
-    *) return 1 ;;
-  esac
+restore_bin_state() {
+  local name state
+  [ -f "$TMP/bin.state" ] || return 0
+  while IFS=$'\t' read -r name state; do
+    case "$state" in
+      present) cp -a "$TMP/bin.saved/$name" "$BIN/$name" 2>/dev/null || warn "Rollback : $BIN/$name n'a pas pu être restauré." ;;
+      absent) rm -f "$BIN/$name" ;;
+    esac
+  done < "$TMP/bin.state"
+  if [ "$BIN_EXISTED" = 0 ] && [ -d "$BIN" ] && [ -z "$(ls -A "$BIN" 2>/dev/null)" ]; then rmdir "$BIN" 2>/dev/null || true; fi
 }
 
-# 3b. Kubernetes : le serveur MCP quitte au démarrage s'il n'y a aucun contexte kubectl
-if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ]; then
-  kc="${KUBECONFIG:-$HOME/.kube/config}"
-  if grep -qs '^current-context: *[^ ]' "${kc%%:*}"; then
-    if mcp_state enable kubernetes; then
-      echo "✅ MCP kubernetes activé (contexte kubectl détecté)"
-    fi
-  elif mcp_state disable kubernetes "aucun contexte kubectl : retire cette ligne quand tu auras un cluster"; then
-    echo "ℹ️  MCP kubernetes désactivé (aucun contexte kubectl dans ${kc%%:*}) : retire la ligne \"disabled\" de opencode.jsonc quand tu auras un cluster."
+restore_android_adb() {
+  if [ "$ANDROID_ADB_EXISTED" = 1 ]; then
+    mkdir -p "$ANDROID_SHIM_ROOT/platform-tools"
+    cp -a "$TMP/adb.saved" "$ANDROID_ADB" 2>/dev/null || warn "Rollback : $ANDROID_ADB n'a pas pu être restauré."
   else
-    warn "MCP kubernetes : opencode.jsonc n'a pas pu être mis à jour (bloc introuvable ou JSONC invalide)."
+    rm -f "$ANDROID_ADB"
+    rmdir "$ANDROID_SHIM_ROOT/platform-tools" "$ANDROID_SHIM_ROOT" 2>/dev/null || true
   fi
-fi
+}
 
-# 3c. REA (rétro-ingénierie) : le serveur exige Node >= 26.12.1 (ou 24.22.1 / 22.23.4) ; sinon on le désactive proprement
-if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"rea": {' "$DEST/opencode.jsonc"; then
-  if rea_msg="$("$BIN/oc-rea-mcp" --check 2>&1)"; then
-    if mcp_state enable rea; then
-      echo "✅ MCP rea (REA 6.8.0) activé : Node ${OC_REA_NODE_VERSION:-$(node -p 'process.versions.node')} convient"
+rollback_config() {
+  if [ -n "$BAK" ] && [ -d "$BAK" ]; then
+    rm -rf "$DEST"
+    if cp -a "$BAK" "$DEST"; then
+      secure_tree "$DEST"
+      warn "État précédent restauré depuis $BAK"
+    else
+      warn "Rollback incomplet : la sauvegarde reste disponible dans $BAK."
     fi
+  elif [ "$DEST_EXISTED" = 1 ]; then
+    find "$DEST" -mindepth 1 -delete 2>/dev/null || true
+    chmod 700 "$DEST"
+    warn "Fichiers créés retirés ($DEST était vide avant l'installation)"
   else
-    if mcp_state disable rea "Node trop ancien pour REA : retire cette ligne après avoir mis Node à jour"; then
-      echo "ℹ️  MCP rea désactivé : $(printf '%s' "$rea_msg" | head -n 1)"
-    fi
-    echo "    Mets Node à jour (mise use -g node@26.12.1) puis relance ./install.sh --no-tools : l'agent reverse-engineer utilisera la CLI en attendant."
+    rm -rf "$DEST"
+    warn "Fichiers créés retirés ($DEST n'existait pas avant l'installation)"
   fi
-fi
+  restore_bin_state
+  restore_android_adb
+}
 
-# 3d. MCP mobile : actif seulement avec le module Android (et Podman) ; sinon désactivé proprement
-if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"mobile": {' "$DEST/opencode.jsonc"; then
-  if [ "$ANDROID" = 1 ] && "$BIN/oc-mobile-mcp" --check >/dev/null 2>&1; then
-    if mcp_state enable mobile; then
-      echo "✅ MCP mobile (mobile-mcp 1.0.15) activé (adb de l'émulateur Podman)"
+# Liste des fichiers du kit + détection des personnalisations AVANT toute copie.
+( cd "$SRC" && find . -type f ! -path './bin/*' | sed 's|^\./||' | sort ) > "$TMP/new.paths"
+: > "$TMP/preserved.paths"
+mkdir -p "$TMP/preserved" "$TMP/kitfinal"
+while IFS= read -r rel; do
+  if [ "$FORCE_CONFIG" = 0 ] && is_modified "$rel"; then
+    printf '%s\n' "$rel" >> "$TMP/preserved.paths"
+    mkdir -p "$TMP/preserved/$(dirname "$rel")"
+    cp -a "$DEST/$rel" "$TMP/preserved/$rel"
+  fi
+done < "$TMP/new.paths"
+
+# Tout ce bloc tourne sous set -e dans un sous-shell : la première erreur annule la phase.
+config_phase() {
+  local rel f oldh curh h mode
+  cp -a "$SRC/." "$DEST/"
+
+  # Retire les fichiers que le kit installait avant et qui n'existent plus (ex. plugins/auto-compact.js),
+  # sans toucher aux fichiers personnels : on se base sur la liste des fichiers déjà installés par le kit.
+  # La liste « legacy » n'est appliquée qu'à partir de la 2e installation (manifeste présent).
+  : > "$TMP/old.paths"
+  if [ -f "$MANIFEST" ]; then
+    { manifest_paths "$MANIFEST"; printf "%s\n" "plugins/auto-compact.js" "plugins/guard.js" "plugins/notify.js"; } | sort -u > "$TMP/old.paths"
+  fi
+  comm -23 "$TMP/old.paths" "$TMP/new.paths" | while IFS= read -r f; do
+    case "$f" in ""|*..*|/*) continue ;; esac
+    [ -e "$DEST/$f" ] || continue
+    oldh="$(manifest_hash "$MANIFEST" "$f")"
+    curh="$(sha256_of "$DEST/$f")"
+    if [ -n "$oldh" ] && [ -n "$curh" ] && [ "$oldh" != "$curh" ]; then
+      warn "Fichier modifié conservé (n'existe plus dans le kit) : $f"
+    else
+      rm -f "$DEST/$f" && echo "🧹 Retiré (n'existe plus dans le kit) : $f"
     fi
+  done
+
+  for f in "$SRC"/bin/*; do install -m 0755 "$f" "$BIN/$(basename "$f")"; done
+  install -m 0755 "$HERE/scripts/new-rust-project.sh" "$BIN/oc-new-rust"
+  mkdir -p "$DEST/templates"
+  cp -a "$HERE/templates/." "$DEST/templates/"
+
+  # Profil léger
+  if [ "$LITE" = 1 ]; then
+    node "$HERE/scripts/make-lite.mjs" "$DEST"
+  fi
+
+  # Module Android (option) — idempotent dans les deux sens
+  if [ "$ANDROID" = 1 ]; then
+    install_android_addon
   else
-    if mcp_state disable mobile "module Android non installé (./install.sh --android) ou Podman absent"; then :; fi
-    if [ "$ANDROID" = 1 ]; then warn "MCP mobile désactivé : Podman introuvable. → $(pkg_hint podman)"; fi
+    remove_android_addon
   fi
-fi
 
-# 3e. MCP semgrep (SAST, agents pentest/security) : exige uv (uvx) ou pipx ; sinon désactivé proprement.
-#     --check est une VRAIE poignée de main MCP (elle peut télécharger ~50 Mo au premier lancement) :
-#     réservée à l'installation d'outils. Avec --no-tools, --check-quick constate seulement la présence
-#     de uvx/pipx, sans lancer de processus ni toucher au réseau.
-if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"semgrep": {' "$DEST/opencode.jsonc"; then
-  if [ "$TOOLS" = 1 ]; then semgrep_check=--check; else semgrep_check=--check-quick; fi
-  if "$BIN/oc-semgrep-mcp" "$semgrep_check" >/dev/null 2>&1; then
-    if mcp_state enable semgrep; then
-      if [ "$TOOLS" = 1 ]; then
-        echo "✅ MCP semgrep activé (serveur vérifié au démarrage)"
-      else
-        echo "✅ MCP semgrep activé (uvx/pipx détecté ; démarrage vérifié à la prochaine installation complète)"
+  if [ "$NOPENTEST" = 1 ]; then
+    remove_pentest_tools   # retire seulement le repère : les binaires déjà posés restent
+  fi
+
+  # Tes choix de modèles (oc-models set ...) survivent aux mises à jour
+  if [ -f "$DEST/oc-models.json" ]; then
+    OPENCODE_CONFIG_DIR="$DEST" node "$DEST/libexec/oc-models.mjs" apply && echo "✅ Modèles personnalisés réappliqués ($DEST/oc-models.json)"
+  fi
+
+  # État des MCP conditionnels : helper Node (portable macOS/Linux, pas de sed -i), idempotent,
+  # conserve les commentaires et vérifie que le fichier reste du JSONC valide.
+  mcp_state() {  # disable|enable <serveur> [raison] — code 2 : serveur absent du fichier
+    local action="$1" server="$2" why="${3:-}"
+    case "$action" in
+      disable) node "$MCP_STATE" disable "$DEST/opencode.jsonc" "$server" "$why" ;;
+      enable)  node "$MCP_STATE" enable "$DEST/opencode.jsonc" "$server" ;;
+      *) return 1 ;;
+    esac
+  }
+
+  # Kubernetes : le serveur MCP quitte au démarrage s'il n'y a aucun contexte kubectl
+  if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ]; then
+    kc="${KUBECONFIG:-$HOME/.kube/config}"
+    if grep -qs '^current-context: *[^ ]' "${kc%%:*}"; then
+      if mcp_state enable kubernetes; then
+        echo "✅ MCP kubernetes activé (contexte kubectl détecté)"
+      fi
+    elif mcp_state disable kubernetes "aucun contexte kubectl : retire cette ligne quand tu auras un cluster"; then
+      echo "ℹ️  MCP kubernetes désactivé (aucun contexte kubectl dans ${kc%%:*}) : retire la ligne \"disabled\" de opencode.jsonc quand tu auras un cluster."
+    else
+      warn "MCP kubernetes : opencode.jsonc n'a pas pu être mis à jour (bloc introuvable ou JSONC invalide)."
+    fi
+  fi
+
+  # REA exige Node >= 26.12.1 (ou 24.22.1 / 22.23.4) ; sinon on le désactive proprement
+  if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"rea": {' "$DEST/opencode.jsonc"; then
+    if rea_msg="$("$BIN/oc-rea-mcp" --check 2>&1)"; then
+      if mcp_state enable rea; then
+        echo "✅ MCP rea (REA 6.8.0) activé : Node ${OC_REA_NODE_VERSION:-$(node -p 'process.versions.node')} convient"
+      fi
+    else
+      if mcp_state disable rea "Node trop ancien pour REA : retire cette ligne après avoir mis Node à jour"; then
+        echo "ℹ️  MCP rea désactivé : $(printf '%s' "$rea_msg" | head -n 1)"
+      fi
+      echo "    Mets Node à jour (mise use -g node@26.12.1) puis relance ./install.sh --no-tools : l'agent reverse-engineer utilisera la CLI en attendant."
+    fi
+  fi
+
+  # MCP mobile : actif seulement avec le module Android (et Podman)
+  if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"mobile": {' "$DEST/opencode.jsonc"; then
+    if [ "$ANDROID" = 1 ] && "$BIN/oc-mobile-mcp" --check >/dev/null 2>&1; then
+      if mcp_state enable mobile; then
+        echo "✅ MCP mobile (mobile-mcp 1.0.15) activé (adb de l'émulateur Podman)"
+      fi
+    else
+      if mcp_state disable mobile "module Android non installé (./install.sh --android) ou Podman absent"; then :; fi
+      if [ "$ANDROID" = 1 ]; then warn "MCP mobile désactivé : Podman introuvable. → $(pkg_hint podman)"; fi
+    fi
+  fi
+
+  # MCP semgrep : exige uv (uvx) ou pipx ; sinon désactivé proprement.
+  # --check est une VRAIE poignée de main MCP (elle peut télécharger ~50 Mo au premier lancement) :
+  # réservée à l'installation d'outils. Avec --no-tools, --check-quick constate seulement la présence
+  # de uvx/pipx, sans lancer de processus ni toucher au réseau.
+  if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"semgrep": {' "$DEST/opencode.jsonc"; then
+    if [ "$TOOLS" = 1 ]; then semgrep_check=--check; else semgrep_check=--check-quick; fi
+    if "$BIN/oc-semgrep-mcp" "$semgrep_check" >/dev/null 2>&1; then
+      if mcp_state enable semgrep; then
+        if [ "$TOOLS" = 1 ]; then
+          echo "✅ MCP semgrep activé (serveur vérifié au démarrage)"
+        else
+          echo "✅ MCP semgrep activé (uvx/pipx détecté ; démarrage vérifié à la prochaine installation complète)"
+        fi
+      fi
+    else
+      if mcp_state disable semgrep "uv (uvx) et pipx absents : retire cette ligne après avoir installé un des deux"; then
+        echo "ℹ️  MCP semgrep désactivé : installe uv (curl -LsSf https://astral.sh/uv/install.sh | sh), déjà requis pour MemPalace."
       fi
     fi
-  else
-    if mcp_state disable semgrep "uv (uvx) et pipx absents : retire cette ligne après avoir installé un des deux"; then
-      echo "ℹ️  MCP semgrep désactivé : installe uv (curl -LsSf https://astral.sh/uv/install.sh | sh), déjà requis pour MemPalace."
-    fi
   fi
+
+  # Personnalisations : on garde la version de l'utilisateur et on dépose la version du kit
+  # finale (après profil léger / Android / MCP) en .new. Le manifeste enregistre cette version
+  # du kit, pas celle de l'utilisateur, pour continuer à détecter ses modifications.
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    mkdir -p "$TMP/kitfinal/$(dirname "$rel")"
+    if [ -f "$DEST/$rel" ]; then cp -a "$DEST/$rel" "$TMP/kitfinal/$rel"; fi
+    cp -a "$TMP/preserved/$rel" "$DEST/$rel"
+    if [ -f "$TMP/kitfinal/$rel" ]; then
+      mode=0600; [ -x "$TMP/kitfinal/$rel" ] && mode=0700
+      install -m "$mode" "$TMP/kitfinal/$rel" "$DEST/$rel.new"
+      warn "Fichier modifié conservé, nouvelle version dans $rel.new"
+    else
+      warn "Fichier modifié conservé : aucune version du kit dans ce profil pour $rel"
+    fi
+  done < "$TMP/preserved.paths"
+
+  # Manifeste : hash de l'état final installé (ou de la version du kit pour un fichier préservé).
+  : > "$MANIFEST"
+  while IFS= read -r rel; do
+    if grep -Fxq "$rel" "$TMP/preserved.paths"; then
+      if [ -f "$TMP/kitfinal/$rel" ]; then h="$(sha256_of "$TMP/kitfinal/$rel")"; else h="$(sha256_of "$SRC/$rel")"; fi
+    elif [ -f "$DEST/$rel" ]; then
+      h="$(sha256_of "$DEST/$rel")"
+    else
+      h="$(sha256_of "$SRC/$rel")"
+    fi
+    printf '%s\t%s\n' "${h:--}" "$rel" >> "$MANIFEST"
+  done < "$TMP/new.paths"
+  chmod 600 "$MANIFEST"
+
+  secure_tree "$DEST"
+}
+
+set +e
+( set -e; config_phase )
+CFG_RC=$?
+set -e
+if [ "$CFG_RC" -ne 0 ]; then
+  warn "Phase de configuration en échec (code $CFG_RC) : aucune modification partielle ne sera conservée."
+  rollback_config
+  die "Installation annulée : aucun changement partiel n'a été conservé."
 fi
 
-# 4. Outils (profil complet seulement)
+# La configuration est complète : c'est ce que vérifie doctor. Le repère est écrit ici,
+# avant les outils : ceux-ci sont best-effort et ne conditionnent pas l'installation de la config.
+: > "$DEST/.opencode-prerequisites.installed"
+chmod 600 "$DEST/.opencode-prerequisites.installed"
+secure_tree "$DEST"
+echo "✅ Config installée dans $DEST ; lanceurs (agent-wt, oc-new-rust, oc-models, oc-playwright-mcp, oc-terraform-mcp, oc-rea-mcp, oc-semgrep-mcp, oc-versions) dans $BIN"
+
+# 4. Outils pentest/appsec (option --pentest) — best-effort, comme les autres outils.
+if [ "$PENTEST" = 1 ]; then
+  install_pentest_tools || warn "Outils pentest : installation partielle (voir les messages ci-dessus)."
+fi
+
+# 5. Outils (profil complet seulement)
 if [ "$TOOLS" = 1 ]; then
   need npx || die "npx (Node.js) est requis pour context7/playwright."
   SYSBROWSER=""
@@ -804,9 +1036,6 @@ fi
 if [ "$MATT" = 1 ]; then
   npx -y "skills@$OC_SKILLS_VERSION" add mattpocock/skills -a opencode || warn "Échec : voir le README du dépôt mattpocock/skills."
 fi
-
-# Repère de fin d'installation : le diagnostic ignore les lignes de journal antérieures
-: > "$DEST/.opencode-prerequisites.installed"
 
 if [ "$ANDROID" = 1 ]; then
   cat <<MSG

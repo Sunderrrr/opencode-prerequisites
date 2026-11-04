@@ -3,6 +3,7 @@
 #   ./uninstall.sh            restaure la dernière sauvegarde (s'il y en a une)
 #   ./uninstall.sh --list     liste les sauvegardes
 set -Eeuo pipefail
+umask 077
 DEST="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 BIN="${OBSCURA_BIN_DIR:-$HOME/.local/bin}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
@@ -32,10 +33,13 @@ fi
 if [ -d "$DEST" ]; then
   removed="$(unique_path "$DEST.removed-$STAMP")"
   mv "$DEST" "$removed"
+  chmod -R go-rwx "$removed" 2>/dev/null || true
   echo "📦 Config actuelle déplacée : $removed"
 fi
 if [ -n "$last" ]; then
   cp -a "$last" "$DEST"
+  chmod -R go-rwx "$DEST" 2>/dev/null || true
+  chmod 700 "$DEST" 2>/dev/null || true
   echo "✅ Restauré depuis $last"
 else
   echo "ℹ️  Aucune sauvegarde : $DEST est maintenant absent (OpenCode recréera sa config par défaut)."
