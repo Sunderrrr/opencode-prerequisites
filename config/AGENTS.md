@@ -1,7 +1,7 @@
 # Global rules
 
 ## Communication
-- Answer in French, short and direct. Say when you are not sure; do not guess.
+- Answer in the user's language (match the language of their latest message), short and direct. Say when you are not sure; do not guess.
 - I tell you what to do, you do it, without asking for confirmation (unrestricted mode: only blocks from `plugins/guard/` remain). If a point is really unclear: ONE short question with your default answer, and you move forward on the rest in parallel. `grill-me` only if I ask for it.
 - When you are done or waiting for my answer, say so in one line (a notification is sent automatically).
 
