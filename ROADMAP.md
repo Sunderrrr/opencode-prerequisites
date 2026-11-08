@@ -1,16 +1,17 @@
 # Roadmap
 
-Status as of 2026-11-04. No version tags: the kit is tracked by commit (`git log`).
+Status as of 2026-11-08. No version tags: the kit is tracked by commit (`git log`).
 
 ## Shipped and verified
 
 - Full installation, `--lite`, `--no-tools`, `--memory-only`, `--shell-env`, `--android`, `--pentest` (`install.sh`).
-- 27 agents (29 with `--android`), 10 MCP servers, 8 skills (9 with `--android`), 9 commands.
+- 28 agents (30 with `--android`), 27 specialists (29 with `--android`), 11 MCP servers, 11 skills (12 with `--android`), 10 commands.
+- UI/UX layer: `designer` agent, vendored `ui-ux-pro-max` (2.15.0, MIT) and `impeccable` (4.8.1, Apache-2.0) skills, `/impeccable` command, `chrome-devtools` MCP (1.12.0, `chrome-devtools_*` denied globally, allowed to `designer` and `frontend`); `--lite` drops the agent, both skills and the command.
 - Project generators: `oc-new-rust` (`templates/rust-project/`) and `oc-new-android` (`templates/android-project/`, 46 checks, real `assembleDebug` build succeeded with an 11.5 MB APK).
-- `oc-versions` (latest versions, 24 h cache) and `oc-deps check` (pin drift, **read-only**, 33 checks); four drifts found on 2026-11-04 (see "Open work").
+- `oc-versions` (latest versions, 24 h cache) and `oc-deps check` (pin drift, **read-only**, 34 checks); four drifts found on 2026-11-04 (see "Open work").
 - Diagnostics: `doctor.sh` and `doctor.sh --offline` (`OC_DOCTOR_OFFLINE=1`, no network requests) — `scripts/test-doctor.mjs` (15 checks).
-- Validation: `scripts/validate-kit.mjs`, the official OpenCode JSON schema (`scripts/validate-schema.py`), `test-mcp-state` (25), `test-lite` (25), `test-doctor` (15), `test-deps` (33), `test-new-android` (46), and the Android `Containerfile` with hadolint `v2.15.1`.
-- Linux CI (`.github/workflows/ci.yml`): validation, tests, ShellCheck, Rust template, dry-run installation (with `pipefail`) on Arch, Debian 12/13, Ubuntu 24.04/26.04, Fedora and Rocky 9; `test-new-android` and `test-deps` steps wired into `validate` and `distros`.
+- Validation: `scripts/validate-kit.mjs`, the official OpenCode JSON schema (`scripts/validate-schema.py`), `test-mcp-state` (25), `test-lite` (29), `test-doctor` (15), `test-deps` (34), `test-new-android` (46), `test-uiux` (36), `test-chrome-devtools` (14), and the Android `Containerfile` with hadolint `v2.15.1`.
+- Linux CI (`.github/workflows/ci.yml`): validation, tests, ShellCheck, Rust template, dry-run installation (with `pipefail`) on Arch, Debian 12/13, Ubuntu 24.04/26.04, Fedora and Rocky 9; `test-new-android`, `test-deps` and `test-chrome-devtools` steps wired into `validate` and `distros`.
 - macOS CI (`.github/workflows/ci-macos.yml`): `macos-latest`, `/bin/bash` 3.2 enforced, ShellCheck via Homebrew, validation and dry-run installations.
 - Nightly CI (`.github/workflows/ci-nightly.yml`): cron `03:17`, real `--pentest` installation on Ubuntu 24.04, checks for the tools, MemPalace, `oc-semgrep-mcp --check` and `doctor.sh --offline`.
 - Security: textual guard, pinned versions, sha256 of downloaded binaries.

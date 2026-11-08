@@ -25,9 +25,9 @@ const runLite = (dir) => spawnSync(process.execPath, [MAKE_LITE, dir], { encodin
 
 const KEEP = read(path.join(ROOT, "profiles/lite-agents.txt"))
   .split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"))
-// 27 kit agents + the 2 from the Android module: the lightweight profile must keep only 12.
-const ALL_AGENTS = ["ansible", "architect", "backend", "ceo", "code-simplifier", "database", "debugger", "devops",
-  "docker", "docs", "frontend", "go", "integrator", "kubernetes", "pentest", "python", "qa", "researcher",
+// 28 kit agents + the 2 from the Android module: the lightweight profile must keep only 12.
+const ALL_AGENTS = ["ansible", "architect", "backend", "ceo", "code-simplifier", "database", "debugger", "designer",
+  "devops", "docker", "docs", "frontend", "go", "integrator", "kubernetes", "pentest", "python", "qa", "researcher",
   "reverse-engineer", "review", "rust", "security", "shell", "terraform", "typescript", "verify-app",
   "web-researcher", "android", "mobile-tester"]
 const CEO = `---
@@ -53,7 +53,7 @@ function buildConfig(dir, { mempalace = true } = {}) {
     write(path.join(dir, "agents", `${a}.md`), body)
   }
   for (const s of ["git-commit", "grill-me", "handoff", "project-onboarding", "reverse-engineer-anything",
-    "safe-refactor", "tdd", "web-research", "android-dev"]) {
+    "safe-refactor", "tdd", "web-research", "android-dev", "ui-ux-pro-max", "impeccable"]) {
     write(path.join(dir, "skills", s, "SKILL.md"), `---\nname: ${s}\ndescription: ${s}\n---\n`)
   }
   write(path.join(dir, "commands/check.md"), "Run lint, tests and build.\n")
@@ -61,6 +61,10 @@ function buildConfig(dir, { mempalace = true } = {}) {
   write(path.join(dir, "commands/verify.md"), "Use @verify-app to check the work.\n")
   write(path.join(dir, "commands/ship.md"), "1. Use @code-simplifier.\n2. Use @verify-app.\n")
   write(path.join(dir, "commands/simplify.md"), "Use @code-simplifier on the current diff.\n")
+  write(path.join(dir, "commands/impeccable.md"),
+    "---\ndescription: Improve a frontend interface.\nagent: designer\n---\nUse the `impeccable` skill.\n")
+  write(path.join(dir, "commands/design-review.md"),
+    "---\ndescription: Review the UI implementation.\nagent: frontend\n---\nReview the UI.\n")
   write(path.join(dir, "plugins/guard/index.ts"), "export default { id: 'guard' }\n")
   write(path.join(dir, "plugins/notify/index.ts"), "export default { id: 'notify' }\n")
   if (mempalace) write(path.join(dir, "plugins/mempalace/index.ts"), "export default { id: 'mempalace' }\n")
@@ -101,6 +105,7 @@ check("agents: the list is exactly profiles/lite-agents.txt", KEEP.length === 12
   `expected ${[...KEEP].sort().join(",")} | got ${agents.join(",")}`)
 check("agents: the removed ones (python, devops, code-simplifier) are gone",
   !agents.includes("python.md") && !agents.includes("devops.md") && !agents.includes("code-simplifier.md"))
+check("agents: the UI/UX agent is dropped from the lightweight profile", !agents.includes("designer.md"))
 check("agents: the Android module is dropped from the lightweight profile",
   !agents.includes("android.md") && !agents.includes("mobile-tester.md"))
 
@@ -118,12 +123,18 @@ check("plugins: guard and notify kept with their entry",
   fs.existsSync(path.join(full, "plugins/guard/index.ts")) && fs.existsSync(path.join(full, "plugins/notify/index.ts")))
 check("skills: reverse-engineer-anything and android-dev removed",
   !fs.existsSync(path.join(full, "skills/reverse-engineer-anything")) && !fs.existsSync(path.join(full, "skills/android-dev")))
+check("skills: the UI/UX skills (ui-ux-pro-max, impeccable) removed",
+  !fs.existsSync(path.join(full, "skills/ui-ux-pro-max")) && !fs.existsSync(path.join(full, "skills/impeccable")))
 check("skills: the others stay (tdd, git-commit)", fs.existsSync(path.join(full, "skills/tdd/SKILL.md")) && fs.existsSync(path.join(full, "skills/git-commit/SKILL.md")))
 
 check("commands: those citing a removed agent are dropped (ship, simplify)",
   !fs.existsSync(path.join(full, "commands/ship.md")) && !fs.existsSync(path.join(full, "commands/simplify.md")))
 check("commands: those without a removed agent are kept (check, pr, verify)",
   ["check.md", "pr.md", "verify.md"].every((f) => fs.existsSync(path.join(full, "commands", f))))
+check("commands: frontmatter `agent: designer` is dropped (impeccable)",
+  !fs.existsSync(path.join(full, "commands/impeccable.md")))
+check("commands: frontmatter `agent:` naming a kept agent is kept (design-review)",
+  fs.existsSync(path.join(full, "commands/design-review.md")))
 check("commands: content of kept commands unchanged",
   read(path.join(full, "commands/pr.md")) === "Use @integrator in PR mode for: $ARGUMENTS\n")
 

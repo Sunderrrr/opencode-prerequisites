@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# oc-uiux-search: run the vendored UI/UX Pro Max search (Python 3 stdlib, offline).
+#   oc-uiux-search "saas dashboard" --design-system
+#   oc-uiux-search "keyboard focus modal" --domain ux
+#   oc-uiux-search --help
+set -Eeuo pipefail
+
+here="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+config="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+
+skill=""
+for candidate in \
+  "$here/../skills/ui-ux-pro-max" \
+  "$config/skills/ui-ux-pro-max" \
+  "$HOME/.config/opencode/skills/ui-ux-pro-max"; do
+  if [ -f "$candidate/scripts/search.py" ]; then
+    skill="$candidate"
+    break
+  fi
+done
+
+if [ -z "$skill" ]; then
+  printf '❌ oc-uiux-search: ui-ux-pro-max skill not found (looked in %s, %s, %s)\n' \
+    "$here/../skills/ui-ux-pro-max" "$config/skills/ui-ux-pro-max" \
+    "$HOME/.config/opencode/skills/ui-ux-pro-max" >&2
+  exit 127
+fi
+
+py=""
+for candidate in python3 python; do
+  command -v "$candidate" >/dev/null 2>&1 || continue
+  if "$candidate" -c 'import sys; sys.exit(0 if sys.version_info[0] == 3 else 1)' >/dev/null 2>&1; then
+    py="$candidate"
+    break
+  fi
+done
+
+if [ -z "$py" ]; then
+  printf '❌ oc-uiux-search: Python 3 not found (need python3 or python on PATH)\n' >&2
+  exit 127
+fi
+
+# Keep the vendored tree clean: do not write __pycache__ into the installed skill.
+export PYTHONDONTWRITEBYTECODE=1
+exec "$py" "$skill/scripts/search.py" "$@"

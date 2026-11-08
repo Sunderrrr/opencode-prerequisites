@@ -90,7 +90,7 @@ jobs:
         run: |
           /bin/bash ./install.sh --no-tools
           test -f "$OPENCODE_CONFIG_DIR/opencode.jsonc"
-          test "$(ls "$OPENCODE_CONFIG_DIR/agents" | wc -l | tr -d ' ')" -eq 27
+          test "$(ls "$OPENCODE_CONFIG_DIR/agents" | wc -l | tr -d ' ')" -eq 28
           test -f "$OPENCODE_CONFIG_DIR/skills/tdd/SKILL.md"
           test ! -e "$OPENCODE_CONFIG_DIR/agents/android.md"
 

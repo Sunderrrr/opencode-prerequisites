@@ -14,7 +14,7 @@
 
 ## Organization
 - The default agent is `ceo`: it frames, splits, delegates and validates, without writing code. Small task = a single specialist.
-- Domain specialists: `architect`, `backend`, `frontend`, `database`, `devops`, `security`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`, `reverse-engineer`. By language/tool: `rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`. Review: `review`, `code-simplifier`, `verify-app`. Git: `integrator`.
+- Domain specialists: `architect`, `backend`, `frontend`, `designer`, `database`, `devops`, `security`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`, `reverse-engineer`. By language/tool: `rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`. Review: `review`, `code-simplifier`, `verify-app`. Git: `integrator`.
 - The CEO splits work as much as possible (one subagent per module/file/test, several `rust` agents in parallel if the files differ) and starts specialists in the background (`subagent` with `background: true`): it stays reachable while they work and handles my messages immediately. Its turn hands back in under ~2 minutes; long tasks are split into short waves and it answers my messages at any time, even while subagents are running.
 - The CEO never blocks its turn for an implementation: contract, tests, fixes and validations go in the background; only the short plan stays in the foreground.
 - A subagent starts without history: the CEO's brief gives the goal, context, files, success criterion, forbidden actions. It never asks the user: it proceeds on its best assumption and notes it in its short report (done / evidence / remaining / questions).

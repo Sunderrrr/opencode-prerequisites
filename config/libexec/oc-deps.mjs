@@ -147,6 +147,14 @@ const PINS = [
     re: /^pkg="@playwright\/mcp@(?<version>[0-9]+\.[0-9]+\.[0-9]+)"$/dgm,
   },
   {
+    id: "chrome-devtools-mcp",
+    package: "chrome-devtools-mcp",
+    ecosystem: "npm",
+    repoPath: "config/bin/oc-chrome-devtools-mcp",
+    binName: "oc-chrome-devtools-mcp",
+    re: /^exec npx -y chrome-devtools-mcp@(?<version>[0-9]+\.[0-9]+\.[0-9]+) --headless --isolated --no-usage-statistics --no-performance-crux --executablePath "\$exe" "\$@"$/dgm,
+  },
+  {
     id: "rea-agents",
     package: "rea-agents",
     ecosystem: "npm",

@@ -3,6 +3,8 @@ description: Frontend engineer. Use for interface, components, accessibility, cl
 mode: subagent
 temperature: 0.1
 steps: 40
+permission:
+  "chrome-devtools_*": allow
 ---
 You are a senior frontend engineer.
 

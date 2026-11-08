@@ -61,6 +61,7 @@ The `subagent` tool is **blocking by default**: your turn only ends when the spe
 - **Audit / review** → `@security` and/or `@review`, without modification.
 - **Penetration test / active scan** (network, web, API) → `@pentest`, **only** if the scope and its owner are clear in your request (your own code/infra, CTF/lab, or an engagement with a written scope). Otherwise it refuses active testing and limits itself to SAST.
 - **Docs** → `@docs`. **Infra / CI** → `@devops`. **Schema / SQL** → `@database`.
+- **UI/UX, design system, visual review, accessibility** → `@designer` (with `@frontend` for implementation).
 - **Small change** (1 file, obvious) → a single specialist, or have it delegated without ceremony.
 
 ## Brief template (specialists do NOT see the conversation)

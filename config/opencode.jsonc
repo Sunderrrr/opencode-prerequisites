@@ -41,6 +41,9 @@
     "mobile_*": "deny",
     // Same for the semgrep MCP (SAST): reserved for the pentest and security agents.
     "semgrep_*": "deny",
+    // Same for the chrome-devtools MCP: tools denied globally, granted per agent when needed
+    // (add  "chrome-devtools_*": "allow"  to that agent's permission block).
+    "chrome-devtools_*": "deny",
     "task": { "*": "allow" }
   },
 
@@ -62,6 +65,15 @@
       "playwright": {
         "type": "local",
         "command": ["{env:HOME}/.local/bin/oc-playwright-mcp"]
+      },
+      // Chrome DevTools (Google, Apache-2.0): DOM, console, network and performance
+      // inspection in headless, isolated Chrome. Launcher pinned to 1.12.0; telemetry off
+      // (--no-usage-statistics, --no-performance-crux, no update check) and a fresh profile
+      // per run (--isolated). Requires Chrome/Chromium; tools denied globally ("chrome-devtools_*").
+      "chrome-devtools": {
+        "type": "local",
+        "command": ["{env:HOME}/.local/bin/oc-chrome-devtools-mcp"],
+        "timeout": { "startup": 120000 }
       },
       // --- DevOps (read-only / no writes) ---
       // Terraform Registry documentation (providers/modules). No TFE_TOKEN: no action on HCP Terraform.
@@ -109,14 +121,6 @@
       "obscura": {
         "type": "local",
         "command": ["obscura", "mcp"]
-      },
-      // WordCraft (word processor, ArtCraft): headless MCP server over stdio.
-      // Documents are confined to ~/Documents/memoire, read AND write (the mémoire folder).
-      // Tools: open_document, get_text, type_text, save_document, execute, inspect_document... (17 total).
-      // The GUI-only tools (screenshot, click, key, ui_inspect) stay unusable without a desktop instance.
-      "wordcraft": {
-        "type": "local",
-        "command": ["/usr/bin/wordcraft-cli", "mcp", "--automation-read-root", "/home/sunder/Documents/memoire", "--automation-write-root", "/home/sunder/Documents/memoire"]
       }
     }
   }

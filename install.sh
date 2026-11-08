@@ -941,7 +941,7 @@ fi
 : > "$DEST/.opencode-prerequisites.installed"
 chmod 600 "$DEST/.opencode-prerequisites.installed"
 secure_tree "$DEST"
-echo "✅ Config installed in $DEST; launchers (agent-wt, oc-new-rust, oc-new-android, oc-models, oc-deps, oc-playwright-mcp, oc-terraform-mcp, oc-rea-mcp, oc-semgrep-mcp, oc-versions) in $BIN"
+echo "✅ Config installed in $DEST; launchers (agent-wt, oc-new-rust, oc-new-android, oc-models, oc-deps, oc-playwright-mcp, oc-uiux-search, oc-impeccable, oc-chrome-devtools-mcp, oc-terraform-mcp, oc-rea-mcp, oc-semgrep-mcp, oc-versions) in $BIN"
 
 # 4. Pentest/appsec tools (--pentest option) — best-effort, like the other tools.
 if [ "$PENTEST" = 1 ]; then

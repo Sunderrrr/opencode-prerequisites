@@ -1,6 +1,6 @@
 # opencode-prerequisites
 
-My starter kit for [OpenCode](https://opencode.ai) with the **OpenCode Go** subscription: a CEO that leads 26 specialist agents (27 in total; 29 with the Android module), skills, commands, MCPs, memory, multi-agent git safety and a Rust project template.
+My starter kit for [OpenCode](https://opencode.ai) with the **OpenCode Go** subscription: a CEO that leads 27 specialist agents (28 in total; 30 with the Android module), skills, commands, MCPs, memory, multi-agent git safety and a Rust project template.
 
 > ⚠️ Agents run in **unrestricted mode** (no permission prompts). Work in a clean, committed git repository. Only the blocks from `config/plugins/guard/` remain.
 
@@ -99,6 +99,12 @@ The first six are downloaded from the latest official GitHub release and verifie
 
 **What is tested**: `scripts/test-pentest.mjs` (CI, all distros) — version/sha256 discovery with fake GitHub releases, installation with fake `curl`/`sha256sum`/`unzip`/`tar`/`uv` (no real download), rejection of an invalid checksum, remembering the option, `--no-pentest`, `--lite`.
 
+## UI/UX (designer agent, design skills, Chrome DevTools)
+
+**`designer`** agent: art direction, design system, layout, typography, color, accessibility, responsive and interaction states; implementation-heavy work goes to `@frontend`, the proof stays with the designer. Two vendored skills: **`ui-ux-pro-max`** ([nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) 2.15.0, MIT: 51 active styles, 192 product palettes, 74 font pairings, 120 UX rules, 22 stacks; launcher `oc-uiux-search`) and **`impeccable`** ([pbakaus/impeccable](https://github.com/pbakaus/impeccable) 4.8.1, Apache-2.0; launcher `oc-impeccable`). The `/impeccable` command routes a UI task to this agent.
+
+Visual proof comes from Playwright or the **`chrome-devtools`** MCP (`chrome-devtools-mcp@1.12.0`, Google, Apache-2.0, headless, isolated profile, telemetry off): screenshots at 375 / 768 / 1024 / 1440 px, measured contrast, `:focus-visible`, reduced motion, keyboard path. The `chrome-devtools_*` tools are **denied globally** in `opencode.jsonc` and allowed only to `designer` and `frontend`. `--lite` removes the `designer` agent, both skills and the `/impeccable` command.
+
 ## Android applications (optional module, Podman)
 
 **Install option**: `./install.sh --android` (disabled by default; the choice is remembered across updates, `./install.sh --no-android` removes the module). It adds the **`android`** (Kotlin, Jetpack Compose, Gradle) and **`mobile-tester`** (checks the app on the emulator, read-only) agents, the **`android-dev`** skill, the **`mobile`** MCP ([mobile-mcp](https://github.com/mobile-next/mobile-mcp) 1.0.15, Apache-2.0, ~10,000 stars: 34 tools to read the screen through the accessibility tree, tap, swipe, install, launch, read logs and crashes; telemetry off) and the **`oc-android`** command. Nothing is added to your CEO or to `AGENTS.md` without this option. Android applications are written in **Kotlin + Compose, not Rust**; AGP, Kotlin and Compose versions are checked against the docs by the agent.
@@ -130,22 +136,22 @@ How it is built: the image starts from Ubuntu 24.04, downloads the Android tools
 
 | | Full | Light (`--lite`) |
 |---|---|---|
-| Agents | 27 (+2 with `--android`) | 12 (`ceo`, `architect`, `rust`, `backend`, `frontend`, `qa`, `security`, `debugger`, `researcher`, `review`, `verify-app`, `integrator`) |
-| MCP | context7, grep_app, terraform, kubernetes, rea, trivy, semgrep, playwright, obscura, mobile (`--android`) | context7, grep_app |
+| Agents | 28 (+2 with `--android`) | 12 (`ceo`, `architect`, `rust`, `backend`, `frontend`, `qa`, `security`, `debugger`, `researcher`, `review`, `verify-app`, `integrator`) |
+| MCP | context7, grep_app, terraform, kubernetes, rea, trivy, semgrep, playwright, chrome-devtools, obscura, mobile (`--android`) | context7, grep_app |
 | Memory | MemPalace (venv `~/.mempalace/venv`, ≈ 500 MB) | — |
 
-The light profile is derived from the full one by `scripts/make-lite.mjs`: there are no two configs to maintain. It also removes `plugins/mempalace/` (otherwise OpenCode would load memory even though its config file is gone) and the `reverse-engineer-anything` / `android-dev` skills.
+The light profile is derived from the full one by `scripts/make-lite.mjs`: there are no two configs to maintain. It also removes `plugins/mempalace/` (otherwise OpenCode would load memory even though its config file is gone), the `designer` agent, the `reverse-engineer-anything` / `android-dev` / `ui-ux-pro-max` / `impeccable` skills and the commands that target them (`/impeccable`).
 
 ## Contents
 
 - `config/opencode.jsonc`: single model `opencode-go/deepseek-v4.1-flash` for ALL agents (large quota; no agent has its own model, to change one: add `model: opencode-go/<id>` in its `agents/<name>.md` file), unrestricted permissions, auto-formatting, compaction.
 - `config/AGENTS.md`: global rules (≈ 800 words, read on every session): CEO, Rust by default, "done = proven", multi-agent git, internet safety, quota.
-- `config/agents/`: `ceo` (default), domain (`architect`, `backend`, `frontend`, `database`, `devops`, `security`, `pentest`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`, `reverse-engineer`), languages/tools (`rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`), control (`review`, `code-simplifier`, `verify-app`), git (`integrator`).
-- `config/skills/`: `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`, `reverse-engineer-anything`, `anti-ia-detection` (détecte et corrige les tics d'écriture générée par IA en français).
-- `config/commands/` (9): `/check`, `/plan-first`, `/simplify`, `/verify`, `/learn`, `/remember`, `/ship`, `/pr`, `/usage`.
+- `config/agents/`: `ceo` (default), domain (`architect`, `backend`, `frontend`, `designer`, `database`, `devops`, `security`, `pentest`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`, `reverse-engineer`), languages/tools (`rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`), control (`review`, `code-simplifier`, `verify-app`), git (`integrator`).
+- `config/skills/` (11 core, 12 with `--android`): `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`, `reverse-engineer-anything`, `anti-ia-detection` (detects and fixes AI-writing tics in French; the skill is French by design), `ui-ux-pro-max`, `impeccable`.
+- `config/commands/` (10): `/check`, `/plan-first`, `/impeccable`, `/simplify`, `/verify`, `/learn`, `/remember`, `/ship`, `/pr`, `/usage`.
 - `config/plugins/`: `guard/` (textual safeguard: blocks reading secret files and common destructive commands; **it is not a barrier** and does not replace a security review) and `notify/` (notification when a session is waiting), in the **OpenCode plugin v2 format** (a folder, `export default Plugin.define({ id, setup })`); tested by `scripts/test-plugins.mjs`. Compaction at 90% is native: `compaction.buffer: "10%"`.
 - `config/bin/oc-models`: per-agent model choice; `config/bin/agent-wt`: one git worktree per agent (`new`, `merge`, `remove`, `list`, `registry`, `integration`, `sync`). `agent-wt list --porcelain` gives the machine state (one line per worktree, 7 tab-separated fields); `agent-wt registry --out .worktrees/REGISTRY.md` maintains the CEO's persistent registry (table rewritten, existing `## History` section kept, legacy `## Historique` also preserved).
-- MCP versions pinned, no implicit `@latest`: `@playwright/mcp@0.0.84`, `rea-agents@6.8.0`, `kubernetes-mcp-server@0.1.1`, `@mobilenext/mobile-mcp@1.0.15`, `semgrep-mcp==0.9.0`, image `terraform-mcp-server:1.4.1`.
+- MCP versions pinned, no implicit `@latest`: `@playwright/mcp@0.0.84`, `chrome-devtools-mcp@1.12.0`, `rea-agents@6.8.0`, `kubernetes-mcp-server@0.1.1`, `@mobilenext/mobile-mcp@1.0.15`, `semgrep-mcp==0.9.0`, image `terraform-mcp-server:1.4.1`.
 - `config/bin/oc-versions <ecosystem> <package>`: the real latest version (24 h cache, `android` preset). `config/bin/oc-deps check` compares the kit's pins with those versions and **reports drift without changing anything** (`--json`, `--only`, `--offline`, `--dry-run`); `oc-deps fix` does not exist, updating is done by hand after review.
 - `templates/rust-project/` + `oc-new-rust <name>`: Rust project with `AGENTS.md`, tests, GitHub Actions CI and `git init`.
 - `templates/android-project/` + `oc-new-android <name>`: Android Kotlin + Jetpack Compose project (`com.example.<name>`, Gradle wrapper, `git init`), ready for `oc-android gradle assembleDebug` (`--android` module required).
@@ -167,7 +173,7 @@ The light profile is derived from the full one by `scripts/make-lite.mjs`: there
 
 ## What is not verified
 
-The kit is validated by script (`validate-kit.mjs`), by the **official OpenCode JSON schema** (`scripts/validate-schema.py`, also in CI) and by the Node tests of `ci.yml` and `ci-macos.yml`: `agent-wt`, `make-lite`, `new-rust-project.sh`, `doctor` (15 checks), `mcp-state` (25), the light profile (25), `oc-new-android` (46), `oc-deps` (33) and the installation have been tested. macOS is covered by a dedicated CI with the system bash 3.2; the nightly (`ci-nightly.yml`) tests the real installation of the tools. What remains to be confirmed in use: the arguments of the `terraform`/`kubernetes` MCPs, the `!`cmd`` syntax of `/usage`, the exact meaning of `compaction.buffer` (inferred from the schema, undocumented), the CEO's `background` delegation on a real OpenCode, `--with-matt`, and the real build of the Android image with the KVM emulator — check with `./doctor.sh` then `opencode mcp list`.
+The kit is validated by script (`validate-kit.mjs`), by the **official OpenCode JSON schema** (`scripts/validate-schema.py`, also in CI) and by the Node tests of `ci.yml` and `ci-macos.yml`: `agent-wt`, `make-lite`, `new-rust-project.sh`, `doctor` (15 checks), `mcp-state` (25), the light profile (29), `oc-new-android` (46), `oc-deps` (34), `chrome-devtools` (14), `ui-ux` (36) and the installation have been tested. macOS is covered by a dedicated CI with the system bash 3.2; the nightly (`ci-nightly.yml`) tests the real installation of the tools. What remains to be confirmed in use: the arguments of the `terraform`/`kubernetes` MCPs, the `!`cmd`` syntax of `/usage`, the exact meaning of `compaction.buffer` (inferred from the schema, undocumented), the CEO's `background` delegation on a real OpenCode, `--with-matt`, and the real build of the Android image with the KVM emulator — check with `./doctor.sh` then `opencode mcp list`.
 
 ## Documents
 

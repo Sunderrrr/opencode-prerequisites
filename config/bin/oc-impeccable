@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# oc-impeccable: run the vendored Impeccable skill launcher.
+#   oc-impeccable <command> [arguments...]
+#
+# Resolves the skill directory in this order:
+#   1. <this script>/../skills/impeccable      (repository config/ or installed config/)
+#   2. $OPENCODE_CONFIG_DIR/skills/impeccable
+#   3. ~/.config/opencode/skills/impeccable
+# then execs `sh <skill>/scripts/impeccable "$@"`.
+#
+# The skill launcher runs a pinned Rust engine (0.1.19). The first real command
+# downloads that binary (~22 MB) from GitHub releases into ~/.impeccable/bin/
+# and verifies it against <skill>/scripts/engine-checksums.txt. `--help` is
+# forwarded to the engine, so it can trigger the download too. `live` and
+# `generate` additionally need a dev server and a browser.
+#
+# Bash 3.2+ (macOS/Linux); no dependency beyond sh, curl or wget on first run.
+set -Eeuo pipefail
+IFS=$'\n\t'
+shopt -s inherit_errexit 2>/dev/null || true
+trap 'printf "oc-impeccable: error at line %s\n" "$LINENO" >&2' ERR
+
+usage() {
+  cat <<'EOF'
+Usage: oc-impeccable <command> [arguments...]
+
+Run the vendored Impeccable skill launcher (engine 0.1.19).
+The command is forwarded to <skill>/scripts/impeccable.
+
+Skill lookup order:
+  1. <this script>/../skills/impeccable
+  2. $OPENCODE_CONFIG_DIR/skills/impeccable
+  3. ~/.config/opencode/skills/impeccable
+
+Examples:
+  oc-impeccable context
+  oc-impeccable critique src/App.tsx
+  oc-impeccable --help
+
+The first real command downloads the engine (~22 MB, sha256 verified) into
+~/.impeccable/bin/. `live` and `generate` need a dev server and a browser.
+EOF
+}
+
+here="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+: "${HOME:?oc-impeccable: HOME is not set}"
+
+skill_dir=""
+find_skill() {
+  local candidate
+  for candidate in \
+    "$here/../skills/impeccable" \
+    "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/impeccable" \
+    "$HOME/.config/opencode/skills/impeccable"; do
+    if [ -f "$candidate/SKILL.md" ] && [ -f "$candidate/scripts/impeccable" ] && [ -r "$candidate/scripts/impeccable" ]; then
+      skill_dir="$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+if ! find_skill; then
+  printf 'oc-impeccable: the impeccable skill was not found.\n' >&2
+  printf 'Looked for SKILL.md and scripts/impeccable in:\n' >&2
+  printf '  - %s\n' "$here/../skills/impeccable" >&2
+  printf '  - %s\n' "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/skills/impeccable" >&2
+  printf '  - %s\n' "$HOME/.config/opencode/skills/impeccable" >&2
+  printf 'Install the kit (./install.sh) or set OPENCODE_CONFIG_DIR to the directory that contains skills/impeccable.\n' >&2
+  usage >&2
+  exit 127
+fi
+
+if ! command -v sh >/dev/null 2>&1; then
+  printf 'oc-impeccable: sh not found in PATH (required to run %s/scripts/impeccable).\n' "$skill_dir" >&2
+  exit 127
+fi
+
+exec sh "$skill_dir/scripts/impeccable" "$@"

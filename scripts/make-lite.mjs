@@ -3,6 +3,7 @@
 //   node make-lite.mjs <installed-config-directory>
 // - keeps only the agents listed in profiles/lite-agents.txt
 // - keeps only the context7 and grep_app MCPs, removes npm plugins (mempalace)
+// - drops skills and commands tied to removed agents (frontmatter `agent:` or @mention)
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -22,13 +23,20 @@ for (const f of fs.readdirSync(agentsDir)) {
 const mentions = (text) => [...text.matchAll(/(?:^|[\s(`|/])@([a-z][a-z0-9-]+)/g)].map((m) => m[1])
 
 // Skills tied to agents/MCPs absent from the lightweight profile
-for (const skill of ["reverse-engineer-anything", "android-dev"]) fs.rmSync(path.join(dest, "skills", skill), { recursive: true, force: true })
+for (const skill of ["reverse-engineer-anything", "android-dev", "ui-ux-pro-max", "impeccable"]) fs.rmSync(path.join(dest, "skills", skill), { recursive: true, force: true })
 
-// Commands that call a removed agent
+// Commands that target a removed agent: frontmatter `agent:` or an @mention in the body
+const frontmatterAgent = (text) => {
+  const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)
+  if (!frontmatter) return null
+  const agent = /^agent:[ \t]*["']?([a-z][a-z0-9-]*)["']?[ \t]*(?:#.*)?$/m.exec(frontmatter[1])
+  return agent ? agent[1] : null
+}
 const cmdDir = path.join(dest, "commands")
 for (const f of fs.existsSync(cmdDir) ? fs.readdirSync(cmdDir) : []) {
   const t = fs.readFileSync(path.join(cmdDir, f), "utf8")
-  if (mentions(t).some((a) => removed.has(a))) fs.rmSync(path.join(cmdDir, f))
+  const agent = frontmatterAgent(t)
+  if ((agent && removed.has(agent)) || mentions(t).some((a) => removed.has(a))) fs.rmSync(path.join(cmdDir, f))
 }
 
 // CEO: drop team-table rows that only target removed agents, and state the real team

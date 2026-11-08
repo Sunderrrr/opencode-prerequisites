@@ -49,6 +49,7 @@ const LATEST = {
     "skills": "1.7.6",
     "kubernetes-mcp-server": "0.1.1",
     "@playwright/mcp": "0.0.84",
+    "chrome-devtools-mcp": "1.12.0",
     "rea-agents": "6.8.0",
     "@mobilenext/mobile-mcp": "1.0.15",
   },
@@ -113,14 +114,14 @@ let r = run(["check"], { cache: freshCache("up") })
 check("all up to date: exit 0", r.status === 0, r.stdout + r.stderr)
 check("table: header package | pinned | latest | status",
   /^package\s+\|\s+pinned\s+\|\s+latest\s+\|\s+status\s*$/m.test(r.stdout), r.stdout)
-check("16 packages rendered (every pin in the kit)",
-  r.stdout.split("\n").filter((l) => / \| /.test(l)).length === 17, r.stdout)
+check("17 packages rendered (every pin in the kit)",
+  r.stdout.split("\n").filter((l) => / \| /.test(l)).length === 18, r.stdout)
 check("GitHub: tag v0.76.1 compared with pin 0.76.1",
   /aquasecurity\/trivy\s+\|\s+0\.76\.1\s+\|\s+v0\.76\.1\s+\|\s+up to date/.test(r.stdout), r.stdout)
 check("pin with a v prefix kept (Trivy plugin)",
   /aquasecurity\/trivy-plugin-mcp\s+\|\s+v0\.0\.20\s+\|\s+v0\.0\.20\s+\|\s+up to date/.test(r.stdout), r.stdout)
-check("summary: 16 up to date, no drift",
-  /16 packages · 16 up to date · 0 drift · 0 unknown/.test(r.stdout), r.stdout)
+check("summary: 17 up to date, no drift",
+  /17 packages · 17 up to date · 0 drift · 0 unknown/.test(r.stdout), r.stdout)
 
 // --- 2. drift detected ----------------------------------------------------
 resetFixtures({ "npm\u0000kubernetes-mcp-server": "0.1.2" })
@@ -143,14 +144,21 @@ check("unknown: cause shown on stderr", /fixture not found/.test(r.stderr), r.st
 resetFixtures()
 r = run(["check", "--json"], { cache: freshCache("json-up") })
 let payload = jsonOf(r.stdout)
-check("--json: 16 results and a consistent summary",
-  r.status === 0 && payload?.results?.length === 16 && payload.summary.up_to_date === 16
+check("--json: 17 results and a consistent summary",
+  r.status === 0 && payload?.results?.length === 17 && payload.summary.up_to_date === 17
   && payload.summary.drift === 0 && payload.summary.unknown === 0, r.stdout + r.stderr)
 const mcp = payload?.results?.find((x) => x.package === "@playwright/mcp")
 check("--json: package/pinned/latest/status/file/line fields",
   mcp?.pinned === "0.0.84" && mcp.latest === "0.0.84" && mcp.status === "up to date"
   && mcp.ecosystem === "npm" && mcp.file === "config/bin/oc-playwright-mcp" && mcp.line === 16,
   JSON.stringify(mcp))
+const chromeMcp = payload?.results?.find((x) => x.package === "chrome-devtools-mcp")
+const chromeExecLine = fs.readFileSync(path.join(ROOT, "config", "bin", "oc-chrome-devtools-mcp"), "utf8")
+  .split("\n").findIndex((l) => l.startsWith("exec npx -y chrome-devtools-mcp@")) + 1
+check("--json: chrome-devtools-mcp pin read from its launcher",
+  chromeMcp?.pinned === "1.12.0" && chromeMcp.latest === "1.12.0" && chromeMcp.status === "up to date"
+  && chromeMcp.ecosystem === "npm" && chromeMcp.file === "config/bin/oc-chrome-devtools-mcp"
+  && chromeMcp.line === chromeExecLine, JSON.stringify(chromeMcp))
 
 resetFixtures({ "github\u0000aquasecurity/trivy": "v0.77.0" })
 r = run(["check", "--only", "trivy", "--json"], { cache: freshCache("json-drift") })
@@ -206,8 +214,8 @@ check("--only unknown: exit 2", r.status === 2 && /--only: unknown package/.test
 
 r = run(["check", "--ecosysteme", "npm", "--json"], { cache: freshCache("eco") })
 payload = jsonOf(r.stdout)
-check("--ecosysteme npm: 6 npm packages only",
-  r.status === 0 && payload?.results?.length === 6 && payload.results.every((x) => x.ecosystem === "npm"), r.stdout)
+check("--ecosysteme npm: 7 npm packages only",
+  r.status === 0 && payload?.results?.length === 7 && payload.results.every((x) => x.ecosystem === "npm"), r.stdout)
 r = run(["check", "--ecosysteme", "maven", "--json"], { cache: freshCache("eco-maven") })
 payload = jsonOf(r.stdout)
 check("--ecosysteme maven: valid, zero packages", r.status === 0 && payload?.results?.length === 0, r.stdout + r.stderr)

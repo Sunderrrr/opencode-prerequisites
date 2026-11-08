@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Starts the chrome-devtools MCP server (Google, Apache-2.0) at a pinned version.
+#   oc-chrome-devtools-mcp            MCP server (stdio), used by OpenCode
+#   oc-chrome-devtools-mcp --check    only resolves the Chrome binary (exit 0/1), starts nothing
+#
+# Chrome/Chromium is required. Upstream officially supports Google Chrome (and Chrome
+# for Testing); a Chromium or Playwright build may work but is not supported.
+# Resolution order: OC_CHROME_PATH, google-chrome-stable, google-chrome, chromium,
+# chromium-browser, brave, then the newest Playwright Chromium in ~/.cache/ms-playwright.
+#
+# Telemetry off: --no-usage-statistics and --no-performance-crux disable usage and
+# CrUX reporting, and CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS=1 disables the npm update
+# check. --headless and --isolated keep each session in a throwaway profile.
+set -Eeuo pipefail
+
+if [ -n "${OC_CHROME_PATH:-}" ]; then
+  # Explicit override: never silently fall back to another browser.
+  if [ ! -x "$OC_CHROME_PATH" ]; then
+    echo "chrome-devtools-mcp: OC_CHROME_PATH is not an executable file: $OC_CHROME_PATH" >&2
+    exit 1
+  fi
+  exe="$OC_CHROME_PATH"
+else
+  exe=""
+  for c in google-chrome-stable google-chrome chromium chromium-browser brave; do
+    if p="$(command -v "$c" 2>/dev/null)"; then exe="$p"; break; fi
+  done
+fi
+
+# Playwright fallback: highest revision wins (chromium-1248 over chromium-1148).
+# The glob accepts both chrome-linux/ and chrome-linux64/ (recent Playwright layouts).
+if [ -z "$exe" ]; then
+  best=""
+  best_rev=0
+  for p in "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux*/chrome; do
+    [ -x "$p" ] || continue
+    rev="${p#"$HOME"/.cache/ms-playwright/chromium-}"
+    rev="${rev%%/*}"
+    case "$rev" in ''|*[!0-9]*) continue ;; esac
+    if [ -z "$best" ] || [ "$rev" -gt "$best_rev" ]; then
+      best="$p"
+      best_rev="$rev"
+    fi
+  done
+  exe="$best"
+fi
+
+if [ -z "$exe" ]; then
+  # printf is a shell builtin: the message also works with a minimal PATH.
+  printf '%s\n' \
+    'chrome-devtools-mcp: no Chrome/Chromium binary found.' \
+    '  Install Google Chrome (officially supported): https://www.google.com/chrome/' \
+    '  or a Chromium package (Arch: sudo pacman -S --needed chromium;' \
+    '  Debian/Ubuntu: sudo apt install chromium), or a Playwright Chromium:' \
+    '    npx playwright install chromium' \
+    '  or point OC_CHROME_PATH to an existing Chrome/Chromium binary.' \
+    '  Note: only Google Chrome and Chrome for Testing are officially supported upstream;' \
+    '  Chromium and Playwright builds may work but are unsupported.' >&2
+  exit 1
+fi
+
+if [ "${1:-}" = "--check" ]; then
+  note=""
+  case "$exe" in
+    "$HOME"/.cache/ms-playwright/*) note=" (Playwright Chromium: may work, not officially supported)" ;;
+  esac
+  echo "chrome-devtools-mcp 1.12.0: Chrome found at $exe$note"
+  exit 0
+fi
+
+command -v npx >/dev/null 2>&1 || {
+  echo "chrome-devtools-mcp: npx not found (Node.js ^20.19 || ^22.12 || >=23 required)." >&2
+  exit 1
+}
+
+# No npm registry round-trip just to compare versions at every startup.
+export CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS=1
+
+exec npx -y chrome-devtools-mcp@1.12.0 --headless --isolated --no-usage-statistics --no-performance-crux --executablePath "$exe" "$@"

@@ -4,6 +4,20 @@ Format [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning [Sem
 
 ## [Unreleased]
 
+### 2026-11-08
+
+#### Added
+
+- `designer` agent (art direction, design system, layout, typography, color, accessibility, responsive and interaction states), routed in the CEO and listed in `AGENTS.md`; `chrome-devtools_*` allowed to it and to `frontend`, denied globally. `scripts/test-uiux.mjs` covers the vendored skills and launchers.
+- Vendored `ui-ux-pro-max` skill (2.15.0, MIT, launcher `oc-uiux-search`).
+- Vendored `impeccable` skill (4.8.1, Apache-2.0, launcher `oc-impeccable`) and `/impeccable` command (`agent: designer`).
+- `chrome-devtools` MCP (`chrome-devtools-mcp@1.12.0`, headless, isolated, telemetry off; launcher `oc-chrome-devtools-mcp`); `--lite` drops the `designer` agent, both skills and the `/impeccable` command.
+- Documentation counts: 28 agents (30 with `--android`), 27 specialists (29 with `--android`), 11 skills (12 with `--android`), 10 commands, 11 MCP servers; test counts: `test-lite` 29, `test-deps` 34, `test-uiux` 36, `test-chrome-devtools` 14.
+
+#### Fixed
+
+- `--lite` now drops a command whose frontmatter `agent:` names a removed agent (`/impeccable` → `designer`), not only commands mentioning `@agent`; `scripts/test-lite.mjs` asserts that `commands/impeccable.md` is absent after `--lite`.
+
 ### 2026-11-04
 
 #### Added

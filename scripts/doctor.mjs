@@ -198,6 +198,16 @@ for (const [name, m] of Object.entries(mcpServers(cfg))) {
         : wa(`${name}: no browser (install chromium with your package manager, or run ./install.sh again)`)
     continue
   }
+  if (bin.endsWith("oc-chrome-devtools-mcp")) {
+    // The launcher owns the resolution order (OC_CHROME_PATH, PATH, Playwright cache):
+    // --check resolves it locally and starts neither npx nor the MCP server.
+    const r = run(bin, ["--check"], 15000)
+    const detail = squash(r.stderr || r.stdout, 8)
+    r.status === 0
+      ? ok(`${name}: ${(r.stdout ?? "").trim()}`)
+      : wa(`${name}: ${detail || `--check failed (code ${r.status})`}`)
+    continue
+  }
   if (bin.endsWith("oc-semgrep-mcp")) {
     if (OFFLINE) { wa(`MCP ${name}: --check not run (offline mode)`); continue }
     // The launcher actually starts the server and checks the MCP initialize handshake:
