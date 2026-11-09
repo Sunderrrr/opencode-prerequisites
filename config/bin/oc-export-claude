@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# oc-export-claude: export the kit to Claude Code format.
+#   oc-export-claude --out .claude          project export (agents, skills, commands, MCP, hooks)
+#   oc-export-claude --global --force       user-level export in ~/.claude
+#   oc-export-claude --android --out .claude
+# See "oc-export-claude --help" and docs/claude-code.md.
+set -Eeuo pipefail
+
+here="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+config="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+
+# Repository checkout: <repo>/config/bin -> <repo>/scripts/export-claude.mjs.
+# Installed kit: install.sh copies the exporter to <config>/libexec/export-claude.mjs.
+for candidate in \
+  "$here/../../scripts/export-claude.mjs" \
+  "$config/libexec/export-claude.mjs" \
+  "$here/../libexec/export-claude.mjs"; do
+  if [ -f "$candidate" ]; then
+    exec node "$candidate" "$@"
+  fi
+done
+
+printf 'oc-export-claude: exporter not found (looked in %s, %s, %s)\n' \
+  "$here/../../scripts/export-claude.mjs" \
+  "$config/libexec/export-claude.mjs" \
+  "$here/../libexec/export-claude.mjs" >&2
+exit 127

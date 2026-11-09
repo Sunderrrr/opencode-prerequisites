@@ -1,0 +1,70 @@
+name: CI Windows
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# One run per ref: closely spaced pushes cancel the previous one.
+concurrency:
+  group: ci-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows (native PowerShell, config-only)
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      - name: Versions (PowerShell, Node 26, Git Bash)
+        run: |
+          $PSVersionTable.PSVersion.ToString()
+          node --version
+          npm --version
+          bash -c 'uname -s'
+
+      - name: Validate the kit (config, agents, skills, plugins, secrets)
+        run: node scripts/validate-kit.mjs
+
+      - name: Local plugins (fake OpenCode v2 context, notify win32 branch)
+        run: node scripts/test-plugins.mjs
+
+      # Full mode: parse + helpers, then install -DryRun, config-only install,
+      # doctor -Offline and uninstall in a temporary home (HKCU\Environment included).
+      - name: Windows scripts (helpers + native install/doctor/uninstall)
+        run: pwsh -NoProfile -File scripts/test-windows.ps1
+
+  helpers:
+    name: PowerShell helpers (Linux, no Windows host)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      # GitHub's ubuntu-24.04 image ships pwsh; install it only when absent.
+      - name: Ensure PowerShell 7
+        run: |
+          if ! command -v pwsh >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y powershell
+          fi
+          pwsh --version
+
+      - name: Parse and unit-test the PowerShell helpers (no registry, no install)
+        run: pwsh -NoProfile -File scripts/test-windows.ps1 -HelpersOnly

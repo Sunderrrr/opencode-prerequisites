@@ -67,6 +67,8 @@ jobs:
         run: node scripts/test-ops.mjs
       - name: "Web generator (hermetic: template, substitutions, git, overwrite refusal)"
         run: node scripts/test-new-web.mjs
+      - name: "Claude Code export (real kit + fixture: agents, skills, commands, MCP, hooks, idempotence)"
+        run: node scripts/test-claude-export.mjs
       - name: Android Containerfile (hadolint, errors only)
         run: docker run --rm -i docker.io/hadolint/hadolint:v2.15.1 hadolint --failure-threshold error - < addons/android/libexec/oc-android/Containerfile
       - name: Installation with the Android module, remembered then removed
@@ -220,6 +222,8 @@ jobs:
         run: node scripts/test-ops.mjs
       - name: "Web generator (hermetic: template, substitutions, git, overwrite refusal)"
         run: node scripts/test-new-web.mjs
+      - name: "Claude Code export (hermetic: real kit + fixture, no network)"
+        run: node scripts/test-claude-export.mjs
       - name: Pentest/appsec tools (--pentest option)
         run: node scripts/test-pentest.mjs
       - name: MCP launchers (browser and container engine selection)

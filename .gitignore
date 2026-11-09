@@ -3,3 +3,5 @@
 .worktrees/
 node_modules/
 demo/
+.claude/
+.oc-export-manifest.json

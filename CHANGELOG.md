@@ -1,8 +1,29 @@
 # Changelog
 
-Format [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning [SemVer](https://semver.org/). No published tags: entries describe `main`.
+Format [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning [SemVer](https://semver.org/). Version 1.0.0 (`VERSION`); no git tag is published yet. Entries describe `main`.
 
 ## [Unreleased]
+
+### 2026-11-09
+
+#### Added
+
+- `oc-export-claude` (`config/bin/oc-export-claude`, `scripts/export-claude.mjs`): deterministic, idempotent Claude Code export of agents, skills, commands, MCP servers and the guard/notify hooks; haiku/sonnet/opus routing, fixed variants (`rust-haiku`, `review-opus`, `architect-opus`), project `.mcp.json` at the root; `scripts/test-claude-export.mjs` (170 checks), `docs/claude-code.md`.
+- Native Windows support (config-only): `install.ps1`, `uninstall.ps1`, `doctor.ps1` and `scripts/test-windows.ps1` (66 helper checks plus the end-to-end native path), `.cmd` shims, user `PATH` (`HKCU\Environment`), PowerShell profile and `opencode.jsonc` path rewrite; `.github/workflows/ci-windows.yml` (`windows-latest` full suite, `ubuntu-24.04` helpers-only); `docs/windows.md`.
+- Packs and profiles: `profiles/packs.tsv`, `--profile core|full|lite`, `--with`/`--without`, `--no-pack`, remembered profile; core and lite derived by `scripts/make-lite.mjs`.
+- Operational tools: `oc-backup` (timestamped archive, sha256 sidecar, last 5 kept), `oc-restore`, `oc-usage`; `oc-deps update` (`--dry-run` by default, `--write --yes` with timestamped backups); `doctor.sh --fix` and `--fix --dry-run`.
+- Web generator: `oc-new-web` and `templates/web-project/` (Vite, React, TypeScript, Tailwind CSS v4, design tokens, Playwright smoke tests); `scripts/test-new-web.mjs` (116 checks).
+- `VERSION` 1.0.0 and `./install.sh --version`.
+- Renovate custom managers (`.github/renovate.json`) for `install.sh` pins, launchers, `opencode.jsonc`, workflow actions/images and the Android `Containerfile`.
+
+#### Changed
+
+- CI diet: pull requests run 3 distributions (Arch, Debian 12, Rocky 9), pushes to `main` run all 7; `concurrency` cancels outdated runs; new steps for ops tools (`scripts/test-ops.mjs`, 47 checks), the web generator and the Claude Code export.
+- README, ROADMAP and CHANGELOG document packs, operational tools, the web generator, `VERSION`, Renovate, Claude Code and native Windows.
+
+#### Fixed
+
+- Documentation: removed the stale "Windows requires WSL" claim (native config-only is supported; WSL2 is only needed for the full toolchain and Android/Podman); the version status now says `VERSION` 1.0.0 with no git tag.
 
 ### 2026-11-08
 
