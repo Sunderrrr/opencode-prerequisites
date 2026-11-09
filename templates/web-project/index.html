@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="{{name}} — a Vite + React + TypeScript design-system starter." />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{{name}}</title>
+    <script>
+      // Apply the saved theme before first paint to avoid a flash of the wrong theme.
+      // The storage key must match src/useTheme.ts.
+      (function () {
+        try {
+          var stored = localStorage.getItem("oc-web-theme")
+          var dark = stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches
+          document.documentElement.dataset.theme = dark ? "dark" : "light"
+        } catch (error) {
+          // Storage can be unavailable (private mode): keep the CSS default.
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

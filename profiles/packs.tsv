@@ -1,0 +1,54 @@
+# Pack table: single source of truth for profiles (install.sh --profile/--with/--without).
+# Format: pack<TAB>kind<TAB>item
+# kind = agent | skill | command | mcp
+# core is always selected and cannot be removed.
+# android is a pack in this table but is selected only by --android (never --with/--packs).
+# Commands are not listed for core/control: make-lite keeps every command unless its `agent:`
+# frontmatter or an @mention targets an agent from a pack that is not selected.
+core	agent	ceo
+core	agent	architect
+core	agent	rust
+core	agent	backend
+core	agent	frontend
+core	agent	qa
+core	agent	security
+core	agent	debugger
+core	agent	researcher
+core	agent	review
+core	agent	verify-app
+core	agent	integrator
+core	skill	anti-ia-detection
+core	skill	git-commit
+core	skill	grill-me
+core	skill	handoff
+core	skill	project-onboarding
+core	skill	safe-refactor
+core	skill	tdd
+core	skill	web-research
+design	agent	designer
+design	skill	ui-ux-pro-max
+design	skill	impeccable
+design	command	impeccable
+devops	agent	devops
+devops	agent	docker
+devops	agent	ansible
+devops	agent	terraform
+devops	agent	kubernetes
+devops	mcp	terraform
+devops	mcp	kubernetes
+languages	agent	python
+languages	agent	typescript
+languages	agent	go
+languages	agent	shell
+data	agent	database
+docs	agent	docs
+control	agent	code-simplifier
+reverse	agent	reverse-engineer
+reverse	skill	reverse-engineer-anything
+reverse	mcp	rea
+research	agent	web-researcher
+pentest	agent	pentest
+android	agent	android
+android	agent	mobile-tester
+android	skill	android-dev
+android	mcp	mobile

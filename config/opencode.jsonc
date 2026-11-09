@@ -75,7 +75,7 @@
         "command": ["{env:HOME}/.local/bin/oc-chrome-devtools-mcp"],
         "timeout": { "startup": 120000 }
       },
-      // --- DevOps (read-only / no writes) ---
+      // --- DevOps pack (./install.sh --with devops): disabled with a pack reason otherwise ---
       // Terraform Registry documentation (providers/modules). No TFE_TOKEN: no action on HCP Terraform.
       // Requires Docker or Podman (the launcher picks whichever responds).
       "terraform": {
@@ -105,14 +105,16 @@
         "url": "https://mcp.grep.app",
         "oauth": false
       },
-      // Reverse engineering (REA, MIT): binaries, Electron/JS, .NET, APK, firmware, network captures. Reserved for the
-      // reverse-engineer agent. Requires Node >= 26.12.1 (or 24.22.1 / 22.23.4): install.sh disables it otherwise.
+      // Reverse pack (./install.sh --with reverse): binaries, Electron/JS, .NET, APK, firmware, network captures.
+      // Reserved for the reverse-engineer agent. Requires Node >= 26.12.1 (or 24.22.1 / 22.23.4):
+      // install.sh disables it otherwise (and with a pack reason when the pack is not selected).
       "rea": {
         "type": "local",
         "command": ["{env:HOME}/.local/bin/oc-rea-mcp"]
       },
       // Android module (./install.sh --android): drives the Podman emulator (mobile-mcp, Apache-2.0, pinned version,
-      // telemetry off). Reserved for the android and mobile-tester agents. Disabled by install.sh if the module is not installed.
+      // telemetry off). Not a pack (--with android is an error). Reserved for the android and mobile-tester agents.
+      // Disabled by install.sh if the module is not installed.
       "mobile": {
         "type": "local",
         "command": ["{env:HOME}/.local/bin/oc-mobile-mcp"]

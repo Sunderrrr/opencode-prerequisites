@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# oc-deps: drift of the versions pinned by the kit (read-only, no updates).
+# oc-deps: drift of the versions pinned by the kit.
 #   oc-deps check
 #   oc-deps check --only trivy --json
-# See "oc-deps --help".
+#   oc-deps update --write --yes
+# See "oc-deps --help". "check" is read-only.
 set -Eeuo pipefail
 
 here="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"

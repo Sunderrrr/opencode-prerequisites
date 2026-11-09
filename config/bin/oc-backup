@@ -1,0 +1,314 @@
+#!/usr/bin/env bash
+# oc-backup: timestamped archive of the live OpenCode setup.
+#
+#   oc-backup [--out DIR] [--dry-run]
+#
+# Contents: config/ (OPENCODE_CONFIG_DIR, without caches/node_modules/*.bak-*),
+# bin/ (the kit launchers: oc-*, agent-wt, oc-new-rust), mempalace-plugin/
+# (package.json + lockfile if present) and backup-info.txt.
+# The archive is written with a .sha256 next to it; the last 5 are kept.
+# No network access. Bash 3.2+ (macOS) and Linux.
+set -Eeuo pipefail
+shopt -s inherit_errexit 2>/dev/null || true
+IFS=$'\n\t'
+umask 077
+
+PROG="oc-backup"
+CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+BIN_DIR="${OBSCURA_BIN_DIR:-$HOME/.local/bin}"
+MEMPALACE_DIR="${OC_MEMPALACE_PLUGIN_DIR:-$HOME/.mempalace/plugin}"
+STATE_DIR="${OC_BACKUP_DIR:-$HOME/.local/state/opencode-backups}"
+KEEP=5
+STAMP="$(date -u +%Y%m%d-%H%M%S)"
+OUT_DIR="$STATE_DIR"
+DRY_RUN=0
+tmp=""
+
+usage() {
+  cat <<EOF
+oc-backup — timestamped backup of the live OpenCode setup
+
+Usage:
+  oc-backup [--out DIR] [--dry-run]
+
+Options:
+  --out DIR     output directory (default: \$HOME/.local/state/opencode-backups)
+  --dry-run     show what would be archived, write nothing
+  -h, --help    this help
+
+Archive: <out>/opencode-<UTC timestamp>.tar.gz (+ .sha256)
+Contents:
+  config/               \$OPENCODE_CONFIG_DIR (default: ~/.config/opencode)
+  bin/                  oc-* launchers, agent-wt and oc-new-rust
+  mempalace-plugin/     ~/.mempalace/plugin/{package.json,package-lock.json}
+  backup-info.txt       format, timestamp, source paths and file counts
+
+Excluded: node_modules, .cache/cache/__pycache__, .git and *.bak-* entries.
+The 5 most recent archives in the output directory are kept; older ones and
+their .sha256 are removed. The config directory must exist.
+
+Environment: OPENCODE_CONFIG_DIR, OBSCURA_BIN_DIR, OC_BACKUP_DIR,
+             OC_MEMPALACE_PLUGIN_DIR.
+
+Exit codes: 0 success · 1 missing config or runtime error · 2 usage error.
+EOF
+}
+
+die() {
+  local code="${2:-1}"
+  printf '❌ %s: %s\n' "$PROG" "$1" >&2
+  exit "$code"
+}
+
+need() { command -v "$1" >/dev/null 2>&1; }
+
+cleanup() {
+  if [ -n "$tmp" ]; then
+    rm -rf -- "$tmp"
+  fi
+}
+trap cleanup EXIT
+trap 'printf "❌ %s: unexpected failure (line %s)\n" "$PROG" "$LINENO" >&2' ERR
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --out)
+      [ $# -ge 2 ] || die "--out requires a directory" 2
+      OUT_DIR="$2"
+      shift 2
+      ;;
+    --out=*)
+      OUT_DIR="${1#*=}"
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      die "unknown option: $1 (see --help)" 2
+      ;;
+    *)
+      die "unexpected argument: $1 (see --help)" 2
+      ;;
+  esac
+done
+[ $# -eq 0 ] || die "unexpected argument: $1 (see --help)" 2
+[ -n "$OUT_DIR" ] || die "--out requires a non-empty directory" 2
+
+[ -d "$CONFIG_DIR" ] || die "config directory not found: $CONFIG_DIR (set OPENCODE_CONFIG_DIR)"
+need tar || die "tar not found in PATH"
+need find || die "find not found in PATH"
+need mktemp || die "mktemp not found in PATH"
+need sha256sum || need shasum || need node || die "no sha256 tool (sha256sum, shasum or node)"
+if [ -d "$BIN_DIR" ]; then
+  need readlink || die "readlink not found in PATH"
+fi
+
+sha256_of() {
+  local file="$1"
+  if need sha256sum; then
+    sha256sum "$file" | awk '{print $1}'
+  elif need shasum; then
+    shasum -a 256 "$file" | awk '{print $1}'
+  elif need node; then
+    node -e 'const c=require("node:crypto"),f=require("node:fs");process.stdout.write(c.createHash("sha256").update(f.readFileSync(process.argv[1])).digest("hex"))' "$file"
+  else
+    return 1
+  fi
+}
+
+human_size() {
+  awk -v n="$1" 'BEGIN { split("B KiB MiB GiB TiB", u, " "); i=1; while (n >= 1024 && i < 5) { n /= 1024; i++ } printf "%.1f %s", n, u[i] }'
+}
+
+# copy_entry <source> <destination>: copy a regular file or reproduce a symlink.
+copy_entry() {
+  local src="$1" dest="$2"
+  if [ -L "$src" ]; then
+    ln -s "$(readlink "$src")" "$dest"
+  else
+    cp -p "$src" "$dest"
+  fi
+}
+
+# copy_tree <source> <destination>: regular files and symlinks, without caches,
+# node_modules, .git or *.bak-* entries. Paths are handled NUL-separated.
+copy_tree() {
+  local src="$1" dest="$2" f rel base
+  while IFS= read -r -d '' f; do
+    rel="${f#"$src"/}"
+    case "/$rel/" in
+      */node_modules/* | */.cache/* | */cache/* | */__pycache__/* | */.pytest_cache/* | */.ruff_cache/* | */.git/* | */.bak-*/*)
+        continue
+        ;;
+    esac
+    base="${rel##*/}"
+    case "$base" in
+      .bak-* | *.bak-*) continue ;;
+    esac
+    mkdir -p "$dest/$(dirname "$rel")"
+    copy_entry "$f" "$dest/$rel"
+  done < <(find "$src" \( -type f -o -type l \) -print0)
+}
+
+count_entries() {
+  local dir="$1"
+  if [ ! -d "$dir" ]; then
+    printf '0'
+    return 0
+  fi
+  find "$dir" \( -type f -o -type l \) -print0 | tr -cd '\0' | wc -c | tr -d '[:space:]'
+}
+
+contains() {
+  local needle="$1"
+  shift
+  local item
+  for item in "$@"; do
+    if [ "$item" = "$needle" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+unique_archive() {
+  local base="$1" candidate="$1" i=1
+  while [ -e "$candidate" ] || [ -e "$candidate.sha256" ]; do
+    candidate="${base%.tar.gz}_$i.tar.gz"
+    i=$((i + 1))
+  done
+  printf '%s\n' "$candidate"
+}
+
+prune_backups() {
+  local dir="$1" keep="$2" archives=() count i f
+  # Byte order: unique_archive appends _1, _2… after the timestamp, and the
+  # locale collation may sort "_1" before ".tar.gz" (en_US.UTF-8 does).
+  local LC_ALL=C
+  shopt -s nullglob
+  archives=("$dir"/opencode-*.tar.gz)
+  shopt -u nullglob
+  count=${#archives[@]}
+  [ "$count" -gt "$keep" ] || return 0
+  i=0
+  while [ "$i" -lt "$((count - keep))" ]; do
+    f="${archives[$i]}"
+    rm -f -- "$f" "$f.sha256"
+    printf '🧹 Pruned old backup: %s\n' "$(basename "$f")"
+    i=$((i + 1))
+  done
+}
+
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/oc-backup.XXXXXX")"
+stage="$tmp/stage"
+mkdir -p "$stage"
+
+# 1. Configuration (oc-models.json, manifest and every kit/user file).
+copy_tree "$CONFIG_DIR" "$stage/config"
+
+# 2. Launchers installed by the kit. oc-* covers oc-new-rust; agent-wt is added
+# separately. Non-kit executables in the bin directory are never included.
+launcher_paths=()
+if [ -d "$BIN_DIR" ]; then
+  shopt -s nullglob
+  for f in "$BIN_DIR"/oc-*; do
+    if [ -f "$f" ] || [ -L "$f" ]; then
+      if [ ${#launcher_paths[@]} -eq 0 ] || ! contains "$f" "${launcher_paths[@]}"; then
+        launcher_paths+=("$f")
+      fi
+    fi
+  done
+  shopt -u nullglob
+fi
+for name in agent-wt oc-new-rust; do
+  f="$BIN_DIR/$name"
+  if [ -f "$f" ] || [ -L "$f" ]; then
+    if [ ${#launcher_paths[@]} -eq 0 ] || ! contains "$f" "${launcher_paths[@]}"; then
+      launcher_paths+=("$f")
+    fi
+  fi
+done
+if [ ${#launcher_paths[@]} -gt 0 ]; then
+  mkdir -p "$stage/bin"
+  for f in "${launcher_paths[@]}"; do
+    copy_entry "$f" "$stage/bin/$(basename "$f")"
+  done
+fi
+
+# 3. MemPalace plugin settings (outside the config directory). Never include
+# node_modules or .npmrc (it may contain a token).
+mp_count=0
+if [ -d "$MEMPALACE_DIR" ]; then
+  for name in package.json package-lock.json npm-shrinkwrap.json; do
+    f="$MEMPALACE_DIR/$name"
+    if [ -f "$f" ]; then
+      mkdir -p "$stage/mempalace-plugin"
+      cp -p "$f" "$stage/mempalace-plugin/$name"
+      mp_count=$((mp_count + 1))
+    fi
+  done
+fi
+
+config_count="$(count_entries "$stage/config")"
+bin_count="$(count_entries "$stage/bin")"
+
+{
+  printf 'format=oc-backup/1\n'
+  printf 'created=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf 'config_dir=%s\n' "$CONFIG_DIR"
+  printf 'bin_dir=%s\n' "$BIN_DIR"
+  printf 'mempalace_plugin_dir=%s\n' "$MEMPALACE_DIR"
+  printf 'config_files=%s\n' "$config_count"
+  printf 'bin_files=%s\n' "$bin_count"
+  printf 'mempalace_files=%s\n' "$mp_count"
+} > "$stage/backup-info.txt"
+
+if [ "$DRY_RUN" = 1 ]; then
+  printf '🔎 Dry run: would create %s\n' "$OUT_DIR/opencode-$STAMP.tar.gz"
+  printf '   config: %s (%s files)\n' "$CONFIG_DIR" "$config_count"
+  printf '   launchers: %s (%s files)\n' "$BIN_DIR" "$bin_count"
+  printf '   mempalace plugin: %s (%s files)\n' "$MEMPALACE_DIR" "$mp_count"
+  exit 0
+fi
+
+[ -d "$OUT_DIR" ] || mkdir -p "$OUT_DIR" || die "cannot create output directory: $OUT_DIR"
+archive="$(unique_archive "$OUT_DIR/opencode-$STAMP.tar.gz")"
+
+members=("backup-info.txt")
+for d in config bin mempalace-plugin; do
+  if [ -d "$stage/$d" ]; then
+    members+=("$d")
+  fi
+done
+tar -czf "$archive" -C "$stage" "${members[@]}" || {
+  rm -f -- "$archive"
+  die "tar failed: archive not created"
+}
+[ -s "$archive" ] || die "tar produced an empty archive"
+
+hash="$(sha256_of "$archive" || true)"
+[ -n "$hash" ] || {
+  rm -f -- "$archive"
+  die "cannot compute the sha256 of the archive"
+}
+printf '%s  %s\n' "$hash" "$(basename "$archive")" > "$archive.sha256"
+
+bytes="$(wc -c < "$archive" | tr -d '[:space:]')"
+printf '✅ Backup: %s\n' "$archive"
+printf '   size: %s (%s bytes)\n' "$(human_size "$bytes")" "$bytes"
+printf '   sha256: %s\n' "$hash"
+printf '   checksum: %s.sha256\n' "$archive"
+printf '   contents: %s config file(s), %s launcher(s), %s mempalace file(s)\n' \
+  "$config_count" "$bin_count" "$mp_count"
+
+prune_backups "$OUT_DIR" "$KEEP"

@@ -36,6 +36,12 @@ const treeDigest = (dir) => {
   return h.digest("hex")
 }
 const mode = (f) => fs.statSync(f).mode & 0o777
+// Every launcher the kit can install: config/bin/* plus oc-new-rust and the Android addon.
+const kitLaunchers = [
+  ...fs.readdirSync(path.join(ROOT, "config", "bin")),
+  "oc-new-rust",
+  ...fs.readdirSync(path.join(ROOT, "addons", "android", "bin")),
+]
 
 // Shared hermetic PATH: every real binary except uv/uvx/pipx. No test may trigger a
 // download or a compilation; Node is a launcher to the real binary.
@@ -66,9 +72,14 @@ const zshenv = fs.readFileSync(path.join(home, ".zshenv"), "utf8"), zshrc = fs.r
 check("zsh: block in ~/.zshenv (read outside an interactive terminal)", zshenv.includes(">>> opencode-prerequisites") && zshenv.includes("MEMPALACE_ADAPTER_PYTHON"))
 check("zsh: old block removed from ~/.zshrc, rest of the file intact", !zshrc.includes("opencode-prerequisites") && !zshrc.includes("/old") && zshrc.includes("export EDITOR=nvim"))
 check("idempotent: 3 runs produce exactly the same file as a single one", bashrc === afterOne, `lines ${afterOne.split("\n").length} → ${bashrc.split("\n").length}`)
+const newLaunchers = ["oc-backup", "oc-restore", "oc-usage", "oc-new-web"]
+check("install: the new launchers oc-backup/oc-restore/oc-usage/oc-new-web are installed",
+  newLaunchers.every((n) => fs.existsSync(path.join(bin, n))), newLaunchers.filter((n) => !fs.existsSync(path.join(bin, n))).join(", "))
 sh("./uninstall.sh", [], env)
 check("uninstall: ~/.bashrc strictly identical to the original", fs.readFileSync(path.join(home, ".bashrc"), "utf8") === bashrc0)
 check("uninstall: no trace left in .zshenv or .zshrc", !/opencode-prerequisites/.test(fs.readFileSync(path.join(home, ".zshenv"), "utf8") + fs.readFileSync(path.join(home, ".zshrc"), "utf8")))
+const leftLaunchers = fs.existsSync(bin) ? fs.readdirSync(bin).filter((n) => kitLaunchers.includes(n)) : []
+check("uninstall: no kit launcher left in $BIN", leftLaunchers.length === 0, leftLaunchers.join(", "))
 
 // ---------- 1b. template, backups, personal files, MCP state ----------
 const h4 = path.join(tmp, "home4"), cfg4 = path.join(h4, "cfg"), bin4 = path.join(h4, ".local/bin")
@@ -232,6 +243,19 @@ check("uninstall: restores the most recent backup (same-second suffix)",
 check("uninstall: current config moved without nesting",
   removed5.length === 1 && !fs.existsSync(path.join(h5, removed5[0], "cfg")), removed5.join(", "))
 
+// The restored backup may itself contain markers left by an older install: uninstall must
+// forget the remembered choices (.android/.pentest/.profile) so a later install cannot replay them.
+const hMark = path.join(tmp, "home-mark"), cfgMark = path.join(hMark, "cfg"), binMark = path.join(hMark, ".local/bin")
+write(path.join(cfgMark, "personal.txt"), "keep me\n")
+for (const m of [".opencode-prerequisites.android", ".opencode-prerequisites.pentest", ".opencode-prerequisites.profile"]) write(path.join(cfgMark, m), "stale\n")
+const envMark = { HOME: hMark, OPENCODE_CONFIG_DIR: cfgMark, OBSCURA_BIN_DIR: binMark, XDG_DATA_HOME: path.join(hMark, ".local/share"), PATH: noUv }
+const rMark = sh("./install.sh", ["--no-tools", "--no-android"], envMark)
+const rMarkUn = sh("./uninstall.sh", [], envMark)
+const markersLeft = fs.readdirSync(cfgMark).filter((n) => n.startsWith(".opencode-prerequisites."))
+check("uninstall: restored config keeps personal files but no remembered marker (.android/.pentest/.profile)",
+  rMark.status === 0 && rMarkUn.status === 0 && fs.existsSync(path.join(cfgMark, "personal.txt")) && markersLeft.length === 0,
+  `install ${rMark.status} | uninstall ${rMarkUn.status} | markers: ${markersLeft.join(", ")}`)
+
 // ---------- 1c. make-lite failure: the config phase is cancelled and EVERYTHING is restored identically ----------
 const h6 = path.join(tmp, "home6"), cfg6 = path.join(h6, "cfg"), bin6 = path.join(h6, ".local/bin")
 write(path.join(cfg6, "witness.txt"), "witness from before installation\n")
@@ -368,6 +392,166 @@ check("permissions: $BIN/oc-models launcher in 755",
 check("permissions: personal file preserved, readable by its owner, closed to others",
   fs.readFileSync(perso8, "utf8") === "user content\n" && (mode(perso8) & 0o400) !== 0 && (mode(perso8) & 0o077) === 0,
   `mode ${mode(perso8).toString(8)}`)
+
+// ---------- 1g. profiles/packs: flags, resolution, marker, MCP gating ----------
+const packEnv = (name) => {
+  const h = path.join(tmp, `home-${name}`)
+  const cfgDir = path.join(h, "cfg")
+  const binDir = path.join(h, ".local", "bin")
+  return {
+    h, cfg: cfgDir, bin: binDir,
+    env: { HOME: h, OPENCODE_CONFIG_DIR: cfgDir, OBSCURA_BIN_DIR: binDir, XDG_DATA_HOME: path.join(h, ".local/share"), PATH: `${fakeUvxDir}:${noUv}` },
+  }
+}
+const runP = (p, args = [], extra = {}) => sh("./install.sh", [...args, "--no-tools"], { ...p.env, ...extra })
+const agentsP = (cfgDir) => (fs.existsSync(path.join(cfgDir, "agents")) ? fs.readdirSync(path.join(cfgDir, "agents")).filter((f) => f.endsWith(".md")).map((f) => f.slice(0, -3)).sort() : [])
+const skillsP = (cfgDir) => (fs.existsSync(path.join(cfgDir, "skills")) ? fs.readdirSync(path.join(cfgDir, "skills")).filter((d) => fs.existsSync(path.join(cfgDir, "skills", d, "SKILL.md"))) : [])
+const commandsP = (cfgDir) => (fs.existsSync(path.join(cfgDir, "commands")) ? fs.readdirSync(path.join(cfgDir, "commands")).filter((f) => f.endsWith(".md")).map((f) => f.slice(0, -3)) : [])
+const profileP = (cfgDir) => fs.readFileSync(path.join(cfgDir, ".opencode-prerequisites.profile"), "utf8")
+const cfgTextP = (cfgDir) => fs.readFileSync(path.join(cfgDir, "opencode.jsonc"), "utf8")
+const mcpP = (cfgDir, name) => (parseJsonc(cfgTextP(cfgDir)).mcp?.servers?.[name] ?? {})
+
+const helpP = sh("./install.sh", ["--help"], { PATH: noUv })
+check("--help: exit 0 and lists profile/pack flags",
+  helpP.status === 0 && ["--profile", "--with", "--without", "--no-pack", "--lite", "--android", "--pentest"].every((f) => helpP.stdout.includes(f)),
+  `code ${helpP.status} | ${helpP.stdout.slice(0, 300)}`)
+
+const pBad = packEnv("pack-bad")
+const rBadPack = runP(pBad, ["--with", "nope"])
+check("unknown pack: exit 1, names it and lists valid packs",
+  rBadPack.status === 1 && /Unknown pack "nope"/.test(rBadPack.stderr) && /valid packs: core design/.test(rBadPack.stderr),
+  `code ${rBadPack.status} | ${rBadPack.stderr}`)
+check("unknown pack: nothing installed", !fs.existsSync(path.join(pBad.cfg, ".opencode-prerequisites.installed")))
+
+const pAndroidWith = packEnv("pack-android-with")
+const rAndroidWith = runP(pAndroidWith, ["--with", "android"])
+check("--with android: exit 1 and tells to use --android",
+  rAndroidWith.status === 1 && /use --android/.test(rAndroidWith.stderr), `code ${rAndroidWith.status} | ${rAndroidWith.stderr}`)
+
+// core: 12 agents, 8 skills, 7 commands, optional MCPs disabled for their pack.
+const pCore = packEnv("pack-core")
+const rCore = runP(pCore, ["--profile", "core"])
+const coreAgents = agentsP(pCore.cfg)
+check("profile core: 12 agents, 8 skills, 7 commands",
+  rCore.status === 0 && coreAgents.length === 12 && skillsP(pCore.cfg).length === 8 && commandsP(pCore.cfg).length === 7,
+  `code ${rCore.status} | ${coreAgents.length} agents, ${skillsP(pCore.cfg).length} skills, ${commandsP(pCore.cfg).length} commands | ${rCore.stderr}`)
+check("profile core: designer and pentest absent",
+  !coreAgents.includes("designer") && !coreAgents.includes("pentest"))
+check("profile core: marker profile=core packs=core, mode 600",
+  profileP(pCore.cfg) === "profile=core\npacks=core\n" && mode(path.join(pCore.cfg, ".opencode-prerequisites.profile")) === 0o600,
+  JSON.stringify(profileP(pCore.cfg)))
+const coreText = cfgTextP(pCore.cfg)
+check("profile core: terraform/kubernetes disabled with the devops pack reason",
+  mcpP(pCore.cfg, "terraform").disabled === true && mcpP(pCore.cfg, "kubernetes").disabled === true
+  && (coreText.match(/install\.sh: devops pack not installed \(--with devops\)/g) ?? []).length === 2, coreText)
+check("profile core: rea disabled with the reverse pack reason",
+  mcpP(pCore.cfg, "rea").disabled === true && /install\.sh: reverse pack not installed \(--with reverse\)/.test(coreText))
+check("profile core: mandatory MCPs stay enabled",
+  ["context7", "grep_app", "playwright", "obscura", "chrome-devtools", "semgrep", "trivy"].every((n) => Object.keys(mcpP(pCore.cfg, n)).length > 0 && mcpP(pCore.cfg, n).disabled === undefined),
+  ["context7", "grep_app", "playwright", "obscura", "chrome-devtools", "semgrep", "trivy"].map((n) => `${n}:${JSON.stringify(mcpP(pCore.cfg, n).disabled)}`).join(" "))
+
+// Remembered choice: a plain run replays profile+packs.
+const rRemember = runP(pCore)
+check("remembered choice: plain --no-tools stays on core (12 agents) and says so",
+  rRemember.status === 0 && agentsP(pCore.cfg).length === 12 && /Profile remembered: core/.test(rRemember.stdout)
+  && profileP(pCore.cfg) === "profile=core\npacks=core\n", rRemember.stdout + rRemember.stderr)
+
+// Unknown and android entries in a saved marker are dropped with a warning.
+fs.writeFileSync(path.join(pCore.cfg, ".opencode-prerequisites.profile"), "profile=core\npacks=core,ghost,android\n")
+const rSaved = runP(pCore)
+check("remembered packs: unknown and android entries dropped with a warning, marker rewritten",
+  rSaved.status === 0 && /Unknown pack "ghost"/.test(rSaved.stderr) && /android pack is selected with --android/.test(rSaved.stderr)
+  && profileP(pCore.cfg) === "profile=core\npacks=core\n" && agentsP(pCore.cfg).length === 12,
+  rSaved.stderr + profileP(pCore.cfg))
+
+// --with alone: core base (not full).
+const pWith = packEnv("pack-with")
+const rWith = runP(pWith, ["--with", "design"])
+check("--with alone: core base + design = 13 agents, marker profile=core packs=core,design",
+  rWith.status === 0 && agentsP(pWith.cfg).length === 13 && agentsP(pWith.cfg).includes("designer")
+  && profileP(pWith.cfg) === "profile=core\npacks=core,design\n",
+  `code ${rWith.status} | ${agentsP(pWith.cfg).length} agents | ${profileP(pWith.cfg)} | ${rWith.stderr}`)
+
+// core + design + devops: packs add agents/skills/commands; MCPs follow the packs.
+const pCDD = packEnv("pack-cdd")
+const rCDD = runP(pCDD, ["--profile", "core", "--with", "design,devops"])
+const cddAgents = agentsP(pCDD.cfg)
+check("core --with design,devops: 18 agents (designer, devops team), 10 skills, 8 commands",
+  rCDD.status === 0 && cddAgents.length === 18 && ["designer", "devops", "docker", "ansible", "terraform", "kubernetes"].every((a) => cddAgents.includes(a))
+  && skillsP(pCDD.cfg).length === 10 && skillsP(pCDD.cfg).includes("ui-ux-pro-max") && skillsP(pCDD.cfg).includes("impeccable")
+  && commandsP(pCDD.cfg).length === 8 && commandsP(pCDD.cfg).includes("impeccable"),
+  `code ${rCDD.status} | ${cddAgents.length} agents, ${skillsP(pCDD.cfg).length} skills, ${commandsP(pCDD.cfg).length} commands | ${rCDD.stderr}`)
+check("core --with design,devops: marker packs=core,design,devops",
+  profileP(pCDD.cfg) === "profile=core\npacks=core,design,devops\n", JSON.stringify(profileP(pCDD.cfg)))
+check("core --with design,devops: terraform enabled",
+  mcpP(pCDD.cfg, "terraform").disabled === undefined && Object.keys(mcpP(pCDD.cfg, "terraform")).length > 0)
+check("core --with design,devops: kubernetes disabled for the missing kubeconfig (not for the pack)",
+  mcpP(pCDD.cfg, "kubernetes").disabled === true && /no kubectl context/.test(cfgTextP(pCDD.cfg))
+  && !/devops pack not installed/.test(cfgTextP(pCDD.cfg)))
+check("core --with design,devops: rea still disabled for the missing reverse pack",
+  mcpP(pCDD.cfg, "rea").disabled === true && /reverse pack not installed/.test(cfgTextP(pCDD.cfg)))
+
+// Same remembered selection + a kubeconfig: kubernetes is enabled.
+write(path.join(pCDD.h, ".kube/config"), "apiVersion: v1\ncurrent-context: kind-test\n")
+const rCDDKube = runP(pCDD)
+check("remembered core+design+devops: kubernetes enabled when a kubeconfig exists",
+  rCDDKube.status === 0 && mcpP(pCDD.cfg, "kubernetes").disabled === undefined
+  && /Profile remembered: core/.test(rCDDKube.stdout), rCDDKube.stdout + rCDDKube.stderr)
+
+// Idempotence of a reduced profile: same tree on a second run.
+const cddDigest = treeDigest(pCDD.cfg)
+const rCDDAgain = runP(pCDD)
+check("idempotence: a second core+design+devops run is byte-identical (treeDigest)",
+  rCDDAgain.status === 0 && treeDigest(pCDD.cfg) === cddDigest,
+  `before ${cddDigest.slice(0, 12)} after ${treeDigest(pCDD.cfg).slice(0, 12)}`)
+
+// full --without design: 27 agents, no designer, pentest kept.
+const pFull = packEnv("pack-full")
+const rFullMinus = runP(pFull, ["--profile", "full", "--without", "design"])
+const fullMinusAgents = agentsP(pFull.cfg)
+check("full --without design: 27 agents, no designer, pentest kept",
+  rFullMinus.status === 0 && fullMinusAgents.length === 27 && !fullMinusAgents.includes("designer") && fullMinusAgents.includes("pentest"),
+  `code ${rFullMinus.status} | ${fullMinusAgents.length} agents | ${rFullMinus.stderr}`)
+check("full --without design: 9 skills, 9 commands, marker excludes design",
+  skillsP(pFull.cfg).length === 9 && commandsP(pFull.cfg).length === 9
+  && profileP(pFull.cfg) === "profile=full\npacks=core,devops,languages,data,docs,control,reverse,research,pentest\n",
+  `${skillsP(pFull.cfg).length} skills, ${commandsP(pFull.cfg).length} commands | ${profileP(pFull.cfg)}`)
+
+// Remembered full-minus-design, then --no-pack resets to full.
+const rFullRemember = runP(pFull)
+check("remembered choice: full --without design is replayed (27 agents)",
+  rFullRemember.status === 0 && agentsP(pFull.cfg).length === 27 && /Profile remembered: full/.test(rFullRemember.stdout))
+const rNoPack = runP(pFull, ["--no-pack"])
+check("--no-pack: resets to the full profile (28 agents, designer back)",
+  rNoPack.status === 0 && agentsP(pFull.cfg).length === 28 && agentsP(pFull.cfg).includes("designer")
+  && profileP(pFull.cfg).startsWith("profile=full\npacks=core,design,"), rNoPack.stdout + rNoPack.stderr)
+
+// --lite: 12 agents, context7 + grep_app only, no tools.
+const pLite = packEnv("pack-lite")
+const rLite = runP(pLite, ["--lite"])
+const liteMcps = Object.keys(parseJsonc(cfgTextP(pLite.cfg)).mcp?.servers ?? {}).sort()
+check("--lite: 12 agents and only context7 + grep_app MCPs",
+  rLite.status === 0 && agentsP(pLite.cfg).length === 12 && liteMcps.join(",") === "context7,grep_app",
+  `code ${rLite.status} | ${agentsP(pLite.cfg).length} agents | MCP ${liteMcps.join(",")} | ${rLite.stderr}`)
+check("--lite: marker profile=lite packs=core, mode 600",
+  profileP(pLite.cfg) === "profile=lite\npacks=core\n" && mode(path.join(pLite.cfg, ".opencode-prerequisites.profile")) === 0o600,
+  JSON.stringify(profileP(pLite.cfg)))
+
+// full + --pentest: config byte-identical to a plain full install (the pentest marker is extra).
+const fakePentest = path.join(tmp, "fake-pentest")
+for (const n of ["gitleaks", "semgrep", "nuclei", "httpx", "ffuf", "osv-scanner", "testssl.sh", "nikto"]) {
+  write(path.join(fakePentest, n), "#!/bin/sh\nexit 0\n", 0o755)
+}
+const pPentFull = packEnv("pack-pentest-full"), pPent = packEnv("pack-pentest")
+const rPentFull = runP(pPentFull)
+const rPent = runP(pPent, ["--pentest"], { PATH: `${fakePentest}:${fakeUvxDir}:${noUv}` })
+fs.rmSync(path.join(pPent.cfg, ".opencode-prerequisites.pentest"), { force: true })
+check("full + --pentest: config tree byte-identical to full",
+  rPentFull.status === 0 && rPent.status === 0 && treeDigest(pPentFull.cfg) === treeDigest(pPent.cfg),
+  `codes ${rPentFull.status}/${rPent.status} | ${rPentFull.stderr}${rPent.stderr}`)
+check("full + --pentest: pentest agent kept and marker packs includes pentest",
+  agentsP(pPent.cfg).includes("pentest") && /packs=.*\bpentest\b/.test(profileP(pPent.cfg)),
+  profileP(pPent.cfg))
 
 // ---------- 2. MemPalace: no more "init", orphan file removed, "mempalace" symlink ----------
 const h2 = path.join(tmp, "home2"), venv = path.join(h2, ".mempalace/venv/bin"), fake = path.join(tmp, "fake"), calls = path.join(tmp, "calls.log")

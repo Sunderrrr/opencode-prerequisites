@@ -4,6 +4,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
+import { fileURLToPath } from "node:url"
 import { parseJsonc, frontmatter, mcpServers } from "./lib/jsonc.mjs"
 
 // --offline / OC_DOCTOR_OFFLINE=1: strictly offline diagnostic. No network requests
@@ -11,6 +12,13 @@ import { parseJsonc, frontmatter, mcpServers } from "./lib/jsonc.mjs"
 // (oc-semgrep-mcp --check, oc-android doctor). Local checks (files, binaries,
 // "opencode debug config") are still performed.
 const OFFLINE = process.argv.includes("--offline") || /^(1|true|yes)$/i.test(process.env.OC_DOCTOR_OFFLINE ?? "")
+// --fix: after the diagnosis, apply only safe, reversible fixes (MCP re-enable + config
+// permissions). --dry-run (with --fix) reports what would change without writing.
+const FIX = process.argv.includes("--fix")
+const DRY = process.argv.includes("--dry-run")
+if (DRY && !FIX) { console.error("doctor: --dry-run requires --fix"); process.exit(1) }
+const SCRIPTS = path.dirname(fileURLToPath(import.meta.url))
+const MCP_STATE = path.join(SCRIPTS, "lib", "mcp-state.mjs")
 const HOME = os.homedir()
 const DEST = process.env.OPENCODE_CONFIG_DIR || path.join(HOME, ".config", "opencode")
 const BIN = process.env.OBSCURA_BIN_DIR || path.join(HOME, ".local", "bin")
@@ -63,11 +71,14 @@ try {
 console.log(`System: ${distro} · Node ${process.versions.node}`)
 if (OFFLINE) console.log("Offline mode: no network requests (models, gh and MCP servers not checked).")
 console.log(`Config directory: ${DEST}\n`)
-if ((process.env.PATH ?? "").split(path.delimiter)[0] === BIN) {
+const pathDirs = (process.env.PATH ?? "").split(path.delimiter)
+const binFirst = pathDirs[0] === BIN
+const binInPath = pathDirs.includes(BIN)
+if (binFirst) {
   console.log(`⚠️  ${BIN} is FIRST in your PATH: this can make mise/asdf shims loop (repeated "mise … tools: opencode@…" lines). Run  ./install.sh --no-tools --shell-env  again (it now appends it to PATH), then open a new terminal.`)
   warned++
 }
-if (!(process.env.PATH ?? "").split(path.delimiter).includes(BIN)) {
+if (!binInPath) {
   console.log(`⚠️  ${BIN} is not in your PATH: add  export PATH="${BIN}:$PATH"  to your ~/.bashrc / ~/.zshrc (obscura, trivy, agent-wt, oc-new-rust)`)
   warned++
 }
@@ -348,6 +359,7 @@ if (hasOc) {
 
 // OpenCode processes started BEFORE the last installation: an already running server keeps its old environment and
 // old plugins (it does not reload them), even when the files are up to date. This is the most common cause of "still not working".
+let staleProcs = []
 if (hasOc && process.platform !== "win32") {
   const stampFiles = [".opencode-prerequisites.installed", ".opencode-prerequisites.manifest"].map((f) => path.join(DEST, f)).filter(fs.existsSync)
   const since = stampFiles.length ? Math.max(...stampFiles.map((f) => fs.statSync(f).mtimeMs)) : 0
@@ -362,6 +374,7 @@ if (hasOc && process.platform !== "win32") {
       const started = Date.parse(lstart)
       if (isOpencode && started && started < since) stale.push(`PID ${pid} (started ${lstart.replace(/\s+/g, " ")})`)
     }
+    staleProcs = stale
     if (stale.length) {
       wa(`OpenCode has been running since before the kit's last installation: ${stale.join(", ")}. It reloads NEITHER plugins NOR the environment: restart it (per your feedback: opencode service restart; otherwise close every OpenCode window and start it again).`)
     }
@@ -390,6 +403,111 @@ if (hasOc) {
       if (lastWrite < since) console.log(`   (OpenCode has not written to its log since the installation: restart it to check the plugins)`)
     }
   } else console.log("\n(OpenCode log not found: `opencode debug paths` to see where it is)")
+}
+
+// Safe fixes (--fix): only reversible changes to the kit's own configuration. Never edit shell
+// files, never install a tool, never touch a running process: those are printed as commands.
+// --dry-run reports the same actions without writing anything (no backup either).
+if (FIX) {
+  console.log("\nSafe fixes (--fix):")
+  let fixed = 0, skipped = 0
+  const applied = (m) => { fixed++; console.log(`${DRY ? "🔎 would fix" : "✅ fixed"}: ${m}`) }
+  const skip = (m) => { skipped++; console.log(`   · skipped: ${m}`) }
+
+  // --- MCP servers disabled by install.sh whose prerequisite is now present ---
+  const kubeconfig = (process.env.KUBECONFIG || path.join(HOME, ".kube", "config")).split(path.delimiter)[0]
+  const reaBin = path.join(BIN, "oc-rea-mcp")
+  const prerequisite = {
+    kubernetes: () => {
+      try { return /^current-context:\s*\S+/m.test(fs.readFileSync(kubeconfig, "utf8")) } catch { return false }
+    },
+    rea: () => fs.existsSync(reaBin) && run(reaBin, ["--check"], 20000).status === 0,
+    mobile: () => fs.existsSync(path.join(DEST, "android", "Containerfile")) && has("podman"),
+    semgrep: () => has("uvx") || has("pipx"),
+  }
+  const hint = {
+    kubernetes: `configure a context (kubectl config use-context …) then run ./doctor.sh --fix`,
+    rea: `update Node (mise use -g node@26.12.1), then run ./doctor.sh --fix`,
+    mobile: `install the Android module and Podman (./install.sh --android), then run ./doctor.sh --fix`,
+    semgrep: `install uv (curl -LsSf https://astral.sh/uv/install.sh | sh), then run ./doctor.sh --fix`,
+  }
+  const disabledMcps = Object.entries(mcpServers(cfg ?? {})).filter(([, m]) => m && (m.disabled === true || m.enabled === false))
+  if (disabledMcps.length && !cfgFile) {
+    skip(`no config file in ${DEST}: run ./install.sh`)
+  } else if (disabledMcps.length) {
+    let backup = ""
+    const backupOnce = () => {
+      if (backup) return backup
+      const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*$/, "")
+      let p = `${cfgFile}.bak-doctor-${stamp}`, n = 2
+      while (fs.existsSync(p)) p = `${cfgFile}.bak-doctor-${stamp}-${n++}`
+      fs.copyFileSync(cfgFile, p)
+      try { fs.chmodSync(p, 0o600) } catch { /* best effort */ }
+      backup = p
+      console.log(`💾 backup: ${p}`)
+      return p
+    }
+    for (const [name, m] of disabledMcps) {
+      if (m.disabled !== true) {
+        skip(`${name} uses "enabled": false (mcp-state edits "disabled" only): remove that line by hand`)
+        continue
+      }
+      if (!(name in prerequisite)) {
+        console.log(`   · ${name}: disabled, not a kit-managed prerequisite (left as is)`)
+        continue
+      }
+      if (!prerequisite[name]()) {
+        skip(`${name}: prerequisite still missing — ${hint[name]}`)
+        continue
+      }
+      if (DRY) {
+        applied(`re-enable MCP ${name} (prerequisite detected)`)
+        continue
+      }
+      backupOnce()
+      const r = spawnSync(process.execPath, [MCP_STATE, "enable", cfgFile, name], { encoding: "utf8", timeout: 15000 })
+      if (r.status === 0) applied(`MCP ${name} re-enabled`)
+      else skip(`MCP ${name}: mcp-state failed (code ${r.status})${(r.stderr || r.stdout || "").trim() ? `: ${(r.stderr || r.stdout).trim()}` : ""}`)
+    }
+  }
+
+  // --- Config tree permissions: directories 700, files 600 when group/other bits are set ---
+  if (fs.existsSync(DEST)) {
+    const loose = []
+    let dirs = 0, files = 0
+    const walk = (p) => {
+      let st
+      try { st = fs.lstatSync(p) } catch { return }
+      if (st.isSymbolicLink()) return
+      if (st.isDirectory()) {
+        if ((st.mode & 0o077) !== 0) { loose.push([p, 0o700]); dirs++ }
+        let entries = []
+        try { entries = fs.readdirSync(p) } catch { return }
+        for (const e of entries) walk(path.join(p, e))
+      } else if (st.isFile() && (st.mode & 0o077) !== 0) {
+        loose.push([p, 0o600]); files++
+      }
+    }
+    walk(DEST)
+    if (loose.length) {
+      let done = 0
+      if (!DRY) for (const [p, mode] of loose) {
+        try { fs.chmodSync(p, mode); done++ }
+        catch (e) { console.log(`   · ${path.relative(DEST, p) || "."}: chmod failed (${e.message})`) }
+      }
+      if (DRY || done) applied(`permissions tightened: ${dirs} dir(s) → 700, ${files} file(s) → 600${DRY ? " (would apply)" : ""}`)
+      if (!DRY && done < loose.length) skip(`${loose.length - done} path(s) could not be tightened`)
+    }
+  }
+
+  // --- Never automatic: shell files, tools, running processes ---
+  if (binFirst) skip(`PATH order: ${BIN} is first — run ./install.sh --no-tools --shell-env, then open a new terminal`)
+  else if (!binInPath) skip(`PATH: ${BIN} is missing — run ./install.sh --no-tools --shell-env, then open a new terminal`)
+  if (!hasOc) skip(`opencode is missing — curl -fsSL https://opencode.ai/install | bash`)
+  if (major < 18) skip(`Node ${process.versions.node} is too old — install Node 18+ (mise use -g node@26.12.1), then open a new terminal`)
+  if (staleProcs.length) skip(`OpenCode running since before the installation (${staleProcs.join(", ")}) — systemctl --user restart opencode, or close every OpenCode window and start it again`)
+
+  console.log(`\n${DRY ? "Dry run: nothing was written. " : ""}fixed: ${fixed}, skipped: ${skipped}`)
 }
 
 console.log(`\n${bad ? "❌" : "✅"} ${bad} error(s), ${warned} warning(s)`)

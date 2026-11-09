@@ -1,0 +1,124 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+/*
+ * Expose the design tokens as Tailwind utilities:
+ *   bg-canvas, text-ink, text-ink-muted, border-line, bg-primary, rounded-lg,
+ *   shadow-card, font-display, text-4xl, ...
+ * "inline" keeps the var() reference, so [data-theme] switches at runtime.
+ */
+@theme inline {
+  --color-canvas: var(--ds-color-canvas);
+  --color-surface: var(--ds-color-surface);
+  --color-surface-muted: var(--ds-color-surface-muted);
+  --color-ink: var(--ds-color-ink);
+  --color-ink-muted: var(--ds-color-ink-muted);
+  --color-line: var(--ds-color-border);
+  --color-primary: var(--ds-color-primary);
+  --color-primary-hover: var(--ds-color-primary-hover);
+  --color-on-primary: var(--ds-color-on-primary);
+  --color-focus: var(--ds-color-focus);
+  --color-success: var(--ds-color-success);
+
+  --font-sans: var(--ds-font-sans);
+  --font-display: var(--ds-font-display);
+  --font-mono: var(--ds-font-mono);
+
+  --text-xs: var(--ds-text-xs);
+  --text-xs--line-height: var(--ds-leading-normal);
+  --text-sm: var(--ds-text-sm);
+  --text-sm--line-height: var(--ds-leading-normal);
+  --text-base: var(--ds-text-base);
+  --text-base--line-height: var(--ds-leading-normal);
+  --text-lg: var(--ds-text-lg);
+  --text-lg--line-height: var(--ds-leading-snug);
+  --text-xl: var(--ds-text-xl);
+  --text-xl--line-height: var(--ds-leading-snug);
+  --text-2xl: var(--ds-text-2xl);
+  --text-2xl--line-height: var(--ds-leading-tight);
+  --text-3xl: var(--ds-text-3xl);
+  --text-3xl--line-height: var(--ds-leading-tight);
+  --text-4xl: var(--ds-text-4xl);
+  --text-4xl--line-height: var(--ds-leading-tight);
+  --text-5xl: var(--ds-text-5xl);
+  --text-5xl--line-height: var(--ds-leading-tight);
+  --text-6xl: var(--ds-text-6xl);
+  --text-6xl--line-height: var(--ds-leading-tight);
+
+  --font-weight-normal: var(--ds-weight-regular);
+  --font-weight-medium: var(--ds-weight-medium);
+  --font-weight-semibold: var(--ds-weight-semibold);
+  --font-weight-bold: var(--ds-weight-bold);
+
+  --radius-sm: var(--ds-radius-sm);
+  --radius-md: var(--ds-radius-md);
+  --radius-lg: var(--ds-radius-lg);
+  --radius-xl: var(--ds-radius-xl);
+
+  --shadow-card: var(--ds-shadow-card);
+  --spacing: var(--ds-space-unit);
+  --ease-out: var(--ds-ease-out);
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: var(--ds-color-canvas);
+    color: var(--ds-color-ink);
+    font-family: var(--ds-font-sans);
+    font-size: var(--ds-text-base);
+    line-height: var(--ds-leading-normal);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    transition:
+      background-color var(--ds-duration-base) var(--ds-ease-out),
+      color var(--ds-duration-base) var(--ds-ease-out);
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--ds-font-display);
+    font-weight: var(--ds-weight-semibold);
+    line-height: var(--ds-leading-tight);
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  code,
+  kbd,
+  samp {
+    font-family: var(--ds-font-mono);
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--ds-color-focus);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

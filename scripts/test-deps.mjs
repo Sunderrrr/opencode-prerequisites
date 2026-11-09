@@ -12,6 +12,9 @@ const LAUNCHER = path.join(ROOT, "config", "bin", "oc-deps")
 const INSTALL_SH = path.join(ROOT, "install.sh")
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "oc-deps-test-"))
 const FIX = path.join(TMP, "fixtures")
+// Copy of the tool inside a throwaway repository: update tests never touch the real files.
+const UPDATE_REPO = path.join(TMP, "update-repo")
+const UPDATE_TOOL = path.join(UPDATE_REPO, "config", "libexec", "oc-deps.mjs")
 
 let checks = 0
 let failed = 0
@@ -27,12 +30,12 @@ for (const key of ["OC_VERSIONS_TTL", "OC_VERSIONS_CACHE", "OC_VERSIONS_FIXTURES
   delete baseEnv[key]
 }
 
-const run = (args, { cache, fixtures = FIX, ttl } = {}) => {
+const run = (args, { cache, fixtures = FIX, ttl, tool = TOOL } = {}) => {
   const env = { ...baseEnv }
   if (cache) env.OC_VERSIONS_CACHE = cache
   if (fixtures) env.OC_VERSIONS_FIXTURES = fixtures
   if (ttl !== undefined) env.OC_VERSIONS_TTL = String(ttl)
-  return spawnSync(process.execPath, [TOOL, ...args], { encoding: "utf8", env, timeout: 30_000 })
+  return spawnSync(process.execPath, [tool, ...args], { encoding: "utf8", env, timeout: 30_000 })
 }
 
 const freshCache = (name) => {
@@ -41,6 +44,21 @@ const freshCache = (name) => {
   fs.mkdirSync(dir, { recursive: true })
   return dir
 }
+
+// Throwaway repository for the update tests: the real install.sh is never written.
+const makeUpdateRepo = () => {
+  fs.rmSync(UPDATE_REPO, { recursive: true, force: true })
+  fs.mkdirSync(path.join(UPDATE_REPO, "config", "libexec"), { recursive: true })
+  fs.copyFileSync(TOOL, UPDATE_TOOL)
+  fs.copyFileSync(path.join(ROOT, "config", "libexec", "oc-versions.mjs"),
+    path.join(UPDATE_REPO, "config", "libexec", "oc-versions.mjs"))
+  const pins = fs.readFileSync(INSTALL_SH, "utf8").split("\n")
+    .filter((line) => /^OC_[A-Z0-9_]+_VERSION=/.test(line)).join("\n")
+  fs.writeFileSync(path.join(UPDATE_REPO, "install.sh"), `#!/usr/bin/env bash\nset -euo pipefail\n${pins}\n`)
+}
+const fixtureInstall = () => path.join(UPDATE_REPO, "install.sh")
+const fixtureInstallText = () => fs.readFileSync(fixtureInstall(), "utf8")
+const backupFiles = () => fs.readdirSync(UPDATE_REPO).filter((f) => /^install\.sh\.bak-/.test(f))
 
 // Versions published "by default": equal to the current pins (except the v prefix of GitHub tags).
 const LATEST = {
@@ -245,7 +263,43 @@ check("--dry-run: proposed diff",
   && r.stdout.includes('+OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.77.0}"'), r.stdout + r.stderr)
 check("--dry-run: install.sh unchanged", fs.readFileSync(INSTALL_SH, "utf8") === before)
 
-// --- 9. CLI, help and guardrails ------------------------------------------
+// --- 9. update: dry-run, --yes guardrail, write + backup ------------------
+resetFixtures({ "github\u0000aquasecurity/trivy": "v0.77.0" })
+makeUpdateRepo()
+let fixtureBefore = fixtureInstallText()
+r = run(["update", "--only", "trivy", "--dry-run"], { cache: freshCache("update-dry"), tool: UPDATE_TOOL })
+check("update --dry-run: proposed diff, exit 1",
+  r.status === 1 && /Proposed diff \(no file is modified\)/.test(r.stdout)
+  && r.stdout.includes('-OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.76.1}"')
+  && r.stdout.includes('+OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.77.0}"'), r.stdout + r.stderr)
+check("update --dry-run: fixture unchanged, no .bak-*",
+  fixtureInstallText() === fixtureBefore && backupFiles().length === 0, r.stdout + r.stderr)
+
+r = run(["update", "--only", "trivy", "--write"], { cache: freshCache("update-no-yes"), tool: UPDATE_TOOL })
+check("update --write without --yes: exit 2, nothing written",
+  r.status === 2 && /refusing to write without --yes/.test(r.stderr)
+  && fixtureInstallText() === fixtureBefore && backupFiles().length === 0, r.stdout + r.stderr)
+
+r = run(["update", "--only", "trivy", "--write", "--yes"], { cache: freshCache("update-write"), tool: UPDATE_TOOL })
+check("update --write --yes: pin updated, final check passes",
+  r.status === 0 && /Updated 1 pin\(s\) in 1 file\(s\)/.test(r.stdout)
+  && fixtureInstallText().includes('OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.77.0}"')
+  && !fixtureInstallText().includes('OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.76.1}"'), r.stdout + r.stderr)
+const backups = backupFiles()
+check("update --write --yes: one .bak-* with the old pin",
+  backups.length === 1
+  && fs.readFileSync(path.join(UPDATE_REPO, backups[0]), "utf8")
+    .includes('OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.76.1}"'), backups.join(", "))
+
+resetFixtures({ "github\u0000aquasecurity/trivy": "v0.77.0" })
+makeUpdateRepo()
+fixtureBefore = fixtureInstallText()
+r = run(["check", "--only", "trivy"], { cache: freshCache("update-check-ro"), tool: UPDATE_TOOL })
+check("check remains read-only: drift reported, fixture unchanged",
+  r.status === 1 && /0\.76\.1\s+\|\s+v0\.77\.0\s+\|\s+drift/.test(r.stdout)
+  && fixtureInstallText() === fixtureBefore && backupFiles().length === 0, r.stdout + r.stderr)
+
+// --- 10. CLI, help and guardrails -----------------------------------------
 r = run([], { cache: freshCache("noargs") })
 check("no argument: exit 2 and usage", r.status === 2 && /missing command/.test(r.stderr), r.stderr)
 r = run(["fix"], { cache: freshCache("fix") })
@@ -253,8 +307,9 @@ check("fix does not exist: exit 2", r.status === 2 && /does not exist/.test(r.st
 r = run(["check", "--offline", "--refresh"], { cache: freshCache("conflict") })
 check("--offline + --refresh: exit 2", r.status === 2 && /incompatible/.test(r.stderr), r.stderr)
 r = run(["--help"], { cache: freshCache("help") })
-check("--help: exit 0, manual update documented",
-  r.status === 0 && /no automatic update/i.test(r.stdout) && /by hand/.test(r.stdout), r.stdout + r.stderr)
+check("--help: exit 0, update --write --yes documented, not manual",
+  r.status === 0 && /update --write --yes/.test(r.stdout)
+  && !/no automatic update/i.test(r.stdout) && !/by hand/i.test(r.stdout), r.stdout + r.stderr)
 r = spawnSync(LAUNCHER, ["--help"], { encoding: "utf8", env: baseEnv, timeout: 20_000 })
 check("launcher config/bin/oc-deps: wired to the Node ESM",
   r.status === 0 && /oc-deps — drift/.test(r.stdout), r.stdout + r.stderr)

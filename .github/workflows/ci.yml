@@ -4,6 +4,14 @@ on:
     branches: [main]
   pull_request:
 
+# Pull requests get fast feedback (3 distributions); pushes to main run the full 7.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ${{ matrix.os }}
@@ -55,6 +63,10 @@ jobs:
         run: node scripts/test-agent-wt.mjs
       - name: "Android project generator (hermetic: template, substitutions, git, overwrite refusal)"
         run: node scripts/test-new-android.mjs
+      - name: "Ops tools (backup, restore, usage, oc-deps: hermetic temp dirs, fake opencode)"
+        run: node scripts/test-ops.mjs
+      - name: "Web generator (hermetic: template, substitutions, git, overwrite refusal)"
+        run: node scripts/test-new-web.mjs
       - name: Android Containerfile (hadolint, errors only)
         run: docker run --rm -i docker.io/hadolint/hadolint:v2.15.1 hadolint --failure-threshold error - < addons/android/libexec/oc-android/Containerfile
       - name: Installation with the Android module, remembered then removed
@@ -104,43 +116,46 @@ jobs:
           cargo clippy --all-targets -- -D warnings
           cargo test --all-targets
 
+  # Matrix of distributions: 3 on pull requests (fast feedback), all 7 on main.
+  # Kept in one place so the distros job below stays identical in both cases.
+  distro-matrix:
+    name: Distribution matrix
+    runs-on: ubuntu-latest
+    outputs:
+      include: ${{ steps.select.outputs.include }}
+    steps:
+      - id: select
+        name: Select distributions
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          node - <<'NODE' >> "$GITHUB_OUTPUT"
+          const all = [
+            // Arch does not provide python3, only python.
+            { name: "Arch Linux (Omarchy)", image: "archlinux:base-20261101.0.620205", python: "python", setup: "pacman -Syu --noconfirm nodejs npm git python tar gzip curl" },
+            { name: "Debian 12 (bookworm)", image: "debian:12.12", python: "python3", setup: "apt-get update && apt-get install -y nodejs npm git python3 python3-venv python3-pip curl ca-certificates tar gzip" },
+            { name: "Debian 13 (trixie)", image: "debian:13.1", python: "python3", setup: "apt-get update && apt-get install -y nodejs npm git python3 python3-venv python3-pip curl ca-certificates tar gzip" },
+            { name: "Ubuntu 24.04", image: "ubuntu:24.04", python: "python3", setup: "apt-get update && apt-get install -y nodejs npm git python3 python3-venv python3-pip curl ca-certificates tar gzip" },
+            { name: "Ubuntu 26.04", image: "ubuntu:26.04", python: "python3", setup: "apt-get update && apt-get install -y nodejs npm git python3 python3-venv python3-pip curl ca-certificates tar gzip" },
+            { name: "Fedora 44", image: "fedora:44", python: "python3", setup: "dnf install -y nodejs npm git python3 python3-pip tar gzip curl" },
+            // The Rocky image provides curl-minimal: requesting curl breaks the dnf transaction.
+            { name: "RHEL (Rocky 9)", image: "quay.io/rockylinux/rockylinux:9.8", python: "python3", setup: "dnf module enable -y nodejs:20 && dnf install -y --setopt=install_weak_deps=False nodejs npm git python3 tar gzip python3-pip" }
+          ]
+          // Pull requests: fast subset. Push to main: full matrix.
+          const pr = ["Arch Linux (Omarchy)", "Debian 12 (bookworm)", "RHEL (Rocky 9)"]
+          const include = process.env.EVENT_NAME === "pull_request" ? all.filter((d) => pr.includes(d.name)) : all
+          console.log("include=" + JSON.stringify(include))
+          NODE
+
   # Distributions: Arch (Omarchy base), Debian, Ubuntu, Fedora, RHEL (Rocky)
   # Images pinned by dated tag, never latest (tags checked on 2026-11-03).
   distros:
+    needs: distro-matrix
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: Arch Linux (Omarchy)
-            image: archlinux:base-20261101.0.620205
-            python: python            # Arch does not provide python3, only python
-            setup: pacman -Syu --noconfirm nodejs npm git python tar gzip curl
-          - name: Debian 12 (bookworm)
-            image: debian:12.12
-            python: python3
-            setup: apt-get update && apt-get install -y nodejs npm git python3 python3-venv python3-pip curl ca-certificates tar gzip
-          - name: Debian 13 (trixie)
-            image: debian:13.1
-            python: python3
-            setup: apt-get update && apt-get install -y nodejs npm git python3 python3-venv python3-pip curl ca-certificates tar gzip
-          - name: Ubuntu 24.04
-            image: ubuntu:24.04
-            python: python3
-            setup: apt-get update && apt-get install -y nodejs npm git python3 python3-venv python3-pip curl ca-certificates tar gzip
-          - name: Ubuntu 26.04
-            image: ubuntu:26.04
-            python: python3
-            setup: apt-get update && apt-get install -y nodejs npm git python3 python3-venv python3-pip curl ca-certificates tar gzip
-          - name: Fedora 44
-            image: fedora:44
-            python: python3
-            setup: dnf install -y nodejs npm git python3 python3-pip tar gzip curl
-          - name: RHEL (Rocky 9)
-            image: quay.io/rockylinux/rockylinux:9.8
-            python: python3
-            # The image provides curl-minimal: requesting curl breaks the dnf transaction.
-            setup: dnf module enable -y nodejs:20 && dnf install -y --setopt=install_weak_deps=False nodejs npm git python3 tar gzip python3-pip
+        include: ${{ fromJSON(needs.distro-matrix.outputs.include) }}
     name: ${{ matrix.name }}
     container: ${{ matrix.image }}
     steps:
@@ -201,6 +216,10 @@ jobs:
         run: node scripts/test-android.mjs
       - name: Android project generator (hermetic, no Podman)
         run: node scripts/test-new-android.mjs
+      - name: "Ops tools (backup, restore, usage, oc-deps: hermetic temp dirs, fake opencode)"
+        run: node scripts/test-ops.mjs
+      - name: "Web generator (hermetic: template, substitutions, git, overwrite refusal)"
+        run: node scripts/test-new-web.mjs
       - name: Pentest/appsec tools (--pentest option)
         run: node scripts/test-pentest.mjs
       - name: MCP launchers (browser and container engine selection)

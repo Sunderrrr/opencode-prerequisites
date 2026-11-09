@@ -5,9 +5,11 @@
 //   oc-deps check --only trivy --json
 //   oc-deps check --ecosysteme npm --offline
 //   oc-deps check --dry-run
+//   oc-deps update --write --yes
 //
-// oc-deps NEVER modifies a file: "oc-deps fix" does not exist. --dry-run only shows
-// the proposed replacement; the update is done by hand after review.
+// "check" is read-only. "update" without --write only prints the proposed diff.
+// "update --write --yes" backs up each modified file to <file>.bak-<timestamp>,
+// applies the pin replacements, then reruns "oc-deps check".
 //
 // Latest versions come from oc-versions (subprocess, same 24 h cache):
 // no network access of its own. Inherited variables: OC_VERSIONS_TTL, OC_VERSIONS_CACHE,
@@ -36,10 +38,11 @@ function die(message, code = 2) {
 }
 
 function usage() {
-  return `oc-deps — drift of the versions pinned by the kit (no automatic updates)
+  return `oc-deps — drift of the versions pinned by the kit
 
 Usage:
-  oc-deps check [options]
+  oc-deps check [options]          read-only report
+  oc-deps update [options]         propose changes; --write --yes applies them
 
 Options:
   --only <package>      limit to one package (name or id; repeatable, commas accepted)
@@ -47,15 +50,18 @@ Options:
   --json                machine-readable JSON output
   --refresh             force oc-versions to ignore its cache (forwarded option)
   --offline             only read the oc-versions cache (unknown when absent)
-  --dry-run             show the proposed replacement, never write
+  --dry-run             show the proposed replacement, never write (update default)
+  --write               update: apply the proposed pin replacements
+  --yes                 confirm --write (required with --write)
   --help                this help
 
-No automatic update: oc-deps never modifies a file and "oc-deps fix" does not
-exist. After review, update the pin by hand in install.sh,
-config/opencode.jsonc, config/bin/oc-* or addons/android/bin/oc-mobile-mcp, then
-rerun the tests. --dry-run only prints the proposed diff.
+check never writes. update without --write only prints the proposed diff;
+"update --write --yes" applies the pin replacements, backs up every modified file
+to <file>.bak-<timestamp>, then reruns "oc-deps check" and reports its exit code.
+"oc-deps fix" does not exist: use "oc-deps update".
 
-Exit codes: 0 everything up to date · 1 drift or unknown · 2 usage or pin not found.
+Exit codes: 0 everything up to date · 1 drift or unknown · 2 usage or pin not
+found · the update --write --yes exit code is the one of the final check.
 
 Known limits:
   - The Android Containerfile only declares ARGs (API, build-tools, Gradle are
@@ -329,7 +335,7 @@ function splitOnly(values) {
 }
 
 function parseArgs(argv) {
-  const opts = { command: null, json: false, refresh: false, offline: false, dryRun: false, only: [], ecosystem: null }
+  const opts = { command: null, json: false, refresh: false, offline: false, dryRun: false, write: false, yes: false, only: [], ecosystem: null }
   for (let i = 0; i < argv.length; i++) {
     let arg = argv[i]
     if (arg === "--help" || arg === "-h") return { help: true }
@@ -337,6 +343,8 @@ function parseArgs(argv) {
     if (arg === "--refresh") { opts.refresh = true; continue }
     if (arg === "--offline") { opts.offline = true; continue }
     if (arg === "--dry-run") { opts.dryRun = true; continue }
+    if (arg === "--write") { opts.write = true; continue }
+    if (arg === "--yes") { opts.yes = true; continue }
     if (arg === "--only" || arg.startsWith("--only=")) {
       let value
       if (arg.includes("=")) value = arg.slice(arg.indexOf("=") + 1)
@@ -375,6 +383,144 @@ function printTable(results) {
   for (const row of rows) console.log(render(row))
 }
 
+function reportPayload(results, skipped, summary, opts, extra = {}) {
+  return {
+    generated_at: new Date().toISOString(),
+    command: opts.command,
+    offline: opts.offline,
+    refresh: opts.refresh,
+    ecosystem: opts.ecosystem,
+    only: opts.only,
+    dry_run: opts.command === "update" ? !opts.write : opts.dryRun,
+    results,
+    skipped,
+    summary,
+    ...extra,
+  }
+}
+
+function printReport(results, skipped, summary, opts, { showDiff = false, hint = null } = {}) {
+  if (opts.json) {
+    console.log(JSON.stringify(reportPayload(results, skipped, summary, opts), null, 2))
+    return
+  }
+  for (const s of skipped) console.error(`⚠️  skipped (file missing): ${s.package}`)
+  printTable(results)
+  console.log(`\n${summary.total} packages · ${summary.up_to_date} up to date · ${summary.drift} drift · ${summary.unknown} unknown`)
+  for (const r of results.filter((r) => r.status === "unknown")) {
+    console.error(`⚠️  ${r.package}: ${r.detail ?? "unknown version"}`)
+  }
+  if (showDiff) {
+    const changes = results.filter((r) => r.status === "drift" && r.proposed_line)
+    if (!changes.length) {
+      console.log("\nNo proposed change.")
+    } else {
+      console.log("\nProposed diff (no file is modified):")
+      for (const r of changes) {
+        console.log(`--- ${r.file}`)
+        console.log(`+++ ${r.file} (proposed)`)
+        console.log(`-${r.line_text}`)
+        console.log(`+${r.proposed_line}`)
+      }
+    }
+  }
+  if (hint) console.log(`\n${hint}`)
+}
+
+function timestamp() {
+  return new Date().toISOString().replace(/\.\d+Z$/, "").replace(/[-:]/g, "").replace("T", "-")
+}
+
+function uniquePath(base) {
+  let candidate = base
+  let i = 1
+  while (fs.existsSync(candidate)) candidate = `${base}-${i++}`
+  return candidate
+}
+
+// Apply the proposed replacements file by file. Each modified file is backed up
+// to <file>.bak-<timestamp>; the write is atomic (temporary file + rename).
+// Symlinks and non-regular files are refused: a pin must be edited in place.
+function applyUpdates(results) {
+  const changes = results.filter((r) => r.status === "drift" && r.proposed && r.latest)
+  if (!changes.length) return { files: [], pins: 0 }
+
+  const byFile = new Map()
+  for (const r of changes) {
+    if (!r._absFile) throw new Error(`no source file for ${r.package}`)
+    if (!byFile.has(r._absFile)) byFile.set(r._absFile, [])
+    byFile.get(r._absFile).push(r)
+  }
+
+  const stamp = timestamp()
+  const files = []
+  let pins = 0
+  for (const [file, fileChanges] of byFile) {
+    const stat = fs.lstatSync(file)
+    if (stat.isSymbolicLink()) throw new Error(`refusing to modify a symlink: ${displayPath(file)}`)
+    if (!stat.isFile()) throw new Error(`refusing to modify a non-regular file: ${displayPath(file)}`)
+
+    const text = fs.readFileSync(file, "utf8")
+    const entries = fileChanges.map((r) => {
+      const pin = PINS.find((p) => p.id === r.id)
+      if (!pin) throw new Error(`internal error: unknown pin ${r.id}`)
+      const source = readPin(pin, file)
+      if (source.pinned !== r.pinned) {
+        throw new Error(`${displayPath(file)} changed while oc-deps was running (pin ${r.id})`)
+      }
+      return { r, source }
+    }).sort((a, b) => b.source.start - a.source.start)
+
+    let next = text
+    for (const { r, source } of entries) {
+      if (next.slice(source.start, source.end) !== source.pinned) {
+        throw new Error(`${displayPath(file)} changed while oc-deps was running (pin ${r.id})`)
+      }
+      next = next.slice(0, source.start) + conformVersion(source.pinned, r.latest) + next.slice(source.end)
+    }
+
+    const backup = uniquePath(`${file}.bak-${stamp}`)
+    fs.copyFileSync(file, backup)
+    fs.chmodSync(backup, stat.mode)
+    const tmp = `${file}.tmp-${process.pid}-${Date.now()}`
+    try {
+      fs.writeFileSync(tmp, next, { mode: stat.mode })
+      fs.chmodSync(tmp, stat.mode)
+      fs.renameSync(tmp, file)
+    } catch (e) {
+      try { fs.rmSync(tmp, { force: true }) } catch { /* best effort */ }
+      throw e
+    }
+
+    pins += entries.length
+    files.push({
+      file: displayPath(file),
+      backup: displayPath(backup),
+      pins: entries.map(({ r, source }) => ({
+        package: r.package,
+        from: source.pinned,
+        to: conformVersion(source.pinned, r.latest),
+      })),
+    })
+  }
+  return { files, pins }
+}
+
+function recheck(opts) {
+  const args = [fileURLToPath(import.meta.url), "check"]
+  if (opts.json) args.push("--json")
+  if (opts.offline) args.push("--offline")
+  if (opts.refresh) args.push("--refresh")
+  if (opts.ecosystem) args.push("--ecosysteme", opts.ecosystem)
+  for (const o of opts.only) args.push("--only", o)
+  return spawnSync(process.execPath, args, {
+    encoding: "utf8",
+    env: process.env,
+    timeout: TIMEOUT_MS,
+    maxBuffer: 32 * 1024 * 1024,
+  })
+}
+
 function main() {
   const opts = parseArgs(process.argv.slice(2))
   if (opts.help) {
@@ -383,9 +529,17 @@ function main() {
   }
   if (opts.command === null) die(`missing command\n\n${usage()}`)
   if (opts.command === "fix") {
-    die(`"oc-deps fix" does not exist: no automatic updates. Run "oc-deps check --dry-run", review the diff, then edit the pin by hand and rerun the tests.`)
+    die(`"oc-deps fix" does not exist: review "oc-deps update --dry-run", then run "oc-deps update --write --yes" or edit the pin by hand.`)
   }
-  if (opts.command !== "check") die(`unknown command: ${opts.command}\n\n${usage()}`)
+  if (opts.command !== "check" && opts.command !== "update") {
+    die(`unknown command: ${opts.command}\n\n${usage()}`)
+  }
+  if (opts.write && opts.command !== "update") die(`--write only applies to update\n\n${usage()}`)
+  if (opts.yes && !opts.write) die(`--yes requires --write\n\n${usage()}`)
+  if (opts.write && opts.dryRun) die(`--write and --dry-run are incompatible\n\n${usage()}`)
+  if (opts.write && !opts.yes) {
+    die(`refusing to write without --yes: review "oc-deps update --dry-run", then run "oc-deps update --write --yes"\n\n${usage()}`)
+  }
   if (opts.ecosystem && !ECOSYSTEMS.includes(opts.ecosystem)) {
     die(`unknown ecosystem: "${opts.ecosystem}". Valid: ${ECOSYSTEMS.join(", ")}`)
   }
@@ -407,6 +561,7 @@ function main() {
     if (opts.json) {
       console.log(JSON.stringify({
         generated_at: new Date().toISOString(),
+        command: opts.command,
         offline: opts.offline,
         refresh: opts.refresh,
         ecosystem: opts.ecosystem,
@@ -469,6 +624,7 @@ function main() {
       line: source.lineNo,
       line_text: source.line,
     }
+    Object.defineProperty(result, "_absFile", { value: pin.file, enumerable: false })
     if (got?.cached) result.cached = true
     if (got?.source) result.source = got.source
     if (detail) result.detail = detail
@@ -486,40 +642,68 @@ function main() {
     unknown: results.filter((r) => r.status === "unknown").length,
   }
 
-  if (opts.json) {
-    console.log(JSON.stringify({
-      generated_at: new Date().toISOString(),
-      offline: opts.offline,
-      refresh: opts.refresh,
-      ecosystem: opts.ecosystem,
-      only,
-      results,
-      skipped,
-      summary,
-    }, null, 2))
-  } else {
-    for (const s of skipped) console.error(`⚠️  skipped (file missing): ${s.package}`)
-    printTable(results)
-    console.log(`\n${summary.total} packages · ${summary.up_to_date} up to date · ${summary.drift} drift · ${summary.unknown} unknown`)
-    for (const r of results.filter((r) => r.status === "unknown")) {
-      console.error(`⚠️  ${r.package}: ${r.detail ?? "unknown version"}`)
-    }
-    if (opts.dryRun) {
-      const changes = results.filter((r) => r.status === "drift" && r.proposed_line)
-      if (!changes.length) {
-        console.log("\nNo proposed change.")
-      } else {
-        console.log("\nProposed diff (no file is modified):")
-        for (const r of changes) {
-          console.log(`--- ${r.file}`)
-          console.log(`+++ ${r.file} (proposed)`)
-          console.log(`-${r.line_text}`)
-          console.log(`+${r.proposed_line}`)
-        }
-      }
-    }
+  if (opts.command === "update" && !opts.write) {
+    printReport(results, skipped, summary, opts, {
+      showDiff: true,
+      hint: summary.drift
+        ? `Run "oc-deps update --write --yes" to apply these changes (each modified file is backed up to <file>.bak-<timestamp>).`
+        : null,
+    })
+    process.exitCode = summary.drift || summary.unknown ? 1 : 0
+    return
   }
 
+  if (opts.command === "update" && opts.write) {
+    const applied = applyUpdates(results)
+    if (!applied.pins) {
+      if (opts.json) {
+        console.log(JSON.stringify({
+          generated_at: new Date().toISOString(),
+          command: "update",
+          applied: { files: [], pins: 0 },
+          summary,
+          message: "no proposed change",
+        }, null, 2))
+      } else {
+        console.log("No proposed change; nothing to write.")
+      }
+      process.exitCode = summary.unknown ? 1 : 0
+      return
+    }
+
+    if (!opts.json) {
+      console.log(`✅ Updated ${applied.pins} pin(s) in ${applied.files.length} file(s):`)
+      for (const f of applied.files) {
+        for (const p of f.pins) console.log(`  ${f.file}: ${p.package} ${p.from} → ${p.to}`)
+        console.log(`  backup: ${f.backup}`)
+      }
+      console.log("\n🔄 Re-running oc-deps check…")
+    }
+
+    const check = recheck(opts)
+    if (opts.json) {
+      let payload = null
+      try { payload = JSON.parse(check.stdout) } catch { /* reported below */ }
+      console.log(JSON.stringify({
+        generated_at: new Date().toISOString(),
+        command: "update",
+        applied,
+        recheck: payload ?? {
+          error: "unreadable oc-deps check output",
+          stdout: check.stdout,
+          stderr: check.stderr,
+        },
+      }, null, 2))
+      process.exitCode = payload ? (check.status ?? 1) : 1
+    } else {
+      process.stdout.write(check.stdout)
+      process.stderr.write(check.stderr)
+      process.exitCode = check.status ?? 1
+    }
+    return
+  }
+
+  printReport(results, skipped, summary, opts, { showDiff: opts.dryRun })
   process.exitCode = summary.drift || summary.unknown ? 1 : 0
 }
 

@@ -1,0 +1,149 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Trivy release pin (OC_TRIVY_VERSION in install.sh)",
+      "managerFilePatterns": ["/(^|/)install\\.sh$/"],
+      "matchStrings": ["OC_TRIVY_VERSION=\"\\$\\{OC_TRIVY_VERSION:-(?<currentValue>[^\"]+)\\}\""],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "aquasecurity/trivy",
+      "extractVersionTemplate": "^v?(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Trivy MCP plugin release pin (OC_TRIVY_MCP_VERSION in install.sh)",
+      "managerFilePatterns": ["/(^|/)install\\.sh$/"],
+      "matchStrings": ["OC_TRIVY_MCP_VERSION=\"\\$\\{OC_TRIVY_MCP_VERSION:-v?(?<currentValue>[^\"]+)\\}\""],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "aquasecurity/trivy-plugin-mcp",
+      "extractVersionTemplate": "^v?(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Obscura release pin (OC_OBSCURA_VERSION in install.sh)",
+      "managerFilePatterns": ["/(^|/)install\\.sh$/"],
+      "matchStrings": ["OC_OBSCURA_VERSION=\"\\$\\{OC_OBSCURA_VERSION:-(?<currentValue>[^\"]+)\\}\""],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "h4ckf0r0day/obscura",
+      "extractVersionTemplate": "^v?(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "uv release pin (OC_UV_VERSION in install.sh)",
+      "managerFilePatterns": ["/(^|/)install\\.sh$/"],
+      "matchStrings": ["OC_UV_VERSION=\"\\$\\{OC_UV_VERSION:-(?<currentValue>[^\"]+)\\}\""],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "astral-sh/uv",
+      "extractVersionTemplate": "^v?(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "MemPalace PyPI pin (OC_MEMPALACE_VERSION in install.sh)",
+      "managerFilePatterns": ["/(^|/)install\\.sh$/"],
+      "matchStrings": ["OC_MEMPALACE_VERSION=\"\\$\\{OC_MEMPALACE_VERSION:-(?<currentValue>[^\"]+)\\}\""],
+      "datasourceTemplate": "pypi",
+      "depNameTemplate": "mempalace",
+      "versioningTemplate": "pep440"
+    },
+    {
+      "customType": "regex",
+      "description": "Semgrep PyPI pin (OC_SEMGREP_VERSION in install.sh)",
+      "managerFilePatterns": ["/(^|/)install\\.sh$/"],
+      "matchStrings": ["OC_SEMGREP_VERSION=\"\\$\\{OC_SEMGREP_VERSION:-(?<currentValue>[^\"]+)\\}\""],
+      "datasourceTemplate": "pypi",
+      "depNameTemplate": "semgrep",
+      "versioningTemplate": "pep440"
+    },
+    {
+      "customType": "regex",
+      "description": "Playwright npm pin (OC_PLAYWRIGHT_VERSION in install.sh)",
+      "managerFilePatterns": ["/(^|/)install\\.sh$/"],
+      "matchStrings": ["OC_PLAYWRIGHT_VERSION=\"\\$\\{OC_PLAYWRIGHT_VERSION:-(?<currentValue>[^\"]+)\\}\""],
+      "datasourceTemplate": "npm",
+      "depNameTemplate": "playwright"
+    },
+    {
+      "customType": "regex",
+      "description": "Matt Pocock skills npm pin (OC_SKILLS_VERSION in install.sh)",
+      "managerFilePatterns": ["/(^|/)install\\.sh$/"],
+      "matchStrings": ["OC_SKILLS_VERSION=\"\\$\\{OC_SKILLS_VERSION:-(?<currentValue>[^\"]+)\\}\""],
+      "datasourceTemplate": "npm",
+      "depNameTemplate": "skills"
+    },
+    {
+      "customType": "regex",
+      "description": "@playwright/mcp pin in config/bin/oc-playwright-mcp",
+      "managerFilePatterns": ["/(^|/)config/bin/oc-playwright-mcp$/"],
+      "matchStrings": ["pkg=\"@playwright/mcp@(?<currentValue>[0-9][^\"]*)\""],
+      "datasourceTemplate": "npm",
+      "depNameTemplate": "@playwright/mcp"
+    },
+    {
+      "customType": "regex",
+      "description": "chrome-devtools-mcp pin in config/bin/oc-chrome-devtools-mcp",
+      "managerFilePatterns": ["/(^|/)config/bin/oc-chrome-devtools-mcp$/"],
+      "matchStrings": ["exec npx -y chrome-devtools-mcp@(?<currentValue>[0-9][^ ]+)"],
+      "datasourceTemplate": "npm",
+      "depNameTemplate": "chrome-devtools-mcp"
+    },
+    {
+      "customType": "regex",
+      "description": "kubernetes-mcp-server pin in config/opencode.jsonc",
+      "managerFilePatterns": ["/(^|/)config/opencode\\.jsonc$/"],
+      "matchStrings": ["\"kubernetes-mcp-server@(?<currentValue>[0-9][^\"]*)\""],
+      "datasourceTemplate": "npm",
+      "depNameTemplate": "kubernetes-mcp-server"
+    },
+    {
+      "customType": "regex",
+      "description": "semgrep-mcp pin in config/bin/oc-semgrep-mcp",
+      "managerFilePatterns": ["/(^|/)config/bin/oc-semgrep-mcp$/"],
+      "matchStrings": [
+        "MCP_VERSION=\"\\$\\{OC_SEMGREP_MCP_VERSION:-(?<currentValue>[^\"]+)\\}\""
+      ],
+      "datasourceTemplate": "pypi",
+      "depNameTemplate": "semgrep-mcp",
+      "versioningTemplate": "pep440"
+    },
+    {
+      "customType": "regex",
+      "description": "@mobilenext/mobile-mcp pin in addons/android/bin/oc-mobile-mcp",
+      "managerFilePatterns": ["/(^|/)addons/android/bin/oc-mobile-mcp$/"],
+      "matchStrings": ["MOBILE_VERSION=\"\\$\\{OC_MOBILE_VERSION:-(?<currentValue>[^\"]+)\\}\""],
+      "datasourceTemplate": "npm",
+      "depNameTemplate": "@mobilenext/mobile-mcp"
+    },
+    {
+      "customType": "regex",
+      "description": "rea-agents pin in config/bin/oc-rea-mcp",
+      "managerFilePatterns": ["/(^|/)config/bin/oc-rea-mcp$/"],
+      "matchStrings": ["REA_VERSION=\"\\$\\{OC_REA_VERSION:-(?<currentValue>[^\"]+)\\}\""],
+      "datasourceTemplate": "npm",
+      "depNameTemplate": "rea-agents"
+    },
+    {
+      "customType": "regex",
+      "description": "GitHub Actions versions in .github/workflows (tags such as @v7)",
+      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.ya?ml$/"],
+      "matchStrings": ["uses:\\s+(?<depName>[^\\s@]+)@(?<currentValue>v?\\d+(?:\\.\\d+)*)"],
+      "datasourceTemplate": "github-tags"
+    },
+    {
+      "customType": "regex",
+      "description": "Docker images in workflows and the Android Containerfile",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/[^/]+\\.ya?ml$/",
+        "/(^|/)Containerfile$/"
+      ],
+      "matchStrings": [
+        "\\{\\s*name:\\s*\"[^\"]+\",\\s*image:\\s*\"(?<depName>[a-z0-9.-]+(?:/[a-z0-9._-]+)*):(?<currentValue>[A-Za-z0-9._-]+)\"",
+        "FROM\\s+(?<depName>[a-z0-9.-]+(?:/[a-z0-9._-]+)*):(?<currentValue>[A-Za-z0-9._-]+)",
+        "docker run[^\\n]*?\\s(?<depName>docker\\.io/[a-z0-9._/-]+):(?<currentValue>[A-Za-z0-9._-]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    }
+  ]
+}

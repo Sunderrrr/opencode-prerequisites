@@ -1,6 +1,6 @@
 # opencode-prerequisites
 
-My starter kit for [OpenCode](https://opencode.ai) with the **OpenCode Go** subscription: a CEO that leads 27 specialist agents (28 in total; 30 with the Android module), skills, commands, MCPs, memory, multi-agent git safety and a Rust project template.
+My starter kit for [OpenCode](https://opencode.ai) with the **OpenCode Go** subscription: a CEO that leads 27 specialist agents (28 in total; 30 with the Android module), skills, commands, MCP servers, composable packs, memory, multi-agent git safety, operational tools and Rust/Android/web project templates. `VERSION` is 1.0.0 (no published git tag yet).
 
 > ⚠️ Agents run in **unrestricted mode** (no permission prompts). Work in a clean, committed git repository. Only the blocks from `config/plugins/guard/` remain.
 
@@ -9,12 +9,19 @@ My starter kit for [OpenCode](https://opencode.ai) with the **OpenCode Go** subs
 ```bash
 git clone https://github.com/Sunderrrr/opencode-prerequisites.git
 cd opencode-prerequisites
-./install.sh              # full: config + Playwright, Obscura, Trivy, MemPalace
-./install.sh --lite       # lightweight: 12 agents, context7 + grep_app MCPs, no heavy tools
-./install.sh --no-tools   # config only: nothing is installed (no tools, no MemPalace)
-./install.sh --with-matt  # + full Matt Pocock skills (untested)
-./install.sh --android    # + Android module (optional, remembered): agents, mobile MCP, Podman toolchain
+./install.sh                        # full (default): 28 agents, 11 skills, 10 commands, 10 MCP servers
+./install.sh --profile core         # 12 agents, 8 skills, 7 commands, 7 MCP servers
+./install.sh --lite                 # alias of --profile lite: 12 agents, context7 + grep_app, no heavy tools
+./install.sh --no-tools             # config only: nothing is installed (no tools, no MemPalace)
+./install.sh --with design,devops   # add packs (design, devops, languages, data, docs, control, reverse, research)
+./install.sh --without design       # remove packs from the selected profile (core cannot be removed)
+./install.sh --no-pack              # forget the remembered packs and reset to the full profile
+./install.sh --version              # print the kit version (VERSION)
+./install.sh --with-matt            # + full Matt Pocock skills (untested)
+./install.sh --android              # + Android module (optional, remembered): agents, mobile MCP, Podman toolchain
 ```
+
+`profiles/packs.tsv` is the single source of truth for packs: one line per agent, skill or MCP (commands follow their agents). The resolved profile and pack list are remembered in `<config>/.opencode-prerequisites.profile`; an explicit `--profile` wins over the remembered choice, `--with` alone starts from `core`, and `--no-pack` resets to `full`. `--profile lite` implies `--no-tools`. `android` is a module (`--android`), not a pack; `--with android` is rejected and `pentest` is selected with `--pentest`.
 
 **Do not run `install.sh` with `sudo`**: everything would be installed in `/root`. The installer also refuses to run via sudo. It validates the kit before copying, backs up the existing setup to `~/.config/opencode.bak-<date>`, and writes no key.
 
@@ -23,9 +30,13 @@ cd opencode-prerequisites
 Then: `opencode` → `/connect` → **OpenCode Go** → paste your key. In the OpenCode console: *Settings › Privacy › Regions › Global* (required for the DeepSeek models). Then:
 
 ```bash
-./doctor.sh      # diagnostic: config, agents, MCPs, tools, models, real read by OpenCode
-./uninstall.sh   # restores the last backup
+./doctor.sh                  # diagnostic: config, agents, MCPs, tools, models, real read by OpenCode
+./doctor.sh --fix            # diagnostic + safe reversible fixes
+./doctor.sh --fix --dry-run  # show what --fix would change, write nothing
+./uninstall.sh               # restores the last backup
 ```
+
+`--fix` re-enables the MCP servers that `install.sh` disabled once their prerequisite is back (`kubernetes` context, suitable Node for `rea`, Android module + Podman for `mobile`, `uvx`/`pipx` for `semgrep`) and tightens the config permissions (directories 700, files 600). It never edits shell files, installs a tool or touches a running process: those are printed as commands to run yourself. `--fix --dry-run` reports the same actions without writing anything.
 
 `./doctor.sh --offline` (or `OC_DOCTOR_OFFLINE=1`) runs the same diagnostic with no network request at all (models, `gh` and MCP servers are not checked): useful in CI or without a connection.
 
@@ -33,7 +44,7 @@ Requirements: Node.js 18+ (CI runs on Node 26, see `.nvmrc`). Windows: use WSL (
 
 ## Supported distributions
 
-Tested in CI (dry-run installation, validation, launchers) on **Arch Linux (Omarchy base)**, **Debian 12 and 13**, **Ubuntu 24.04 and 26.04**, **Fedora** and **Rocky Linux 9 (RHEL)**. **macOS** (Intel and ARM) is covered by a dedicated CI (`.github/workflows/ci-macos.yml`, `macos-latest`, system `/bin/bash` 3.2): validation, ShellCheck via Homebrew and dry-run installations. A nightly workflow (`.github/workflows/ci-nightly.yml`, cron `03:17`) performs a **real installation** with `--pentest` on Ubuntu 24.04 every night and checks the tools, MemPalace, `oc-semgrep-mcp --check` and `doctor.sh --offline`. The installer detects your distribution and gives you the matching package command when something is missing.
+Tested in CI (dry-run installation, validation, launchers) on **Arch Linux (Omarchy base)**, **Debian 12 and 13**, **Ubuntu 24.04 and 26.04**, **Fedora** and **Rocky Linux 9 (RHEL)**. Pull requests run the fast subset (Arch, Debian 12, Rocky 9); a push to `main` runs all seven. **macOS** (Intel and ARM) is covered by a dedicated CI (`.github/workflows/ci-macos.yml`, `macos-latest`, system `/bin/bash` 3.2): validation, ShellCheck via Homebrew and dry-run installations. A nightly workflow (`.github/workflows/ci-nightly.yml`, cron `03:17`) performs a **real installation** with `--pentest` on Ubuntu 24.04 every night and checks the tools, MemPalace, `oc-semgrep-mcp --check` and `doctor.sh --offline`. The installer detects your distribution and gives you the matching package command when something is missing.
 
 | | Arch / Omarchy | Debian / Ubuntu | Fedora / RHEL |
 |---|---|---|---|
@@ -132,15 +143,35 @@ How it is built: the image starts from Ubuntu 24.04, downloads the Android tools
 
 **Alternatives considered**: AndroidBuildMCP (0 stars, 8 commits), rnett's `gradle-mcp` (JDK 21 + JBang for little gain), Appium/Maestro/Patrol (useful if you already use them).
 
-## Profiles
+## Packs and profiles
 
-| | Full | Light (`--lite`) |
-|---|---|---|
-| Agents | 28 (+2 with `--android`) | 12 (`ceo`, `architect`, `rust`, `backend`, `frontend`, `qa`, `security`, `debugger`, `researcher`, `review`, `verify-app`, `integrator`) |
-| MCP | context7, grep_app, terraform, kubernetes, rea, trivy, semgrep, playwright, chrome-devtools, obscura, mobile (`--android`) | context7, grep_app |
-| Memory | MemPalace (venv `~/.mempalace/venv`, ≈ 500 MB) | — |
+| Pack | Agents | Skills | MCP | Selected by |
+|---|---|---|---|---|
+| `core` | `ceo`, `architect`, `rust`, `backend`, `frontend`, `qa`, `security`, `debugger`, `researcher`, `review`, `verify-app`, `integrator` | `anti-ia-detection`, `git-commit`, `grill-me`, `handoff`, `project-onboarding`, `safe-refactor`, `tdd`, `web-research` | context7, grep_app (lite); the 7 mandatory servers otherwise | always |
+| `design` | `designer` | `ui-ux-pro-max`, `impeccable` | — | `--with design` (in full) |
+| `devops` | `devops`, `docker`, `ansible`, `terraform`, `kubernetes` | — | terraform, kubernetes | `--with devops` (in full) |
+| `languages` | `python`, `typescript`, `go`, `shell` | — | — | `--with languages` (in full) |
+| `data` | `database` | — | — | `--with data` (in full) |
+| `docs` | `docs` | — | — | `--with docs` (in full) |
+| `control` | `code-simplifier` | — | — | `--with control` (in full) |
+| `reverse` | `reverse-engineer` | `reverse-engineer-anything` | rea | `--with reverse` (in full) |
+| `research` | `web-researcher` | — | — | `--with research` (in full) |
+| `pentest` | `pentest` | — | — | `--pentest` (agent in full; tools only with the flag) |
+| `android` | `android`, `mobile-tester` | `android-dev` | mobile | `--android` (module, never `--with`) |
 
-The light profile is derived from the full one by `scripts/make-lite.mjs`: there are no two configs to maintain. It also removes `plugins/mempalace/` (otherwise OpenCode would load memory even though its config file is gone), the `designer` agent, the `reverse-engineer-anything` / `android-dev` / `ui-ux-pro-max` / `impeccable` skills and the commands that target them (`/impeccable`).
+The seven **mandatory** MCP servers are context7, grep_app, playwright, obscura, chrome-devtools, semgrep and trivy. Pack selection never removes them: only a failed runtime prerequisite can disable one. **Obscura stays enabled** by default. terraform/kubernetes follow the `devops` pack, rea follows `reverse`, mobile follows the Android module.
+
+| | Full (default) | Core (`--profile core`) | Lite (`--lite`) |
+|---|---|---|---|
+| Packs | all except `android` | `core` | `core` |
+| Agents | 28 (+2 with `--android`) | 12 | 12 |
+| Skills | 11 (12 with `--android`) | 8 | 8 |
+| Commands | 10 | 7 | 7 |
+| MCP | 10 active (11 entries with `--android`) | 7 | context7, grep_app |
+| Memory | MemPalace (venv `~/.mempalace/venv`, ≈ 500 MB) | MemPalace | — |
+| Tools | installed | installed | none (`--lite` implies `--no-tools`) |
+
+The core and light profiles are derived from the full one by `scripts/make-lite.mjs`: there are no separate configs to maintain. The light profile additionally removes `plugins/mempalace/` (otherwise OpenCode would load memory even though its config file is gone) and keeps only context7 and grep_app. Commands follow their agents: full has 10, core/lite keep the 7 that do not target a removed agent (`/impeccable`, `/simplify` and `/ship` need the `design` or `control` packs).
 
 ## Contents
 
@@ -151,10 +182,15 @@ The light profile is derived from the full one by `scripts/make-lite.mjs`: there
 - `config/commands/` (10): `/check`, `/plan-first`, `/impeccable`, `/simplify`, `/verify`, `/learn`, `/remember`, `/ship`, `/pr`, `/usage`.
 - `config/plugins/`: `guard/` (textual safeguard: blocks reading secret files and common destructive commands; **it is not a barrier** and does not replace a security review) and `notify/` (notification when a session is waiting), in the **OpenCode plugin v2 format** (a folder, `export default Plugin.define({ id, setup })`); tested by `scripts/test-plugins.mjs`. Compaction at 90% is native: `compaction.buffer: "10%"`.
 - `config/bin/oc-models`: per-agent model choice; `config/bin/agent-wt`: one git worktree per agent (`new`, `merge`, `remove`, `list`, `registry`, `integration`, `sync`). `agent-wt list --porcelain` gives the machine state (one line per worktree, 7 tab-separated fields); `agent-wt registry --out .worktrees/REGISTRY.md` maintains the CEO's persistent registry (table rewritten, existing `## History` section kept, legacy `## Historique` also preserved).
+- `config/bin/oc-backup`, `oc-restore` and `oc-usage`: see "Backup, restore and usage" below. `config/bin/oc-new-web <name>`: web project generator.
 - MCP versions pinned, no implicit `@latest`: `@playwright/mcp@0.0.84`, `chrome-devtools-mcp@1.12.0`, `rea-agents@6.8.0`, `kubernetes-mcp-server@0.1.1`, `@mobilenext/mobile-mcp@1.0.15`, `semgrep-mcp==0.9.0`, image `terraform-mcp-server:1.4.1`.
-- `config/bin/oc-versions <ecosystem> <package>`: the real latest version (24 h cache, `android` preset). `config/bin/oc-deps check` compares the kit's pins with those versions and **reports drift without changing anything** (`--json`, `--only`, `--offline`, `--dry-run`); `oc-deps fix` does not exist, updating is done by hand after review.
+- `config/bin/oc-versions <ecosystem> <package>`: the real latest version (24 h cache, `android` preset). `config/bin/oc-deps check` compares the kit's pins with those versions and **reports drift without changing anything** (`--json`, `--only`, `--ecosysteme`, `--offline`, `--refresh`). `oc-deps update` prints the proposed replacements (`--dry-run` is the default); `oc-deps update --write --yes` applies them, backs up each modified file to `<file>.bak-<timestamp>` and reruns `check`. `oc-deps fix` does not exist: use `oc-deps update`.
 - `templates/rust-project/` + `oc-new-rust <name>`: Rust project with `AGENTS.md`, tests, GitHub Actions CI and `git init`.
 - `templates/android-project/` + `oc-new-android <name>`: Android Kotlin + Jetpack Compose project (`com.example.<name>`, Gradle wrapper, `git init`), ready for `oc-android gradle assembleDebug` (`--android` module required).
+- `templates/web-project/` + `oc-new-web <name>`: Vite + React + TypeScript + Tailwind CSS v4 project with design tokens, light/dark theme, accessible demo page, Playwright smoke tests, `AGENTS.md` and `git init`.
+- `profiles/packs.tsv`: pack table (agent/skill/MCP per pack), the single source of truth for `--profile`, `--with` and `--without`.
+- `VERSION` (1.0.0) and `./install.sh --version`; no git tag is published yet.
+- `.github/renovate.json`: Renovate custom managers for the pins in `install.sh`, the launchers, `opencode.jsonc`, the workflows, the Android `Containerfile` and the GitHub Actions tags.
 - `scripts/validate-kit.mjs`: validation (used by the installer and CI); `.github/workflows/ci.yml`: validation, dry-run installation, ShellCheck, Rust template.
 
 ## How it works
@@ -177,6 +213,7 @@ The kit is validated by script (`validate-kit.mjs`), by the **official OpenCode 
 
 ## Documents
 
+- [docs/project-config.md](docs/project-config.md): machine/project-specific MCPs in a project `opencode.jsonc` (WordCraft example), merge and precedence rules.
 - [ROADMAP.md](ROADMAP.md): shipped and verified, open work, out of scope.
 - [CHANGELOG.md](CHANGELOG.md): what changes on `main` (Keep a Changelog, SemVer, no published tag).
 - [SECURITY.md](SECURITY.md): reporting a vulnerability through a private advisory, security scope.

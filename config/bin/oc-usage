@@ -1,0 +1,266 @@
+#!/usr/bin/env bash
+# oc-usage: summarize "opencode stats --days 7" (tokens and cost per model).
+#
+#   oc-usage [--json] [--warn N]
+#
+# No network access: only the local opencode CLI is read. opencode stats does
+# not expose quota or budget limits, so no percentage of a quota is invented:
+# --warn is an explicit token threshold chosen by the user.
+# Bash 3.2+ (macOS) and Linux.
+set -Eeuo pipefail
+shopt -s inherit_errexit 2>/dev/null || true
+IFS=$'\n\t'
+
+PROG="oc-usage"
+JSON=0
+WARN_RAW=""
+WARN_TOKENS=""
+tmp=""
+
+usage() {
+  cat <<EOF
+oc-usage — tokens and cost per model from "opencode stats --days 7"
+
+Usage:
+  oc-usage [--json] [--warn N]
+
+Options:
+  --json        machine-readable JSON (normalized: totals, models, threshold)
+  --warn N      exit 1 when the total number of tokens over the period exceeds N.
+                N is an integer; k/m/b suffixes are accepted (1k = 1000,
+                1m = 1000000, 1b = 1000000000). No default threshold.
+  -h, --help    this help
+
+The total includes input, output, reasoning and cache read/write tokens. The
+per-model table is sorted by total tokens. Without --warn the command only
+reports usage and exits 0: opencode stats does not expose quota or budget
+limits, so this tool never invents a percentage of a quota.
+
+Exit codes: 0 success · 1 explicit --warn threshold crossed or stats failure
+            · 2 usage error · 127 opencode/node missing.
+EOF
+}
+
+die() {
+  local code="${2:-2}"
+  printf '❌ %s: %s\n' "$PROG" "$1" >&2
+  exit "$code"
+}
+
+trap 'if [ -n "$tmp" ]; then rm -rf -- "$tmp"; fi' EXIT
+trap 'printf "❌ %s: unexpected failure (line %s)\n" "$PROG" "$LINENO" >&2' ERR
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json)
+      JSON=1
+      shift
+      ;;
+    --warn)
+      [ $# -ge 2 ] || die "--warn requires a value"
+      WARN_RAW="$2"
+      shift 2
+      ;;
+    --warn=*)
+      WARN_RAW="${1#*=}"
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      die "unknown option: $1 (see --help)"
+      ;;
+    *)
+      die "unexpected argument: $1 (see --help)"
+      ;;
+  esac
+done
+[ $# -eq 0 ] || die "unexpected argument: $1 (see --help)"
+
+if [ -n "$WARN_RAW" ]; then
+  case "$WARN_RAW" in
+    *k | *K)
+      num="${WARN_RAW%?}"
+      mult=1000
+      ;;
+    *m | *M)
+      num="${WARN_RAW%?}"
+      mult=1000000
+      ;;
+    *b | *B)
+      num="${WARN_RAW%?}"
+      mult=1000000000
+      ;;
+    *)
+      num="$WARN_RAW"
+      mult=1
+      ;;
+  esac
+  case "$num" in
+    "" | *[!0-9]*)
+      die "--warn expects a positive integer, optionally with k/m/b: $WARN_RAW"
+      ;;
+  esac
+  WARN_TOKENS=$((10#$num * mult))
+  [ "$WARN_TOKENS" -gt 0 ] || die "--warn must be greater than zero"
+fi
+
+command -v opencode >/dev/null 2>&1 || {
+  printf '❌ %s: opencode not found in PATH\n' "$PROG" >&2
+  exit 127
+}
+command -v node >/dev/null 2>&1 || {
+  printf '❌ %s: node not found in PATH\n' "$PROG" >&2
+  exit 127
+}
+
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/oc-usage.XXXXXX")"
+if ! opencode stats --days 7 --json > "$tmp/stats.json" 2> "$tmp/err"; then
+  printf '❌ %s: "opencode stats --days 7 --json" failed\n' "$PROG" >&2
+  if [ -s "$tmp/err" ]; then
+    cat "$tmp/err" >&2
+  fi
+  exit 1
+fi
+[ -s "$tmp/stats.json" ] || {
+  printf '❌ %s: opencode returned no data\n' "$PROG" >&2
+  exit 1
+}
+
+# The formatter lives here (rather than in libexec/) so oc-usage stays a single
+# launcher. It only reads the JSON captured above: no network, no opencode call.
+# Exit code 1 is expected when --warn is crossed: disable the ERR trap around
+# node and forward its status unchanged.
+trap - ERR
+set +e
+node --input-type=module - "$tmp/stats.json" "$JSON" "$WARN_TOKENS" <<'NODE'
+import fs from "node:fs"
+
+const [statsPath, jsonFlag, warnRaw] = process.argv.slice(2)
+const asJson = jsonFlag === "1"
+const warn = warnRaw === "" ? null : Number(warnRaw)
+
+let data
+try {
+  data = JSON.parse(fs.readFileSync(statsPath, "utf8"))
+} catch (e) {
+  console.error(`❌ oc-usage: invalid JSON from "opencode stats": ${e.message}`)
+  process.exit(1)
+}
+
+const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : 0)
+const partsOf = (t) => ({
+  input: num(t?.input),
+  output: num(t?.output),
+  reasoning: num(t?.reasoning),
+  cache_read: num(t?.cache?.read),
+  cache_write: num(t?.cache?.write),
+})
+const totalOf = (p) => p.input + p.output + p.reasoning + p.cache_read + p.cache_write
+
+const models = (Array.isArray(data.models) ? data.models : []).map((m) => {
+  const parts = partsOf(m.tokens)
+  const model = m.model ?? {}
+  const provider = model.providerID ?? "unknown"
+  const id = model.id ?? "unknown"
+  const variant = model.variant ?? null
+  return {
+    model: `${provider}/${id}${variant ? `#${variant}` : ""}`,
+    provider,
+    id,
+    variant,
+    steps: num(m.steps),
+    tokens: { ...parts, total: totalOf(parts) },
+    cost: num(m.cost),
+  }
+}).sort((a, b) => b.tokens.total - a.tokens.total)
+
+const totals = data.tokens
+  ? partsOf(data.tokens)
+  : models.reduce((acc, m) => {
+    acc.input += m.tokens.input
+    acc.output += m.tokens.output
+    acc.reasoning += m.tokens.reasoning
+    acc.cache_read += m.tokens.cache_read
+    acc.cache_write += m.tokens.cache_write
+    return acc
+  }, { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0 })
+const total = totalOf(totals)
+const exceeded = warn !== null && total > warn
+
+const quota = {
+  available: false,
+  note: "opencode stats does not expose quota or budget limits; this report is usage only.",
+}
+const payload = {
+  generated_at: new Date().toISOString(),
+  days: 7,
+  source: "opencode stats --days 7 --json",
+  range: data.range ?? null,
+  sessions: num(data.sessions),
+  subagents: num(data.subagents),
+  prompts: num(data.prompts),
+  steps: num(data.steps),
+  tokens: { ...totals, total },
+  cost: num(data.cost),
+  models,
+  threshold: warn === null ? null : { tokens: warn, exceeded, ratio: total / warn },
+  quota,
+}
+
+const human = (n) => {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}b`
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}m`
+  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}k`
+  return String(n)
+}
+const money = (n) => `$${n.toFixed(2)}`
+
+if (asJson) {
+  console.log(JSON.stringify(payload, null, 2))
+  if (exceeded) {
+    console.error(`⚠️  Token threshold exceeded: ${human(total)} > ${human(warn)} (${((total / warn) * 100).toFixed(1)}% of --warn).`)
+  }
+  process.exit(exceeded ? 1 : 0)
+}
+
+console.log("OpenCode usage · last 7 days · all projects")
+console.log(`  ${num(data.sessions)} sessions · ${num(data.prompts)} prompts · ${human(num(data.steps))} steps · ${num(data.subagents)} subagents`)
+console.log(`  tokens ${human(total)} (input ${human(totals.input)} · output ${human(totals.output)} · reasoning ${human(totals.reasoning)} · cache read ${human(totals.cache_read)} · cache write ${human(totals.cache_write)})`)
+console.log(`  cost ${money(num(data.cost))}`)
+
+if (models.length) {
+  const headers = ["model", "tokens", "steps", "cost"]
+  const rows = models.map((m) => [m.model, human(m.tokens.total), human(m.steps), money(m.cost)])
+  const widths = headers.map((h, i) => Math.max(h.length, ...rows.map((row) => row[i].length)))
+  const render = (cells) => cells.map((c, i) => c.padEnd(widths[i])).join("  ")
+  console.log("\nPer model:")
+  console.log(`  ${render(headers)}`)
+  console.log(`  ${widths.map((w) => "-".repeat(w)).join("  ")}`)
+  for (const row of rows) console.log(`  ${render(row)}`)
+} else {
+  console.log("\nNo model usage in this period.")
+}
+
+if (warn === null) {
+  console.log("\nℹ️  No threshold set. Use --warn N to exit 1 above N tokens.")
+  console.log(`   ${quota.note} No quota percentage is invented.`)
+} else {
+  const pct = ((total / warn) * 100).toFixed(1)
+  if (exceeded) {
+    console.error(`⚠️  Token threshold exceeded: ${human(total)} > ${human(warn)} (${pct}% of --warn).`)
+  } else {
+    console.log(`✅ Below threshold: ${human(total)} / ${human(warn)} tokens (${pct}%).`)
+  }
+}
+process.exit(exceeded ? 1 : 0)
+NODE
+rc=$?
+set -e
+exit "$rc"

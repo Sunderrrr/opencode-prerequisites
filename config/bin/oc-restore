@@ -1,0 +1,382 @@
+#!/usr/bin/env bash
+# oc-restore: restore an archive produced by oc-backup.
+#
+#   oc-restore --list [--dir DIR]
+#   oc-restore [--dir DIR] <archive.tar.gz>
+#
+# The .sha256 is verified before anything is touched. The current config is
+# copied to <config>.bak-<timestamp> first. Files present in the current config
+# but absent from the archive are kept (the restore is an overlay, not a wipe).
+# Launchers and the MemPalace plugin settings are restored too.
+# No network access. Bash 3.2+ (macOS) and Linux.
+set -Eeuo pipefail
+shopt -s inherit_errexit 2>/dev/null || true
+IFS=$'\n\t'
+umask 077
+
+PROG="oc-restore"
+CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+BIN_DIR="${OBSCURA_BIN_DIR:-$HOME/.local/bin}"
+MEMPALACE_DIR="${OC_MEMPALACE_PLUGIN_DIR:-$HOME/.mempalace/plugin}"
+BACKUP_DIR="${OC_BACKUP_DIR:-$HOME/.local/state/opencode-backups}"
+STAMP="$(date -u +%Y%m%d-%H%M%S)"
+LIST=0
+ARCHIVE=""
+tmp=""
+
+usage() {
+  cat <<EOF
+oc-restore — restore a backup made by oc-backup
+
+Usage:
+  oc-restore --list [--dir DIR]
+  oc-restore [--dir DIR] <archive.tar.gz>
+
+Options:
+  --list        list the archives in the backup directory
+  --dir DIR     backup directory (default: \$HOME/.local/state/opencode-backups)
+  -h, --help    this help
+
+A bare archive name is looked up in the backup directory. The archive must be
+accompanied by <archive>.sha256: the checksum is verified and a corrupt or
+unverifiable archive is refused. The current config is copied to
+<config>.bak-<timestamp> before the restore. Files absent from the archive are
+kept; the restore only adds and overwrites. Launchers are installed in
+\$OBSCURA_BIN_DIR (default: ~/.local/bin).
+
+Environment: OPENCODE_CONFIG_DIR, OBSCURA_BIN_DIR, OC_BACKUP_DIR,
+             OC_MEMPALACE_PLUGIN_DIR.
+
+Exit codes: 0 success · 1 runtime error · 2 usage error · 3 verification or
+unsafe archive (nothing was modified).
+EOF
+}
+
+die() {
+  local code="${2:-1}"
+  printf '❌ %s: %s\n' "$PROG" "$1" >&2
+  exit "$code"
+}
+
+need() { command -v "$1" >/dev/null 2>&1; }
+
+cleanup() {
+  if [ -n "$tmp" ]; then
+    rm -rf -- "$tmp"
+  fi
+}
+trap cleanup EXIT
+trap 'printf "❌ %s: unexpected failure (line %s)\n" "$PROG" "$LINENO" >&2' ERR
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --list)
+      LIST=1
+      shift
+      ;;
+    --dir)
+      [ $# -ge 2 ] || die "--dir requires a directory" 2
+      BACKUP_DIR="$2"
+      shift 2
+      ;;
+    --dir=*)
+      BACKUP_DIR="${1#*=}"
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      die "unknown option: $1 (see --help)" 2
+      ;;
+    *)
+      [ -z "$ARCHIVE" ] || die "unexpected argument: $1 (see --help)" 2
+      ARCHIVE="$1"
+      shift
+      ;;
+  esac
+done
+while [ $# -gt 0 ]; do
+  [ -z "$ARCHIVE" ] || die "unexpected argument: $1 (see --help)" 2
+  ARCHIVE="$1"
+  shift
+done
+
+need tar || die "tar not found in PATH"
+need sha256sum || need shasum || need node || die "no sha256 tool (sha256sum, shasum or node)"
+need mktemp || die "mktemp not found in PATH"
+
+sha256_of() {
+  local file="$1"
+  if need sha256sum; then
+    sha256sum "$file" | awk '{print $1}'
+  elif need shasum; then
+    shasum -a 256 "$file" | awk '{print $1}'
+  elif need node; then
+    node -e 'const c=require("node:crypto"),f=require("node:fs");process.stdout.write(c.createHash("sha256").update(f.readFileSync(process.argv[1])).digest("hex"))' "$file"
+  else
+    return 1
+  fi
+}
+
+human_size() {
+  awk -v n="$1" 'BEGIN { split("B KiB MiB GiB TiB", u, " "); i=1; while (n >= 1024 && i < 5) { n /= 1024; i++ } printf "%.1f %s", n, u[i] }'
+}
+
+unique_path() {
+  local base="$1" candidate="$1" i=1
+  while [ -e "$candidate" ]; do
+    candidate="$base-$i"
+    i=$((i + 1))
+  done
+  printf '%s\n' "$candidate"
+}
+
+hash_entry() {
+  local file="$1"
+  if [ -L "$file" ]; then
+    printf 'link:%s' "$(readlink "$file")"
+  else
+    sha256_of "$file" || printf 'unreadable'
+  fi
+}
+
+# snapshot_tree <root> <file>: "hash<TAB>relative-path" for every regular file
+# and symlink. Used to report exactly what the restore added or modified.
+snapshot_tree() {
+  local root="$1" out="$2" f rel h
+  : > "$out"
+  [ -d "$root" ] || return 0
+  while IFS= read -r -d '' f; do
+    rel="${f#"$root"/}"
+    h="$(hash_entry "$f" || true)"
+    printf '%s\t%s\n' "$h" "$rel" >> "$out"
+  done < <(find "$root" \( -type f -o -type l \) -print0)
+}
+
+old_hash() {
+  local snap="$1" rel="$2"
+  awk -F '\t' -v r="$rel" '$2 == r { print $1; exit }' "$snap"
+}
+
+# count_changes <snapshot> <staging-dir> <destination> <label> <change-file>
+# Prints "added<TAB>path" or "modified<TAB>path" for each difference, copies
+# the staged files into the destination, and echoes "added modified unchanged".
+restore_tree() {
+  local snap="$1" staged="$2" dest="$3" label="$4" changes="$5"
+  local f rel old new kind added=0 modified=0 unchanged=0
+  if [ ! -d "$staged" ]; then
+    printf '0\t0\t0\n'
+    return 0
+  fi
+  while IFS= read -r -d '' f; do
+    rel="${f#"$staged"/}"
+    old="$(old_hash "$snap" "$rel")"
+    new="$(hash_entry "$f" || true)"
+    if [ -z "$old" ]; then
+      kind="added"
+      added=$((added + 1))
+    elif [ "$old" != "$new" ]; then
+      kind="modified"
+      modified=$((modified + 1))
+    else
+      kind="unchanged"
+      unchanged=$((unchanged + 1))
+    fi
+    if [ "$kind" != "unchanged" ]; then
+      printf '%s\t%s/%s\n' "$kind" "$label" "$rel" >> "$changes"
+    fi
+    mkdir -p "$dest/$(dirname "$rel")"
+    if [ -L "$f" ]; then
+      rm -f -- "$dest/$rel"
+      ln -s "$(readlink "$f")" "$dest/$rel"
+    else
+      cp -p "$f" "$dest/$rel"
+    fi
+  done < <(find "$staged" \( -type f -o -type l \) -print0)
+  printf '%s\t%s\t%s\n' "$added" "$modified" "$unchanged"
+}
+
+# restore_bin <snapshot> <staging-dir> <changes>: launchers are executable.
+restore_bin() {
+  local snap="$1" staged="$2" changes="$3"
+  local f name old new kind added=0 modified=0 unchanged=0
+  if [ ! -d "$staged" ]; then
+    printf '0\t0\t0\n'
+    return 0
+  fi
+  while IFS= read -r -d '' f; do
+    name="$(basename "$f")"
+    old="$(old_hash "$snap" "$name")"
+    new="$(hash_entry "$f" || true)"
+    if [ -z "$old" ]; then
+      kind="added"
+      added=$((added + 1))
+    elif [ "$old" != "$new" ]; then
+      kind="modified"
+      modified=$((modified + 1))
+    else
+      kind="unchanged"
+      unchanged=$((unchanged + 1))
+    fi
+    if [ "$kind" != "unchanged" ]; then
+      printf '%s\tbin/%s\n' "$kind" "$name" >> "$changes"
+    fi
+    mkdir -p "$BIN_DIR"
+    if [ -L "$f" ]; then
+      rm -f -- "$BIN_DIR/$name"
+      ln -s "$(readlink "$f")" "$BIN_DIR/$name"
+    else
+      install -m 0755 "$f" "$BIN_DIR/$name"
+    fi
+  done < <(find "$staged" \( -type f -o -type l \) -print0)
+  printf '%s\t%s\t%s\n' "$added" "$modified" "$unchanged"
+}
+
+list_backups() {
+  local archives=() count i f status expected actual bytes
+  # Byte order matches creation order (see unique_archive in oc-backup).
+  local LC_ALL=C
+  shopt -s nullglob
+  archives=("$BACKUP_DIR"/opencode-*.tar.gz)
+  shopt -u nullglob
+  count=${#archives[@]}
+  printf 'Backups in %s:\n' "$BACKUP_DIR"
+  if [ "$count" -eq 0 ]; then
+    printf '  (none)\n'
+    return 0
+  fi
+  i=$((count - 1))
+  while [ "$i" -ge 0 ]; do
+    f="${archives[$i]}"
+    status="no checksum"
+    if [ -f "$f.sha256" ]; then
+      expected="$(awk 'NR == 1 { print $1 }' "$f.sha256" | tr 'A-F' 'a-f')"
+      actual="$(sha256_of "$f" 2>/dev/null || true)"
+      if [ -n "$expected" ] && [ "$expected" = "$actual" ]; then
+        status="sha256 ok"
+      else
+        status="BAD sha256"
+      fi
+    fi
+    bytes="$(wc -c < "$f" | tr -d '[:space:]')"
+    printf '  %-45s %10s bytes  %s\n' "$(basename "$f")" "$bytes" "$status"
+    i=$((i - 1))
+  done
+}
+
+if [ "$LIST" = 1 ]; then
+  [ -z "$ARCHIVE" ] || die "--list does not take an archive" 2
+  list_backups
+  exit 0
+fi
+
+[ -n "$ARCHIVE" ] || die "missing archive (see --help)" 2
+if [ ! -f "$ARCHIVE" ] && [ -f "$BACKUP_DIR/$ARCHIVE" ]; then
+  ARCHIVE="$BACKUP_DIR/$ARCHIVE"
+fi
+[ -f "$ARCHIVE" ] || die "archive not found: $ARCHIVE" 2
+
+sha_file="$ARCHIVE.sha256"
+[ -f "$sha_file" ] || die "checksum file missing: $sha_file (refusing an unverifiable archive)" 3
+expected="$(awk 'NR == 1 { print $1 }' "$sha_file" | tr 'A-F' 'a-f')"
+[[ "$expected" =~ ^[0-9a-f]{64}$ ]] || die "invalid checksum file: $sha_file" 3
+actual="$(sha256_of "$ARCHIVE" 2>/dev/null || true)"
+[ -n "$actual" ] || die "cannot compute the sha256 of $ARCHIVE" 3
+[ "$expected" = "$actual" ] || die "checksum mismatch for $ARCHIVE (refusing a corrupt archive)" 3
+
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/oc-restore.XXXXXX")"
+tar -tzf "$ARCHIVE" > "$tmp/members" 2> "$tmp/tar.err" || die "unreadable archive: $ARCHIVE" 3
+[ -s "$tmp/members" ] || die "empty archive: $ARCHIVE" 3
+
+# Refuse absolute paths, ".." components and members outside the documented
+# layout. This runs before extraction: nothing is written on a bad archive.
+bad=""
+while IFS= read -r entry; do
+  entry="${entry#./}"
+  entry="${entry%/}"
+  case "$entry" in
+    "" | /* | .. | ../* | */../* | */..)
+      bad="$entry"
+      break
+      ;;
+    config | config/* | bin | bin/* | mempalace-plugin | mempalace-plugin/* | backup-info.txt) ;;
+    *)
+      bad="$entry"
+      break
+      ;;
+  esac
+done < "$tmp/members"
+[ -z "$bad" ] || die "unsafe archive member: $bad (nothing restored)" 3
+
+# 1. Back up the current config before touching it.
+if [ -d "$CONFIG_DIR" ]; then
+  shopt -s nullglob dotglob
+  current_entries=("$CONFIG_DIR"/*)
+  shopt -u nullglob dotglob
+  if [ ${#current_entries[@]} -gt 0 ]; then
+    config_backup="$(unique_path "$CONFIG_DIR.bak-$STAMP")"
+    cp -a "$CONFIG_DIR" "$config_backup" || die "cannot back up the current config to $config_backup"
+    printf '💾 Current config backed up: %s\n' "$config_backup"
+  else
+    printf 'ℹ️  Current config is empty: nothing to back up.\n'
+  fi
+else
+  printf 'ℹ️  No current config at %s: nothing to back up.\n' "$CONFIG_DIR"
+fi
+
+# 2. Extract to a staging directory and restore config, launchers and plugin settings.
+mkdir -p "$tmp/stage"
+tar -xzf "$ARCHIVE" -C "$tmp/stage" || die "extraction failed: $ARCHIVE" 1
+
+if [ -f "$tmp/stage/backup-info.txt" ]; then
+  created="$(awk -F '=' '$1 == "created" { print $2; exit }' "$tmp/stage/backup-info.txt")"
+  [ -z "$created" ] || printf '📦 Archive created: %s\n' "$created"
+fi
+
+mkdir -p "$CONFIG_DIR"
+snapshot_tree "$CONFIG_DIR" "$tmp/before-config"
+: > "$tmp/changes"
+IFS=$'\t' read -r cfg_added cfg_modified cfg_unchanged <<EOF
+$(restore_tree "$tmp/before-config" "$tmp/stage/config" "$CONFIG_DIR" "config" "$tmp/changes")
+EOF
+
+snapshot_tree "$BIN_DIR" "$tmp/before-bin"
+IFS=$'\t' read -r bin_added bin_modified bin_unchanged <<EOF
+$(restore_bin "$tmp/before-bin" "$tmp/stage/bin" "$tmp/changes")
+EOF
+
+snapshot_tree "$MEMPALACE_DIR" "$tmp/before-mp"
+IFS=$'\t' read -r mp_added mp_modified mp_unchanged <<EOF
+$(restore_tree "$tmp/before-mp" "$tmp/stage/mempalace-plugin" "$MEMPALACE_DIR" "mempalace-plugin" "$tmp/changes")
+EOF
+
+if [ -s "$tmp/changes" ]; then
+  printf '\nChanged:\n'
+  shown=0
+  while IFS=$'\t' read -r kind path; do
+    if [ "$shown" -lt 40 ]; then
+      case "$kind" in
+        added) printf '  + %s\n' "$path" ;;
+        modified) printf '  ~ %s\n' "$path" ;;
+      esac
+    fi
+    shown=$((shown + 1))
+  done < "$tmp/changes"
+  if [ "$shown" -gt 40 ]; then
+    printf '  … and %s more\n' "$((shown - 40))"
+  fi
+else
+  printf '\nNo file changed (the archive matches the current setup).\n'
+fi
+
+printf '\n✅ Restore complete: config %s added, %s modified, %s unchanged' \
+  "$cfg_added" "$cfg_modified" "$cfg_unchanged"
+printf ' · launchers %s/%s/%s' "$bin_added" "$bin_modified" "$bin_unchanged"
+printf ' · mempalace %s/%s/%s\n' "$mp_added" "$mp_modified" "$mp_unchanged"
+printf '   Extra files not present in the archive were kept.\n'

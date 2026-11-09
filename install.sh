@@ -2,8 +2,18 @@
 # Installs the OpenCode kit into ~/.config/opencode (existing config is backed up automatically).
 # Never touches API keys.
 #
-#   ./install.sh                full install (tools included)
-#   ./install.sh --lite         lightweight profile: 12 agents, context7 + grep_app MCPs, no heavy tools
+#   ./install.sh                full install (tools included; all packs except pentest/Android)
+#   ./install.sh --profile core|full|lite
+#                               agent/skill/command packs to install (default: full). core = 12 agents;
+#                               lite = core + context7/grep_app only + no heavy tools.
+#                               The resolved choice is remembered in $DEST/.opencode-prerequisites.profile.
+#   ./install.sh --with design,devops
+#                               add packs (design, devops, languages, data, docs, control, reverse, research;
+#                               android and pentest are selected by --android and --pentest)
+#   ./install.sh --without design
+#                               remove packs from the selected profile (core cannot be removed)
+#   ./install.sh --no-pack      forget the remembered packs and reset to the full profile
+#   ./install.sh --lite         alias of --profile lite (also implies --no-tools)
 #   ./install.sh --no-tools     copy the config only (no tool download/installation)
 #   ./install.sh --memory-only  only (re)try installing MemPalace, without copying anything
 #   ./install.sh --force-config overwrite kit files you have modified (otherwise, starting with the
@@ -20,6 +30,7 @@
 #                               install); nmap and sqlmap are reported (run the command yourself, never sudo
 #                               from this script). Used by the @pentest agent. Remembered;
 #   ./install.sh --no-pentest   forget this choice (does not uninstall binaries already installed)
+#   ./install.sh --version      print the kit version (VERSION file) and exit
 #   (do not run this script with sudo: everything would go to /root instead of your home directory)
 #   OPENCODE_CONFIG_DIR=...     alternate destination directory; OBSCURA_BIN_DIR=... binary directory
 set -Eeuo pipefail
@@ -39,11 +50,27 @@ OC_SEMGREP_VERSION="${OC_SEMGREP_VERSION:-1.183.0}"
 OC_PLAYWRIGHT_VERSION="${OC_PLAYWRIGHT_VERSION:-1.64.1}"
 OC_SKILLS_VERSION="${OC_SKILLS_VERSION:-1.7.6}"
 
-LITE=0; TOOLS=1; MATT=0; MEMONLY=0; ALLOWROOT=0; SHELLENV=0; ANDROID=0; NOANDROID=0; PENTEST=0; NOPENTEST=0; PENTEST_EXPLICIT=0; FORCE_CONFIG=0
-for a in "$@"; do
+LITE=0; PROFILE=""; PROFILE_EXPLICIT=0; NOPACK=0; NOTOOLS=0
+TOOLS=1; MATT=0; MEMONLY=0; ALLOWROOT=0; SHELLENV=0; ANDROID=0; NOANDROID=0; PENTEST=0; NOPENTEST=0; PENTEST_EXPLICIT=0; FORCE_CONFIG=0
+WITH_RAW=(); WITHOUT_RAW=()
+while [ "$#" -gt 0 ]; do
+  a="$1"
   case "$a" in
-    --lite) LITE=1; TOOLS=0 ;;
-    --no-tools) TOOLS=0 ;;
+    --lite) PROFILE=lite; PROFILE_EXPLICIT=1 ;;
+    --profile)
+      [ "$#" -ge 2 ] || { echo "Missing value for --profile (core, full or lite)." >&2; exit 1; }
+      PROFILE="$2"; PROFILE_EXPLICIT=1; shift ;;
+    --profile=*) PROFILE="${a#*=}"; PROFILE_EXPLICIT=1 ;;
+    --with)
+      [ "$#" -ge 2 ] || { echo "Missing value for --with (comma-separated packs)." >&2; exit 1; }
+      WITH_RAW+=("$2"); shift ;;
+    --with=*) WITH_RAW+=("${a#*=}") ;;
+    --without)
+      [ "$#" -ge 2 ] || { echo "Missing value for --without (comma-separated packs)." >&2; exit 1; }
+      WITHOUT_RAW+=("$2"); shift ;;
+    --without=*) WITHOUT_RAW+=("${a#*=}") ;;
+    --no-pack) PROFILE=full; PROFILE_EXPLICIT=1; NOPACK=1; WITH_RAW=(); WITHOUT_RAW=() ;;
+    --no-tools) NOTOOLS=1 ;;
     --memory-only) MEMONLY=1 ;;
     --force-config) FORCE_CONFIG=1 ;;
     --allow-root) ALLOWROOT=1 ;;
@@ -54,9 +81,17 @@ for a in "$@"; do
     --shell-env) SHELLENV=1 ;;
     --with-matt) MATT=1 ;;
     -h|--help) awk 'NR > 1 && /^set -/ { exit } NR > 1 { print }' "$0"; exit 0 ;;
+    -V|--version) cat "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/VERSION"; exit 0 ;;
     *) echo "Unknown option: $a" >&2; exit 1 ;;
   esac
+  shift
 done
+case "$PROFILE" in
+  "") PROFILE=full ;;
+  core|full|lite) ;;
+  *) echo "Unknown profile: $PROFILE (expected core, full or lite)." >&2; exit 1 ;;
+esac
+if [ "$NOTOOLS" = 1 ] || [ "$PROFILE" = lite ]; then TOOLS=0; fi
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$HERE/config"
@@ -69,6 +104,90 @@ trap 'rm -rf "$TMP"' EXIT
 need() { command -v "$1" >/dev/null 2>&1; }
 warn() { echo "⚠️  $*" >&2; }
 die()  { echo "❌ $*" >&2; exit 1; }
+
+# --- Packs: profiles/packs.tsv is the single source of truth --------------------------------
+# The full profile selects every pack except android (a module, selected by --android).
+# pentest is part of full (the agent ships with the kit); --pentest adds its tools.
+PACKS_TABLE="$HERE/profiles/packs.tsv"
+[ -r "$PACKS_TABLE" ] || die "Pack table not found: $PACKS_TABLE"
+ALL_PACKS=()
+FULL_PACKS=()
+while IFS= read -r _pack; do
+  [ -n "$_pack" ] || continue
+  ALL_PACKS+=("$_pack")
+  [ "$_pack" = android ] || FULL_PACKS+=("$_pack")
+done <<EOF
+$(awk -F '\t' '
+  /^[[:space:]]*#/ { next }
+  NF >= 1 {
+    p = $1
+    gsub(/\r$/, "", p)
+    gsub(/^[[:space:]]+|[[:space:]]+$/, "", p)
+    if (p != "") print p
+  }' "$PACKS_TABLE" | awk '!seen[$0]++')
+EOF
+[ "${#ALL_PACKS[@]}" -gt 0 ] || die "No pack found in $PACKS_TABLE"
+PACKS=()
+is_pack() {
+  local p="$1" x
+  for x in "${ALL_PACKS[@]}"; do [ "$x" = "$p" ] && return 0; done
+  return 1
+}
+has_pack() {
+  local p="$1" x
+  [ "${#PACKS[@]}" -gt 0 ] || return 1
+  for x in "${PACKS[@]}"; do [ "$x" = "$p" ] && return 0; done
+  return 1
+}
+packs_are_full() {
+  local p
+  [ "${#PACKS[@]}" -eq "${#FULL_PACKS[@]}" ] || return 1
+  for p in "${FULL_PACKS[@]}"; do has_pack "$p" || return 1; done
+  return 0
+}
+add_pack() {
+  local p="$1" x
+  if [ "${#PACKS[@]}" -gt 0 ]; then
+    for x in "${PACKS[@]}"; do [ "$x" = "$p" ] && return 0; done
+  fi
+  PACKS+=("$p")
+}
+remove_pack() {
+  local p="$1" x
+  local -a out=()
+  if [ "$p" = core ]; then
+    warn "core pack cannot be removed: ignored."
+    return 0
+  fi
+  if [ "${#PACKS[@]}" -gt 0 ]; then
+    for x in "${PACKS[@]}"; do [ "$x" = "$p" ] || out+=("$x"); done
+  fi
+  if [ "${#out[@]}" -gt 0 ]; then PACKS=("${out[@]}"); else PACKS=(); fi
+}
+add_packs_csv() {  # add_packs_csv <csv> <add|remove>
+  local csv="$1" mode="$2" p
+  local -a items=()
+  IFS=',' read -r -a items <<< "$csv"
+  for p in "${items[@]}"; do
+    p="${p//[[:space:]]/}"
+    [ -n "$p" ] || continue
+    if [ "$p" = android ]; then
+      if [ "$mode" = add ]; then
+        die "--with android is not supported: use --android (Android is a module, not a pack)."
+      fi
+      warn "--without android is not supported: use --no-android."
+      continue
+    fi
+    if [ "$p" = pentest ] && [ "$mode" = add ]; then
+      warn "The pentest pack is selected with --pentest, not --with: ignored."
+      continue
+    fi
+    if ! is_pack "$p"; then
+      die "Unknown pack \"$p\" (valid packs: ${ALL_PACKS[*]})."
+    fi
+    if [ "$mode" = add ]; then add_pack "$p"; else remove_pack "$p"; fi
+  done
+}
 
 # An overridable version must never be able to inject a URL or an option.
 for v in "$OC_TRIVY_VERSION" "$OC_TRIVY_MCP_VERSION" "$OC_OBSCURA_VERSION" "$OC_UV_VERSION" \
@@ -290,6 +409,34 @@ if [ "$MEMONLY" = 1 ]; then
   exit 0
 fi
 
+# --- Remembered profile/packs: read BEFORE replaying Android/pentest so lite never downloads --
+PROFILE_FILE="$DEST/.opencode-prerequisites.profile"
+REMEMBERED_PROFILE=""; REMEMBERED_PACKS=""
+if [ -f "$PROFILE_FILE" ]; then
+  REMEMBERED_PROFILE="$(sed -n 's/^profile=//p' "$PROFILE_FILE" 2>/dev/null | head -n 1 || true)"
+  REMEMBERED_PACKS="$(sed -n 's/^packs=//p' "$PROFILE_FILE" 2>/dev/null | head -n 1 || true)"
+fi
+case "$REMEMBERED_PROFILE" in
+  core|full|lite) ;;
+  "") ;;
+  *) warn "Unknown profile \"$REMEMBERED_PROFILE\" in $PROFILE_FILE: ignored."; REMEMBERED_PROFILE="" ;;
+esac
+# Resolution: explicit profile > remembered marker > core when --with is used alone > full.
+if [ "$PROFILE_EXPLICIT" = 0 ]; then
+  if [ "$NOPACK" = 0 ] && [ -n "$REMEMBERED_PROFILE" ]; then
+    PROFILE="$REMEMBERED_PROFILE"
+  elif [ "${#WITH_RAW[@]}" -gt 0 ] && [ "${#WITHOUT_RAW[@]}" -eq 0 ]; then
+    PROFILE=core
+  else
+    PROFILE=full
+  fi
+fi
+if [ "$PROFILE" = lite ]; then LITE=1; else LITE=0; fi
+if [ "$NOTOOLS" = 1 ] || [ "$PROFILE" = lite ]; then TOOLS=0; fi
+if [ "$PROFILE_EXPLICIT" = 0 ] && [ "$NOPACK" = 0 ] && [ -n "$REMEMBERED_PROFILE" ]; then
+  echo "ℹ️  Profile remembered: $PROFILE (packs: ${REMEMBERED_PACKS:-core})"
+fi
+
 # --- Android module (optional): agents, skill, MCP, Podman toolchain. Remembered by a marker in the config. ---
 ANDROID_MARKER="$DEST/.opencode-prerequisites.android"
 ANDROID_SHIM_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/oc-android/sdk"
@@ -336,6 +483,42 @@ if [ "$PENTEST" = 0 ] && [ "$NOPENTEST" = 0 ] && [ -f "$PENTEST_MARKER" ]; then
   if [ "$TOOLS" = 1 ] || [ "$PENTEST_EXPLICIT" = 1 ]; then PENTEST=1; fi
 fi
 if [ "$LITE" = 1 ] && [ "$PENTEST" = 1 ]; then warn "The lightweight profile does not install pentest tools: ignored."; PENTEST=0; fi
+
+# --- Resolve the pack set (remembered choice, --without then --with, --pentest, core always) --
+PACKS=()
+if [ "$NOPACK" = 0 ] && [ "$PROFILE_EXPLICIT" = 0 ] && [ -n "$REMEMBERED_PACKS" ]; then
+  _saved=()
+  IFS=',' read -r -a _saved <<< "$REMEMBERED_PACKS"
+  if [ "${#_saved[@]}" -gt 0 ]; then
+    for _p in "${_saved[@]}"; do
+      _p="${_p//[[:space:]]/}"
+      [ -n "$_p" ] || continue
+      if [ "$_p" = android ]; then
+        warn "The android pack is selected with --android, not in $PROFILE_FILE: ignored."
+        continue
+      fi
+      if is_pack "$_p"; then add_pack "$_p"; else warn "Unknown pack \"$_p\" in $PROFILE_FILE: ignored."; fi
+    done
+  fi
+fi
+if [ "${#PACKS[@]}" -eq 0 ]; then
+  case "$PROFILE" in
+    full) PACKS=("${FULL_PACKS[@]}") ;;
+    *) PACKS=(core) ;;
+  esac
+fi
+# Order matters: a pack removed then re-added is selected (--without design --with design).
+if [ "${#WITHOUT_RAW[@]}" -gt 0 ]; then
+  for _csv in "${WITHOUT_RAW[@]}"; do add_packs_csv "$_csv" remove; done
+fi
+if [ "${#WITH_RAW[@]}" -gt 0 ]; then
+  for _csv in "${WITH_RAW[@]}"; do add_packs_csv "$_csv" add; done
+fi
+# --pentest implies the pentest pack; --no-pentest removes it from an otherwise full selection.
+if [ "$PENTEST" = 1 ]; then add_pack pentest; fi
+if [ "$NOPENTEST" = 1 ]; then remove_pack pentest; fi
+add_pack core
+PACKS_CSV="$(IFS=,; printf '%s' "${PACKS[*]}")"
 
 extract_archive() {
   local archive="$1" dest="$2"
@@ -772,7 +955,8 @@ done < "$TMP/new.paths"
 
 # This whole block runs under set -e in a subshell: the first error cancels the phase.
 config_phase() {
-  local rel f oldh curh h mode
+  local rel f oldh curh h mode packs_csv
+  local -a lite_args=()
   cp -a "$SRC/." "$DEST/"
 
   # Remove files the kit used to install and that no longer exist (e.g. plugins/auto-compact.js),
@@ -799,9 +983,14 @@ config_phase() {
   mkdir -p "$DEST/templates"
   cp -a "$HERE/templates/." "$DEST/templates/"
 
-  # Lightweight profile
-  if [ "$LITE" = 1 ]; then
-    node "$HERE/scripts/make-lite.mjs" "$DEST"
+  # Packs: prune agents/skills/commands from profiles/packs.tsv. make-lite is skipped only when
+  # the full profile already selects every pack: the copied config is then exact, and
+  # full + --pentest stays byte-identical to a plain full install.
+  packs_csv="$(IFS=,; printf '%s' "${PACKS[*]}")"
+  if [ "$PROFILE" != full ] || ! packs_are_full; then
+    lite_args=("$DEST" --profile "$PROFILE" --packs "$packs_csv")
+    if [ "$ANDROID" = 1 ]; then lite_args+=(--android); fi
+    node "$HERE/scripts/make-lite.mjs" "${lite_args[@]}"
   fi
 
   # Android module (optional) — idempotent in both directions
@@ -830,29 +1019,46 @@ config_phase() {
       *) return 1 ;;
     esac
   }
+  mcp_disable() {  # always refresh the reason (enable then disable), never delete the block
+    local server="$1" why="$2"
+    mcp_state enable "$server" >/dev/null 2>&1 || true
+    mcp_state disable "$server" "$why"
+  }
 
-  # Kubernetes: the MCP server exits at startup if there is no kubectl context
+  # Optional MCPs follow their pack. Mandatory MCPs (context7, grep_app, playwright, obscura,
+  # chrome-devtools, semgrep, trivy) are never removed: only a runtime check can disable them.
   if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ]; then
-    kc="${KUBECONFIG:-$HOME/.kube/config}"
-    if grep -qs '^current-context: *[^ ]' "${kc%%:*}"; then
-      if mcp_state enable kubernetes; then
-        echo "✅ kubernetes MCP enabled (kubectl context detected)"
+    if has_pack devops; then
+      mcp_state enable terraform >/dev/null 2>&1 || true
+      kc="${KUBECONFIG:-$HOME/.kube/config}"
+      if grep -qs '^current-context: *[^ ]' "${kc%%:*}"; then
+        if mcp_state enable kubernetes; then
+          echo "✅ kubernetes MCP enabled (kubectl context detected)"
+        fi
+      elif mcp_disable kubernetes "no kubectl context: remove this line once you have a cluster"; then
+        echo "ℹ️  kubernetes MCP disabled (no kubectl context in ${kc%%:*}): remove the \"disabled\" line from opencode.jsonc once you have a cluster."
+      else
+        warn "kubernetes MCP: opencode.jsonc could not be updated (block missing or invalid JSONC)."
       fi
-    elif mcp_state disable kubernetes "no kubectl context: remove this line once you have a cluster"; then
-      echo "ℹ️  kubernetes MCP disabled (no kubectl context in ${kc%%:*}): remove the \"disabled\" line from opencode.jsonc once you have a cluster."
     else
-      warn "kubernetes MCP: opencode.jsonc could not be updated (block missing or invalid JSONC)."
+      if mcp_disable terraform "devops pack not installed (--with devops)"; then :; fi
+      if mcp_disable kubernetes "devops pack not installed (--with devops)"; then :; fi
+      echo "ℹ️  terraform/kubernetes MCPs disabled (devops pack not installed: ./install.sh --with devops)."
     fi
   fi
 
   # REA requires Node >= 26.12.1 (or 24.22.1 / 22.23.4); otherwise disable it cleanly
   if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"rea": {' "$DEST/opencode.jsonc"; then
-    if rea_msg="$("$BIN/oc-rea-mcp" --check 2>&1)"; then
+    if ! has_pack reverse; then
+      if mcp_disable rea "reverse pack not installed (--with reverse)"; then
+        echo "ℹ️  rea MCP disabled (reverse pack not installed: ./install.sh --with reverse)."
+      fi
+    elif rea_msg="$("$BIN/oc-rea-mcp" --check 2>&1)"; then
       if mcp_state enable rea; then
         echo "✅ rea MCP (REA 6.8.0) enabled: Node ${OC_REA_NODE_VERSION:-$(node -p 'process.versions.node')} is suitable"
       fi
     else
-      if mcp_state disable rea "Node too old for REA: remove this line after updating Node"; then
+      if mcp_disable rea "Node too old for REA: remove this line after updating Node"; then
         echo "ℹ️  rea MCP disabled: $(printf '%s' "$rea_msg" | head -n 1)"
       fi
       echo "    Update Node (mise use -g node@26.12.1) then rerun ./install.sh --no-tools: the reverse-engineer agent will use the CLI meanwhile."
@@ -866,12 +1072,12 @@ config_phase() {
         echo "✅ mobile MCP (mobile-mcp 1.0.15) enabled (adb from the Podman emulator)"
       fi
     else
-      if mcp_state disable mobile "Android module not installed (./install.sh --android) or Podman missing"; then :; fi
+      if mcp_disable mobile "Android module not installed (./install.sh --android) or Podman missing"; then :; fi
       if [ "$ANDROID" = 1 ]; then warn "mobile MCP disabled: Podman not found. → $(pkg_hint podman)"; fi
     fi
   fi
 
-  # semgrep MCP: requires uv (uvx) or pipx; otherwise disabled cleanly.
+  # semgrep MCP: mandatory, but requires uv (uvx) or pipx; otherwise disabled cleanly.
   # --check is a REAL MCP handshake (it may download ~50 MB on first run):
   # reserved for tools installation. With --no-tools, --check-quick only checks for
   # uvx/pipx without starting a process or touching the network.
@@ -886,11 +1092,16 @@ config_phase() {
         fi
       fi
     else
-      if mcp_state disable semgrep "uv (uvx) and pipx missing: remove this line after installing either one"; then
+      if mcp_disable semgrep "uv (uvx) and pipx missing: remove this line after installing either one"; then
         echo "ℹ️  semgrep MCP disabled: install uv (curl -LsSf https://astral.sh/uv/install.sh | sh), already required for MemPalace."
       fi
     fi
   fi
+
+  # Remembered profile/packs: written inside the transactional phase (mode 600) and rolled back
+  # with the rest of $DEST if the configuration phase fails.
+  printf 'profile=%s\npacks=%s\n' "$PROFILE" "$packs_csv" > "$DEST/.opencode-prerequisites.profile"
+  chmod 600 "$DEST/.opencode-prerequisites.profile"
 
   # Customizations: keep the user's version and write the final kit version
   # (after lightweight profile / Android / MCPs) to .new. The manifest records this kit
@@ -941,7 +1152,8 @@ fi
 : > "$DEST/.opencode-prerequisites.installed"
 chmod 600 "$DEST/.opencode-prerequisites.installed"
 secure_tree "$DEST"
-echo "✅ Config installed in $DEST; launchers (agent-wt, oc-new-rust, oc-new-android, oc-models, oc-deps, oc-playwright-mcp, oc-uiux-search, oc-impeccable, oc-chrome-devtools-mcp, oc-terraform-mcp, oc-rea-mcp, oc-semgrep-mcp, oc-versions) in $BIN"
+echo "✅ Config installed in $DEST; launchers (agent-wt, oc-new-rust, oc-new-android, oc-new-web, oc-models, oc-deps, oc-backup, oc-restore, oc-usage, oc-playwright-mcp, oc-uiux-search, oc-impeccable, oc-chrome-devtools-mcp, oc-terraform-mcp, oc-rea-mcp, oc-semgrep-mcp, oc-versions) in $BIN"
+echo "ℹ️  Profile: $PROFILE (packs: $PACKS_CSV)"
 
 # 4. Pentest/appsec tools (--pentest option) — best-effort, like the other tools.
 if [ "$PENTEST" = 1 ]; then

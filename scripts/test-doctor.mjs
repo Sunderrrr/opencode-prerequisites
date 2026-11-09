@@ -10,6 +10,7 @@ import os from "node:os"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
 import { fileURLToPath, pathToFileURL } from "node:url"
+import { parseJsonc } from "./lib/jsonc.mjs"
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const DOCTOR = path.join(ROOT, "scripts/doctor.mjs")
@@ -57,7 +58,7 @@ const baseEnv = {
   HOME: home,
   OPENCODE_CONFIG_DIR: cfg,
   OBSCURA_BIN_DIR: fakeBin, // already in PATH: no PATH warning
-  PATH: [fakeBin, path.dirname(process.execPath), "/usr/bin", "/bin"].join(path.delimiter),
+  PATH: [path.dirname(process.execPath), fakeBin, "/usr/bin", "/bin"].join(path.delimiter),
   XDG_CONFIG_HOME: path.join(home, ".config"),
   GH_CONFIG_DIR: path.join(home, "config", "gh"),
   FAKE_OC_CONFIG: ocConfigOut,
@@ -154,6 +155,109 @@ check("doctor.sh --offline: code 0 on a healthy config, offline banner",
 setConfig({ jsonc: '{\n  "default_agent": "ceo",\n', ocJson: "{}" })
 r = runDoctor({ args: ["--offline"], shell: true, env: { OC_DOCTOR_OFFLINE: "" } })
 check("doctor.sh --offline: propagates code 1 from a broken config", r.status === 1, `code ${r.status}`)
+
+// ---------- 7. --fix: re-enable a kit-disabled MCP when its prerequisite is back ----------
+const cfgFile = path.join(cfg, "opencode.jsonc")
+const fakeUvxDir = path.join(tmp, "uvxbin")
+write(path.join(fakeUvxDir, "uvx"), "#!/bin/sh\nexit 0\n")
+// PATH without uv/uvx/pipx: deterministic "prerequisite missing" even on a CI image that ships uv.
+const noUvx = path.join(tmp, "no-uvx")
+fs.mkdirSync(noUvx)
+for (const dir of baseEnv.PATH.split(path.delimiter)) {
+  let names = []
+  try { names = fs.readdirSync(dir) } catch { continue }
+  for (const n of names) if (!["uv", "uvx", "pipx"].includes(n) && !fs.existsSync(path.join(noUvx, n))) {
+    try { fs.symlinkSync(path.join(dir, n), path.join(noUvx, n)) } catch { /* ignored */ }
+  }
+}
+const withUvx = [fakeUvxDir, noUvx, fakeBin].join(path.delimiter)
+const withoutUvx = [noUvx, fakeBin].join(path.delimiter)
+const tightTree = (dir) => {
+  fs.chmodSync(dir, 0o700)
+  for (const e of fs.readdirSync(dir)) {
+    const p = path.join(dir, e)
+    const st = fs.lstatSync(p)
+    if (st.isDirectory()) tightTree(p)
+    else if (st.isFile()) fs.chmodSync(p, 0o600)
+  }
+}
+const backups = () => fs.readdirSync(cfg).filter((n) => n.includes(".bak-doctor-"))
+const disabledLines = (text) => (text.match(/^\s*"disabled"\s*:\s*true\b.*$/gm) ?? []).length
+const SEMGREP_OFF = `{
+  "default_agent": "ceo",
+  "mcp": { "servers": {
+    "semgrep": {
+      "type": "local",
+      "command": ["${fakeBin}/oc-semgrep-mcp", "--stdio"],
+      "disabled": true // install.sh: uv (uvx) and pipx missing
+    }
+  } }
+}
+`
+
+setConfig({ jsonc: SEMGREP_OFF })
+tightTree(cfg)
+const semgrepBefore = read(cfgFile)
+r = runDoctor({ args: ["--fix"], env: { PATH: withUvx } })
+const semgrepAfter = read(cfgFile)
+const semgrepBackups = backups()
+check("--fix: semgrep re-enabled when its prerequisite (uvx) is present",
+  r.status === 0 && parseJsonc(semgrepAfter).mcp.servers.semgrep.disabled === undefined && disabledLines(semgrepAfter) === 0,
+  `code ${r.status} | ${r.stdout + r.stderr}`)
+check("--fix: exactly one disabled line removed, rest of the file byte-identical",
+  semgrepAfter === semgrepBefore.split("\n").filter((l) => !/^\s*"disabled"\s*:\s*true\b/.test(l)).join("\n"),
+  `${semgrepBefore.split("\n").length} → ${semgrepAfter.split("\n").length} lines`)
+check("--fix: opencode.jsonc backed up before the edit (same bytes, mode 600)",
+  semgrepBackups.length === 1 && read(path.join(cfg, semgrepBackups[0])) === semgrepBefore
+  && (fs.statSync(path.join(cfg, semgrepBackups[0])).mode & 0o777) === 0o600,
+  semgrepBackups.join(", "))
+check("--fix: summary fixed: 1, skipped: 0", /fixed: 1, skipped: 0/.test(r.stdout), r.stdout.slice(-300))
+
+// ---------- 8. --fix: no prerequisite → config unchanged ----------
+setConfig({ jsonc: SEMGREP_OFF })
+tightTree(cfg)
+const noPrereqBefore = read(cfgFile)
+r = runDoctor({ args: ["--fix"], env: { PATH: withoutUvx } })
+check("--fix without prerequisite: config byte-identical, no backup, semgrep still disabled",
+  r.status === 0 && read(cfgFile) === noPrereqBefore && backups().length === 0 && disabledLines(read(cfgFile)) === 1,
+  `code ${r.status} | ${r.stdout + r.stderr}`)
+check("--fix without prerequisite: counted as skipped with the exact install command",
+  /fixed: 0, skipped: 1/.test(r.stdout) && /semgrep: prerequisite still missing/.test(r.stdout) && /astral\.sh\/uv\/install\.sh/.test(r.stdout),
+  r.stdout.slice(-400))
+
+// ---------- 9. --fix --dry-run: reports, writes nothing ----------
+setConfig({ jsonc: SEMGREP_OFF })
+fs.chmodSync(cfg, 0o755); fs.chmodSync(cfgFile, 0o644)
+const dryBefore = read(cfgFile)
+r = runDoctor({ args: ["--fix", "--dry-run"], env: { PATH: withUvx } })
+check("--dry-run: config and permissions untouched, no backup",
+  r.status === 0 && read(cfgFile) === dryBefore && backups().length === 0
+  && (fs.statSync(cfg).mode & 0o777) === 0o755 && (fs.statSync(cfgFile).mode & 0o777) === 0o644,
+  `dir ${(fs.statSync(cfg).mode & 0o777).toString(8)} | file ${(fs.statSync(cfgFile).mode & 0o777).toString(8)}`)
+check("--dry-run: announces the MCP fix, the permission fix and that nothing was written",
+  /would fix: re-enable MCP semgrep/.test(r.stdout) && /would fix: permissions tightened/.test(r.stdout)
+  && /Dry run: nothing was written/.test(r.stdout) && /fixed: 2, skipped: 0/.test(r.stdout),
+  r.stdout.slice(-500))
+
+// ---------- 10. default mode: still strictly read-only ----------
+setConfig({ jsonc: SEMGREP_OFF })
+fs.chmodSync(cfg, 0o755); fs.chmodSync(cfgFile, 0o644)
+const roBefore = read(cfgFile)
+r = runDoctor({ env: { PATH: withUvx } })
+check("default mode: no write, no backup, permissions untouched, no fix summary",
+  r.status === 0 && read(cfgFile) === roBefore && backups().length === 0
+  && (fs.statSync(cfg).mode & 0o777) === 0o755 && (fs.statSync(cfgFile).mode & 0o777) === 0o644
+  && !/fixed: \d+, skipped: \d+/.test(r.stdout),
+  r.stdout.slice(-300))
+
+// ---------- 11. --fix: config tree permissions tightened to 700/600 ----------
+setConfig({ jsonc: '{\n  "default_agent": "ceo",\n  "mcp": { "servers": {} }\n}\n' })
+fs.chmodSync(cfg, 0o755); fs.chmodSync(cfgFile, 0o644)
+r = runDoctor({ args: ["--fix"], env: { PATH: withoutUvx } })
+check("--fix: config directory 700 and opencode.jsonc 600",
+  r.status === 0 && (fs.statSync(cfg).mode & 0o777) === 0o700 && (fs.statSync(cfgFile).mode & 0o777) === 0o600,
+  `dir ${(fs.statSync(cfg).mode & 0o777).toString(8)} | file ${(fs.statSync(cfgFile).mode & 0o777).toString(8)}`)
+check("--fix: permissions counted as one fix", /fixed: 1, skipped: 0/.test(r.stdout), r.stdout.slice(-300))
 
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log(failed ? `\n❌ ${failed} check(s) failed` : `\n✅ offline doctor OK (${passed} checks)`)
