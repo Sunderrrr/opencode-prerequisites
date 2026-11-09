@@ -96,8 +96,9 @@ Model routing is explicit on every call: **haiku** for reading and mechanical wo
 
 - **No agent of this kind existed** in the collections we looked at (VoltAgent: nothing on reverse engineering or malware). REA only provides a skill, used as-is in `config/skills/reverse-engineer-anything/` (MIT license kept, see `UPSTREAM.md`); the agent is the kit's own.
 - **Legal scope**, taken from [REA's DISCLAIMER](https://github.com/morluto/rea/blob/main/DISCLAIMER.md) and written into the agent: your own software, CTFs, malware under defensive analysis, interoperability, authorized research. It **refuses** to bypass licenses, DRM or anti-cheat, to make cheats, to bypass the authentication of an unauthorized system, to copy protected code, or to create malware/exploits against third parties. Unknown samples are never executed on your machine.
-- **Node required: ≥ 26.12.1** (or 24.22.1 / 22.23.4). If your version is older, the installer disables the MCP (`"disabled": true`) and the agent uses the `npx -y rea-agents@6.8.0 …` CLI; update Node (`mise use -g node@26.12.1`) then rerun `./install.sh --no-tools`. `oc-rea-mcp --check` tests your version.
+- **Node required: ≥ 26.12.1** (or 24.22.1 / 22.23.4). If your version is older, the installer disables the MCP (`"disabled": true`) and the agent uses the `oc-rea` CLI (same `npx -y rea-agents@6.8.0` pin); update Node (`mise use -g node@26.12.1`) then rerun `./install.sh --no-tools`. `oc-rea --check` / `oc-rea-mcp --check` test your version without downloading anything.
 - The MCP's ~229 tools are only visible to this agent (`rea_*` rule in `opencode.jsonc`), to avoid weighing down the other sessions. Ghidra, IDA and Hopper are not installed by the kit: REA uses the ones already present. Never use `rea setup`: the configuration is managed by the kit.
+- **Installable CLI**: `oc-rea` exposes the same toolset from a terminal (`oc-rea --version`, `oc-rea analyze-javascript-application /path --json`); the first run downloads the pinned package through `npx`. Full details, legal scope and troubleshooting: [docs/rea.md](docs/rea.md).
 
 ## Securing your apps (pentest agent, real tools installed on the machine)
 
@@ -232,6 +233,7 @@ The kit is validated by script (`validate-kit.mjs`), by the **official OpenCode 
 - [docs/evals.md](docs/evals.md): agent evals (`scripts/eval.mjs`), the three tasks, objective checks, quota and the harness tests.
 - [docs/windows.md](docs/windows.md): native Windows (config-only), `install.ps1`, `.cmd` shims, `doctor.ps1`, and what still needs WSL2.
 - [docs/claude-code.md](docs/claude-code.md): `oc-export-claude`, model routing, fixed variants and the project `.mcp.json`.
+- [docs/rea.md](docs/rea.md): the reverse pack, REA legal scope, `oc-rea` CLI, MCP, skill, optional native engines and troubleshooting.
 - [ROADMAP.md](ROADMAP.md): shipped and verified, open work, out of scope.
 - [CHANGELOG.md](CHANGELOG.md): what changes on `main` (Keep a Changelog, SemVer, v1.0.0 tagged and signed).
 - [SECURITY.md](SECURITY.md): reporting a vulnerability through a private advisory, security scope.

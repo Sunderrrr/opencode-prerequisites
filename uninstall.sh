@@ -60,7 +60,7 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.zshenv"; do
   ' "$rc" > "$tmp" && cat "$tmp" > "$rc" && echo "🧹 opencode-prerequisites block removed from $rc"
   rm -f "$tmp"
 done
-rm -f "$BIN/mempalace" "$BIN/agent-wt" "$BIN/oc-new-rust" "$BIN/oc-new-android" "$BIN/oc-new-web" "$BIN/oc-models" "$BIN/oc-deps" "$BIN/oc-backup" "$BIN/oc-restore" "$BIN/oc-usage" "$BIN/oc-secrets" "$BIN/oc-playwright-mcp" "$BIN/oc-chrome-devtools-mcp" "$BIN/oc-uiux-search" "$BIN/oc-impeccable" "$BIN/oc-terraform-mcp" "$BIN/oc-rea-mcp" "$BIN/oc-semgrep-mcp" "$BIN/oc-android" "$BIN/oc-mobile-mcp" "$BIN/oc-versions" "$BIN/oc-export-claude" && echo "🧹 kit launchers removed from $BIN"
+rm -f "$BIN/mempalace" "$BIN/agent-wt" "$BIN/oc-new-rust" "$BIN/oc-new-android" "$BIN/oc-new-web" "$BIN/oc-models" "$BIN/oc-deps" "$BIN/oc-backup" "$BIN/oc-restore" "$BIN/oc-usage" "$BIN/oc-secrets" "$BIN/oc-playwright-mcp" "$BIN/oc-chrome-devtools-mcp" "$BIN/oc-uiux-search" "$BIN/oc-impeccable" "$BIN/oc-terraform-mcp" "$BIN/oc-rea" "$BIN/oc-rea-mcp" "$BIN/oc-semgrep-mcp" "$BIN/oc-android" "$BIN/oc-mobile-mcp" "$BIN/oc-versions" "$BIN/oc-export-claude" && echo "🧹 kit launchers removed from $BIN"
 rm -f "$DEST/.opencode-prerequisites.android" 2>/dev/null || true
 rm -f "$DEST/.opencode-prerequisites.pentest" 2>/dev/null || true
 rm -f "$DEST/.opencode-prerequisites.profile" 2>/dev/null || true

@@ -36,6 +36,8 @@ jobs:
         run: node scripts/test-deps.mjs
       - name: "chrome-devtools MCP launcher (fake npx/browsers: resolution order, exact pin, telemetry off, doctor)"
         run: node scripts/test-chrome-devtools.mjs
+      - name: "REA integration (pinned CLI/MCP, Node gate, skill, docs, doctor)"
+        run: node scripts/test-rea.mjs
       - name: "ui-ux-pro-max skill and oc-uiux-search (vendored files, path rewrites, offline search)"
         run: node scripts/test-uiux.mjs
       - name: Local plugins (functional test with a fake OpenCode v2 context)
@@ -180,6 +182,8 @@ jobs:
         run: node scripts/test-deps.mjs
       - name: "chrome-devtools MCP launcher (fake npx/browsers, no Chrome, no network)"
         run: node scripts/test-chrome-devtools.mjs
+      - name: "REA integration (pinned CLI/MCP, Node gate, skill, docs, doctor)"
+        run: node scripts/test-rea.mjs
       - name: "ui-ux-pro-max skill and oc-uiux-search (vendored files, offline search)"
         run: node scripts/test-uiux.mjs
       - name: oc-models (per-agent model selection, survives updates)

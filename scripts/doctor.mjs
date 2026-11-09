@@ -23,6 +23,13 @@ const HOME = os.homedir()
 const DEST = process.env.OPENCODE_CONFIG_DIR || path.join(HOME, ".config", "opencode")
 const BIN = process.env.OBSCURA_BIN_DIR || path.join(HOME, ".local", "bin")
 const env = { ...process.env, PATH: `${BIN}${path.delimiter}${process.env.PATH}` }
+// Selected packs (installer marker): pack-specific checks run only when the pack is installed.
+let packs = []
+try {
+  const m = fs.readFileSync(path.join(DEST, ".opencode-prerequisites.profile"), "utf8").match(/^packs=(.*)$/m)
+  packs = m ? m[1].split(",").map((s) => s.trim()).filter(Boolean) : []
+} catch { /* no marker: no pack-specific check */ }
+const hasPack = (p) => packs.includes(p)
 let bad = 0, warned = 0
 const ok = (m) => console.log(`✅ ${m}`)
 const ko = (m) => { bad++; console.log(`❌ ${m}`) }
@@ -182,6 +189,15 @@ for (const [name, m] of Object.entries(mcpServers(cfg))) {
   const exists = path.isAbsolute(bin) ? fs.existsSync(bin) : has(bin)
   if (!exists) { ko(`${name}: "${bin}" not found${path.isAbsolute(bin) ? " (run ./install.sh)" : ""}`); continue }
 
+  if (bin.endsWith("oc-rea-mcp")) {
+    // --check is local: it only validates the Node version REA requires, no npx, no download.
+    const r = run(bin, ["--check"], 20000)
+    const detail = squash(r.stderr || r.stdout, 6)
+    r.status === 0
+      ? ok(`${name}: Node ${process.versions.node} suitable (REA MCP ready)`)
+      : ko(`${name}: ${detail || `--check failed (code ${r.status})`}`)
+    continue
+  }
   if (bin.endsWith("oc-terraform-mcp") || bin === "docker") {
     const installed = ["docker", "podman"].filter(has)
     if (!installed.length) { ko(`${name}: neither docker nor podman installed`); continue }
@@ -234,6 +250,39 @@ for (const [name, m] of Object.entries(mcpServers(cfg))) {
     continue
   }
   ok(`${name}: ${bin} available`)
+}
+
+// REA (reverse pack): CLI launcher, real --version (cache or download), optional native engines.
+// The MCP launcher itself is checked by the enabled-MCP loop above; this section adds the CLI
+// and never treats a missing Ghidra/IDA/Hopper as an error (REA uses the engines already installed).
+if (hasPack("reverse")) {
+  console.log("\nREA (reverse pack):")
+  const reaCli = path.join(BIN, "oc-rea")
+  const reaMcp = path.join(BIN, "oc-rea-mcp")
+  const missing = [reaCli, reaMcp].filter((f) => !fs.existsSync(f))
+  if (missing.length) ko(`${missing.join(", ")} not found: run ./install.sh --no-tools`)
+  else {
+    const gate = run(reaCli, ["--check"], 20000)
+    if (gate.status !== 0) {
+      wa(`oc-rea not ready: ${squash(gate.stderr || gate.stdout, 4) || `--check failed (code ${gate.status})`}`)
+    } else {
+      ok("oc-rea ready (Node is suitable)")
+      if (OFFLINE) console.log("   (oc-rea --version not run: offline mode; the first run downloads rea-agents)")
+      else {
+        const ms = Number(process.env.OC_DOCTOR_REA_TIMEOUT_MS || 60000)
+        const r = run(reaCli, ["--version"], ms)
+        const out = ((r.stdout || "").trim().split("\n").pop() || "").trim()
+        r.status === 0
+          ? ok(`oc-rea --version: ${out || "OK"}`)
+          : wa(`oc-rea --version did not answer (${r.status === null ? `timeout after ${Math.round(ms / 1000)}s` : `code ${r.status}`}): the first run downloads rea-agents, run oc-rea --version once`)
+      }
+    }
+  }
+  const engines = [["Ghidra", ["ghidra", "analyzeHeadless"]], ["IDA", ["ida", "ida64", "idat", "idat64"]], ["Hopper", ["hopper", "Hopper"]]]
+    .map(([label, names]) => [label, names.find(has)]).filter(([, exe]) => exe)
+  engines.length
+    ? ok(`native engines: ${engines.map(([label, exe]) => `${label} (${exe})`).join(", ")}`)
+    : wa("no Ghidra/IDA/Hopper found: static JavaScript/.NET/APK analysis works; native engines are optional (REA uses the ones installed)")
 }
 
 // Android module (--android option): Podman toolchain

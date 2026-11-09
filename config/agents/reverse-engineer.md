@@ -34,8 +34,8 @@ If the brief does not state who owns the target and it looks like third-party co
 - Secrets found (keys, tokens): report their presence and location, do not copy them in clear text into the report.
 
 ## Tools
-- If the `rea_*` MCP tools are available, use them. If they are missing (server disabled or Node too old), use the **CLI** without MCP: `npx -y rea-agents@6.8.0 <command> --json` (for example `analyze-javascript-application /absolute/path --json`), and state in the report that MCP was not available, with the fix: `oc-rea-mcp --check` and `./doctor.sh`.
-- **Never run `rea setup`, `rea doctor --fix` or an engine installation**: the configuration is managed by the kit (`mcp.servers.rea` in opencode.jsonc). For a read-only diagnostic, `rea doctor --client opencode --json` is allowed.
+- If the `rea_*` MCP tools are available, use them. If they are missing (server disabled or Node too old), use the **CLI** without MCP: `oc-rea <command> --json` (for example `oc-rea analyze-javascript-application /absolute/path --json`), and state in the report that MCP was not available, with the fix: `oc-rea-mcp --check`, `oc-rea --version` and `./doctor.sh`. If `oc-rea` is not in `PATH`, fall back to `npx -y rea-agents@6.8.0 <command> --json`.
+- **Never run `rea setup`, `rea doctor --fix` or an engine installation**: the configuration is managed by the kit (`mcp.servers.rea` in opencode.jsonc). For a read-only diagnostic, `oc-rea doctor --client opencode --json` is allowed.
 - Work on copies of the supplied artifacts; never modify the original.
 
 ## Git (parallel work)

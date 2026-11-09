@@ -24,7 +24,7 @@ Status as of 2026-11-09. Version 1.0.1 (`VERSION`); v1.0.0 is tagged and signed,
 - Windows CI (`.github/workflows/ci-windows.yml`): `windows-latest` runs validation, plugins and the full PowerShell suite; `ubuntu-24.04` runs the helpers-only suite with PowerShell 7.
 - Nightly CI (`.github/workflows/ci-nightly.yml`): cron `03:17`, real `--pentest` installation on Ubuntu 24.04, checks for the tools, MemPalace, `oc-semgrep-mcp --check` and `doctor.sh --offline`.
 - Supply chain and releases: textual guard, pinned versions, sha256 of downloaded binaries, Renovate custom managers (`.github/renovate.json`) for `install.sh` pins, launchers, `opencode.jsonc`, workflow actions/images and the Android `Containerfile`; `VERSION` 1.0.1 and `./install.sh --version`; v1.0.0 is tagged and signed.
-- Modules: Android (Podman), pentest, reverse engineering (REA), memory (MemPalace).
+- Modules: Android (Podman), pentest, reverse engineering (REA, see [docs/rea.md](docs/rea.md)), memory (MemPalace).
 
 ## Open work
 
