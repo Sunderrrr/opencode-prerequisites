@@ -13,13 +13,17 @@ Format [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning [Sem
 - Packs and profiles: `profiles/packs.tsv`, `--profile core|full|lite`, `--with`/`--without`, `--no-pack`, remembered profile; core and lite derived by `scripts/make-lite.mjs`.
 - Operational tools: `oc-backup` (timestamped archive, sha256 sidecar, last 5 kept), `oc-restore`, `oc-usage`; `oc-deps update` (`--dry-run` by default, `--write --yes` with timestamped backups); `doctor.sh --fix` and `--fix --dry-run`.
 - Web generator: `oc-new-web` and `templates/web-project/` (Vite, React, TypeScript, Tailwind CSS v4, design tokens, Playwright smoke tests); `scripts/test-new-web.mjs` (116 checks).
+- Real Chrome session: `scripts/test-chrome-devtools-live.mjs` drives the pinned `chrome-devtools-mcp` against the Chrome/Chromium binary resolved by `oc-chrome-devtools-mcp` (JSON-RPC initialize, tools/list, page, snapshot, PNG screenshot); the hermetic `scripts/test-chrome-devtools.mjs` stays at 14 checks.
+- Android E2E harness: `scripts/e2e-android.sh` (doctor, KVM emulator boot, project generation, `assembleDebug`, `installDebug`, launch, empty `AndroidRuntime:E` logcat, PNG screenshot), `.github/workflows/ci-android-e2e.yml` for a self-hosted `[self-hosted, linux, x64, kvm]` runner, `docs/android-e2e.md`.
+- Installed pin record: `install.sh` writes `<config>/versions.json` (mode 600) so `oc-deps check` reads the `OC_*_VERSION` pins and launcher pins outside the repository; intentional pins (pydantic and setuptools for `semgrep-mcp`) are reported as `intentional`, never drift and never rewritten; `scripts/test-deps.mjs` (50 checks).
+- `oc-secrets` (`config/bin/oc-secrets`): file-backed secrets (`set` from stdin, `get`, `list`, `rm`, `export`, `check`), mode 700/600, names `[A-Z0-9_]+`; `scripts/test-secrets.mjs` (30 checks), `docs/secrets.md`. The file backend is not encrypted at rest; OS keyring integration remains open.
 - `VERSION` 1.0.0 and `./install.sh --version`.
 - Renovate custom managers (`.github/renovate.json`) for `install.sh` pins, launchers, `opencode.jsonc`, workflow actions/images and the Android `Containerfile`.
 
 #### Changed
 
 - CI diet: pull requests run 3 distributions (Arch, Debian 12, Rocky 9), pushes to `main` run all 7; `concurrency` cancels outdated runs; new steps for ops tools (`scripts/test-ops.mjs`, 47 checks), the web generator and the Claude Code export.
-- README, ROADMAP and CHANGELOG document packs, operational tools, the web generator, `VERSION`, Renovate, Claude Code and native Windows.
+- README, ROADMAP and CHANGELOG document packs, operational tools, the web generator, `VERSION`, Renovate, Claude Code, native Windows, `oc-secrets`, the Chrome live test, the Android E2E harness and the installed pin record.
 
 #### Fixed
 

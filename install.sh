@@ -1071,7 +1071,7 @@ config_phase() {
   if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"mobile": {' "$DEST/opencode.jsonc"; then
     if [ "$ANDROID" = 1 ] && "$BIN/oc-mobile-mcp" --check >/dev/null 2>&1; then
       if mcp_state enable mobile; then
-        echo "✅ mobile MCP (mobile-mcp 1.0.15) enabled (adb from the Podman emulator)"
+        echo "✅ mobile MCP (mobile-mcp 1.0.16) enabled (adb from the Podman emulator)"
       fi
     else
       if mcp_disable mobile "Android module not installed (./install.sh --android) or Podman missing"; then :; fi
@@ -1099,6 +1099,13 @@ config_phase() {
       fi
     fi
   fi
+
+  # Installed pin record (mode 600): outside the repository install.sh is not copied, so
+  # oc-deps reads <config>/versions.json to check the 8 OC_*_VERSION pins and the launcher
+  # pins instead of skipping them. Deterministic content (no timestamp): a reinstall is
+  # byte-identical, and the file is rolled back with the rest of $DEST on failure.
+  node "$HERE/config/libexec/oc-deps.mjs" snapshot > "$TMP/versions.json"
+  install -m 0600 "$TMP/versions.json" "$DEST/versions.json"
 
   # Remembered profile/packs: written inside the transactional phase (mode 600) and rolled back
   # with the rest of $DEST if the configuration phase fails.
@@ -1154,7 +1161,7 @@ fi
 : > "$DEST/.opencode-prerequisites.installed"
 chmod 600 "$DEST/.opencode-prerequisites.installed"
 secure_tree "$DEST"
-echo "✅ Config installed in $DEST; launchers (agent-wt, oc-new-rust, oc-new-android, oc-new-web, oc-models, oc-deps, oc-backup, oc-restore, oc-usage, oc-playwright-mcp, oc-uiux-search, oc-impeccable, oc-chrome-devtools-mcp, oc-terraform-mcp, oc-rea-mcp, oc-semgrep-mcp, oc-versions, oc-export-claude) in $BIN"
+echo "✅ Config installed in $DEST; launchers (agent-wt, oc-new-rust, oc-new-android, oc-new-web, oc-models, oc-deps, oc-backup, oc-restore, oc-usage, oc-secrets, oc-playwright-mcp, oc-uiux-search, oc-impeccable, oc-chrome-devtools-mcp, oc-terraform-mcp, oc-rea-mcp, oc-semgrep-mcp, oc-versions, oc-export-claude) in $BIN"
 echo "ℹ️  Profile: $PROFILE (packs: $PACKS_CSV)"
 
 # 4. Pentest/appsec tools (--pentest option) — best-effort, like the other tools.

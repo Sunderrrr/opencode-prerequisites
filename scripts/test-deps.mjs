@@ -30,11 +30,12 @@ for (const key of ["OC_VERSIONS_TTL", "OC_VERSIONS_CACHE", "OC_VERSIONS_FIXTURES
   delete baseEnv[key]
 }
 
-const run = (args, { cache, fixtures = FIX, ttl, tool = TOOL } = {}) => {
+const run = (args, { cache, fixtures = FIX, ttl, tool = TOOL, bin } = {}) => {
   const env = { ...baseEnv }
   if (cache) env.OC_VERSIONS_CACHE = cache
   if (fixtures) env.OC_VERSIONS_FIXTURES = fixtures
   if (ttl !== undefined) env.OC_VERSIONS_TTL = String(ttl)
+  if (bin) env.OBSCURA_BIN_DIR = bin
   return spawnSync(process.execPath, [tool, ...args], { encoding: "utf8", env, timeout: 30_000 })
 }
 
@@ -60,23 +61,42 @@ const fixtureInstall = () => path.join(UPDATE_REPO, "install.sh")
 const fixtureInstallText = () => fs.readFileSync(fixtureInstall(), "utf8")
 const backupFiles = () => fs.readdirSync(UPDATE_REPO).filter((f) => /^install\.sh\.bak-/.test(f))
 
+// Fake installed config: <config>/libexec + versions.json, no install.sh and no launchers.
+// This is what oc-deps sees after install.sh copied the kit outside its repository.
+const EMPTY_BIN = path.join(TMP, "empty-bin")
+fs.mkdirSync(EMPTY_BIN, { recursive: true })
+const INSTALLED = path.join(TMP, "installed")
+const INSTALLED_TOOL = path.join(INSTALLED, "libexec", "oc-deps.mjs")
+const INSTALLED_PINS = path.join(INSTALLED, "versions.json")
+const makeInstalledConfig = () => {
+  fs.rmSync(INSTALLED, { recursive: true, force: true })
+  fs.mkdirSync(path.join(INSTALLED, "libexec"), { recursive: true })
+  fs.copyFileSync(TOOL, INSTALLED_TOOL)
+  fs.copyFileSync(path.join(ROOT, "config", "libexec", "oc-versions.mjs"),
+    path.join(INSTALLED, "libexec", "oc-versions.mjs"))
+  const snap = spawnSync(process.execPath, [TOOL, "snapshot"], { encoding: "utf8", env: baseEnv, timeout: 30_000 })
+  if (snap.status !== 0) throw new Error(`snapshot failed: ${snap.stderr}`)
+  fs.writeFileSync(INSTALLED_PINS, snap.stdout, { mode: 0o600 })
+  fs.chmodSync(INSTALLED_PINS, 0o600)
+}
+
 // Versions published "by default": equal to the current pins (except the v prefix of GitHub tags).
 const LATEST = {
   npm: {
     "playwright": "1.64.1",
     "skills": "1.7.6",
-    "kubernetes-mcp-server": "0.1.1",
+    "kubernetes-mcp-server": "0.1.2",
     "@playwright/mcp": "0.0.84",
     "chrome-devtools-mcp": "1.12.0",
     "rea-agents": "6.8.0",
-    "@mobilenext/mobile-mcp": "1.0.15",
+    "@mobilenext/mobile-mcp": "1.0.16",
   },
   pypi: {
     "mempalace": "3.11.0",
     "semgrep": "1.183.0",
     "semgrep-mcp": "0.9.0",
-    "pydantic": "2.11.10",
-    "setuptools": "80.10.2",
+    "pydantic": "2.14.3",
+    "setuptools": "84.2.1",
   },
   github: {
     "aquasecurity/trivy": "v0.76.1",
@@ -129,7 +149,7 @@ const seedCache = (cache, eco, entries) => {
 // --- 1. all pins are read and everything is up to date --------------------
 resetFixtures()
 let r = run(["check"], { cache: freshCache("up") })
-check("all up to date: exit 0", r.status === 0, r.stdout + r.stderr)
+check("all pins read: exit 0 despite 2 intentional pins", r.status === 0, r.stdout + r.stderr)
 check("table: header package | pinned | latest | status",
   /^package\s+\|\s+pinned\s+\|\s+latest\s+\|\s+status\s*$/m.test(r.stdout), r.stdout)
 check("17 packages rendered (every pin in the kit)",
@@ -138,17 +158,22 @@ check("GitHub: tag v0.76.1 compared with pin 0.76.1",
   /aquasecurity\/trivy\s+\|\s+0\.76\.1\s+\|\s+v0\.76\.1\s+\|\s+up to date/.test(r.stdout), r.stdout)
 check("pin with a v prefix kept (Trivy plugin)",
   /aquasecurity\/trivy-plugin-mcp\s+\|\s+v0\.0\.20\s+\|\s+v0\.0\.20\s+\|\s+up to date/.test(r.stdout), r.stdout)
-check("summary: 17 up to date, no drift",
-  /17 packages · 17 up to date · 0 drift · 0 unknown/.test(r.stdout), r.stdout)
+check("summary: 15 up to date, no drift, 2 intentional",
+  /17 packages · 15 up to date · 0 drift · 0 unknown · 2 intentional/.test(r.stdout), r.stdout)
+check("intentional: pydantic and setuptools, with their reasons",
+  /pydantic\s+\|\s+2\.11\.10\s+\|\s+2\.14\.3\s+\|\s+intentional/.test(r.stdout)
+  && /setuptools\s+\|\s+80\.10\.2\s+\|\s+84\.2\.1\s+\|\s+intentional/.test(r.stdout)
+  && /intentional: pydantic 2\.11\.10 .*eval_type_backport/.test(r.stdout)
+  && /intentional: setuptools 80\.10\.2 .*pkg_resources/.test(r.stdout), r.stdout)
 
 // --- 2. drift detected ----------------------------------------------------
-resetFixtures({ "npm\u0000kubernetes-mcp-server": "0.1.2" })
+resetFixtures({ "npm\u0000kubernetes-mcp-server": "0.1.3" })
 r = run(["check", "--only", "kubernetes-mcp-server"], { cache: freshCache("drift") })
 check("drift: exit 1", r.status === 1, r.stdout + r.stderr)
 check("drift: pinned, latest and status on the same line",
-  /kubernetes-mcp-server\s+\|\s+0\.1\.1\s+\|\s+0\.1\.2\s+\|\s+drift/.test(r.stdout), r.stdout)
+  /kubernetes-mcp-server\s+\|\s+0\.1\.2\s+\|\s+0\.1\.3\s+\|\s+drift/.test(r.stdout), r.stdout)
 check("drift: summary shows 1 drift",
-  /1 packages · 0 up to date · 1 drift · 0 unknown/.test(r.stdout), r.stdout)
+  /1 packages · 0 up to date · 1 drift · 0 unknown · 0 intentional/.test(r.stdout), r.stdout)
 
 // --- 3. unknown package ---------------------------------------------------
 resetFixtures()
@@ -163,8 +188,13 @@ resetFixtures()
 r = run(["check", "--json"], { cache: freshCache("json-up") })
 let payload = jsonOf(r.stdout)
 check("--json: 17 results and a consistent summary",
-  r.status === 0 && payload?.results?.length === 17 && payload.summary.up_to_date === 17
-  && payload.summary.drift === 0 && payload.summary.unknown === 0, r.stdout + r.stderr)
+  r.status === 0 && payload?.results?.length === 17 && payload.summary.up_to_date === 15
+  && payload.summary.drift === 0 && payload.summary.unknown === 0
+  && payload.summary.intentional === 2, r.stdout + r.stderr)
+const pydantic = payload?.results?.find((x) => x.package === "pydantic")
+check("--json: intentional pin carries its reason",
+  pydantic?.status === "intentional" && pydantic.intentional === true
+  && /eval_type_backport/.test(pydantic.reason ?? ""), JSON.stringify(pydantic))
 const mcp = payload?.results?.find((x) => x.package === "@playwright/mcp")
 check("--json: package/pinned/latest/status/file/line fields",
   mcp?.pinned === "0.0.84" && mcp.latest === "0.0.84" && mcp.status === "up to date"
@@ -196,7 +226,29 @@ check("--json: structured unknown with detail",
   && payload.summary.unknown === 1 && /fixture not found/.test(payload.results[0].detail ?? ""),
   r.stdout + r.stderr)
 
-// --- 5. --offline: cache only, no fixture ---------------------------------
+// An intentional pin is never proposed for writing, even when a newer release exists.
+const beforeIntentional = fs.readFileSync(INSTALL_SH, "utf8")
+r = run(["update", "--only", "pydantic", "--dry-run"], { cache: freshCache("intentional-update") })
+check("intentional pin: update proposes nothing, exits 0",
+  r.status === 0 && /No proposed change/.test(r.stdout)
+  && fs.readFileSync(INSTALL_SH, "utf8") === beforeIntentional, r.stdout + r.stderr)
+
+// --- 5. snapshot: every pin recorded, deterministic (install.sh writes versions.json) ---
+resetFixtures()
+r = run(["snapshot"], { cache: freshCache("snapshot") })
+const snapshotText = r.stdout
+payload = jsonOf(r.stdout)
+check("snapshot: 17 pins, versions as pinned, no timestamp",
+  r.status === 0 && Object.keys(payload?.pins ?? {}).length === 17
+  && payload.pins.trivy === "0.76.1"
+  && payload.pins["@mobilenext/mobile-mcp"] === "1.0.16"
+  && payload.kit_version === fs.readFileSync(path.join(ROOT, "VERSION"), "utf8").trim()
+  && !/generated_at/.test(r.stdout), r.stdout + r.stderr)
+r = run(["snapshot"], { cache: freshCache("snapshot-again") })
+check("snapshot: byte-identical on a second run (idempotent install)",
+  r.status === 0 && r.stdout === snapshotText, r.stdout + r.stderr)
+
+// --- 6. --offline: cache only, no fixture ---------------------------------
 let cache = freshCache("offline")
 seedCache(cache, "github", { "aquasecurity/trivy": "v0.76.1" })
 resetFixtures({ "github\u0000aquasecurity/trivy": "v9.9.9" })
@@ -219,7 +271,7 @@ fs.writeFileSync(path.join(cache, "github.json"), JSON.stringify(old))
 r = run(["check", "--only", "trivy", "--offline"], { cache, fixtures: "" })
 check("--offline: old entry accepted", r.status === 0, r.stdout + r.stderr)
 
-// --- 6. --only and --ecosysteme -------------------------------------------
+// --- 7. --only and --ecosysteme -------------------------------------------
 resetFixtures()
 r = run(["check", "--only", "@playwright/mcp", "--json"], { cache: freshCache("only") })
 payload = jsonOf(r.stdout)
@@ -240,7 +292,7 @@ check("--ecosysteme maven: valid, zero packages", r.status === 0 && payload?.res
 r = run(["check", "--ecosysteme", "rubygems"], { cache: freshCache("eco-bad") })
 check("--ecosysteme invalid: exit 2", r.status === 2 && /unknown ecosystem/.test(r.stderr), r.stderr)
 
-// --- 7. --refresh forwarded to oc-versions --------------------------------
+// --- 8. --refresh forwarded to oc-versions --------------------------------
 cache = freshCache("refresh")
 seedCache(cache, "github", { "aquasecurity/trivy": "v0.76.1" })
 resetFixtures({ "github\u0000aquasecurity/trivy": "v0.77.0" })
@@ -253,7 +305,7 @@ check("--refresh: source queried again and drift seen",
   r.status === 1 && payload?.results?.[0]?.latest === "v0.77.0"
   && payload.results[0].status === "drift", r.stdout + r.stderr)
 
-// --- 8. --dry-run: proposed diff, no file modified -----------------------
+// --- 9. --dry-run: proposed diff, no file modified -----------------------
 resetFixtures({ "github\u0000aquasecurity/trivy": "v0.77.0" })
 const before = fs.readFileSync(INSTALL_SH, "utf8")
 r = run(["check", "--only", "trivy", "--dry-run"], { cache: freshCache("dry") })
@@ -263,7 +315,7 @@ check("--dry-run: proposed diff",
   && r.stdout.includes('+OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.77.0}"'), r.stdout + r.stderr)
 check("--dry-run: install.sh unchanged", fs.readFileSync(INSTALL_SH, "utf8") === before)
 
-// --- 9. update: dry-run, --yes guardrail, write + backup ------------------
+// --- 10. update: dry-run, --yes guardrail, write + backup ------------------
 resetFixtures({ "github\u0000aquasecurity/trivy": "v0.77.0" })
 makeUpdateRepo()
 let fixtureBefore = fixtureInstallText()
@@ -299,7 +351,37 @@ check("check remains read-only: drift reported, fixture unchanged",
   r.status === 1 && /0\.76\.1\s+\|\s+v0\.77\.0\s+\|\s+drift/.test(r.stdout)
   && fixtureInstallText() === fixtureBefore && backupFiles().length === 0, r.stdout + r.stderr)
 
-// --- 10. CLI, help and guardrails -----------------------------------------
+// --- 11. installed config: versions.json replaces the missing source files -----
+resetFixtures()
+makeInstalledConfig()
+r = run(["check", "--json"], { cache: freshCache("installed"), tool: INSTALLED_TOOL, bin: EMPTY_BIN })
+payload = jsonOf(r.stdout)
+check("installed: exit 0, 17 pins checked, none skipped",
+  r.status === 0 && payload?.results?.length === 17 && payload.skipped.length === 0
+  && payload.summary.up_to_date === 15 && payload.summary.intentional === 2,
+  r.stdout + r.stderr)
+const installedTrivy = payload?.results?.find((x) => x.id === "trivy")
+check("installed: install.sh pins read from versions.json (read-only)",
+  installedTrivy?.pinned === "0.76.1" && installedTrivy.readonly === true
+  && /versions\.json$/.test(installedTrivy.file ?? ""), JSON.stringify(installedTrivy))
+check("installed: no \"skipped (file missing)\" on stderr",
+  !/skipped \(file missing\)/.test(r.stderr), r.stderr)
+
+resetFixtures({ "github\u0000aquasecurity/trivy": "v0.77.0" })
+makeInstalledConfig()
+const installedBefore = fs.readFileSync(INSTALLED_PINS, "utf8")
+r = run(["check", "--only", "trivy", "--json"], { cache: freshCache("installed-drift"), tool: INSTALLED_TOOL, bin: EMPTY_BIN })
+payload = jsonOf(r.stdout)
+check("installed drift: exit 1, drift + read-only, no proposed replacement",
+  r.status === 1 && payload?.results?.[0]?.status === "drift"
+  && payload.results[0].readonly === true && payload.results[0].proposed_line === undefined
+  && /versions\.json$/.test(payload.results[0].file ?? ""), r.stdout + r.stderr)
+r = run(["update", "--only", "trivy", "--write", "--yes"], { cache: freshCache("installed-write"), tool: INSTALLED_TOOL, bin: EMPTY_BIN })
+check("installed update: never rewrites versions.json, exits 1",
+  r.status === 1 && /never rewrites versions\.json/.test(r.stdout)
+  && fs.readFileSync(INSTALLED_PINS, "utf8") === installedBefore, r.stdout + r.stderr)
+
+// --- 12. CLI, help and guardrails -----------------------------------------
 r = run([], { cache: freshCache("noargs") })
 check("no argument: exit 2 and usage", r.status === 2 && /missing command/.test(r.stderr), r.stderr)
 r = run(["fix"], { cache: freshCache("fix") })

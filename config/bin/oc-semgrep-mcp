@@ -10,12 +10,16 @@
 #
 # Pinned versions (no implicit @latest):
 #   semgrep-mcp 0.9.0 (latest on PyPI) publishes mcp==1.12.2 and semgrep==1.135.0.
-#   - mcp 1.12.2 imports pydantic._internal._typing_extra.eval_type_backport, removed in pydantic 2.12+:
+#   - INTENTIONAL PIN pydantic 2.11.10: mcp 1.12.2 imports
+#     pydantic._internal._typing_extra.eval_type_backport, removed in pydantic 2.12+:
 #     without the constraint, uv resolves pydantic 2.14.x and the server dies on ImportError.
-#   - semgrep 1.135.0 imports opentelemetry.instrumentation, which imports pkg_resources: setuptools 82+
-#     no longer ships pkg_resources (81 only prints a deprecation warning). Without it,
-#     `semgrep --version` fails in the uvx environment and the MCP server dies at startup
-#     ("Semgrep is not installed or not in your PATH").
+#   - INTENTIONAL PIN setuptools 80.10.2: semgrep 1.135.0 imports opentelemetry.instrumentation,
+#     which imports pkg_resources: setuptools 82+ no longer ships pkg_resources (81 only prints
+#     a deprecation warning). Without it, `semgrep --version` fails in the uvx environment and
+#     the MCP server dies at startup ("Semgrep is not installed or not in your PATH").
+#   Both pins are listed in oc-deps' intentional list (with the same reasons), so
+#   "oc-deps check" reports them as intentional instead of drift. Do not bump them
+#   without revalidating `oc-semgrep-mcp --check`.
 #
 # Python interpreter: pydantic 2.11.10 depends on pydantic-core 2.33.2, which has no wheel
 # for Python 3.14/3.15. With the default system Python, uv then tries a

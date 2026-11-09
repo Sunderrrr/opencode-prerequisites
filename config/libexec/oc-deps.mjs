@@ -6,10 +6,13 @@
 //   oc-deps check --ecosysteme npm --offline
 //   oc-deps check --dry-run
 //   oc-deps update --write --yes
+//   oc-deps snapshot > versions.json
 //
 // "check" is read-only. "update" without --write only prints the proposed diff.
 // "update --write --yes" backs up each modified file to <file>.bak-<timestamp>,
 // applies the pin replacements, then reruns "oc-deps check".
+// "snapshot" prints every pin as JSON: install.sh stores it in <config>/versions.json,
+// the only pin source available outside the repository (install.sh is not copied).
 //
 // Latest versions come from oc-versions (subprocess, same 24 h cache):
 // no network access of its own. Inherited variables: OC_VERSIONS_TTL, OC_VERSIONS_CACHE,
@@ -43,6 +46,7 @@ function usage() {
 Usage:
   oc-deps check [options]          read-only report
   oc-deps update [options]         propose changes; --write --yes applies them
+  oc-deps snapshot                 print every pin as JSON (install.sh writes versions.json)
 
 Options:
   --only <package>      limit to one package (name or id; repeatable, commas accepted)
@@ -60,6 +64,9 @@ check never writes. update without --write only prints the proposed diff;
 to <file>.bak-<timestamp>, then reruns "oc-deps check" and reports its exit code.
 "oc-deps fix" does not exist: use "oc-deps update".
 
+Pins listed as intentional (for example pydantic and setuptools, constrained by
+semgrep-mcp) are reported as "intentional", never as drift, and are never rewritten.
+
 Exit codes: 0 everything up to date · 1 drift or unknown · 2 usage or pin not
 found · the update --write --yes exit code is the one of the final check.
 
@@ -69,8 +76,10 @@ Known limits:
     oc-versions, so nothing is compared for that file.
   - The Terraform image is tracked through the GitHub releases of the
     hashicorp/terraform-mcp-server repository (proxy for the image tag).
-  - Outside the repository (installed config), install.sh is not copied: only the
-    pins from configuration files are checked.`
+  - Outside the repository (installed config), install.sh is not copied: the pins
+    it holds are read from <config>/versions.json, written by install.sh. Those
+    pins are read-only: oc-deps never rewrites versions.json. Update the kit and
+    rerun install.sh instead.`
 }
 
 // --- pin catalogue --------------------------------------------------------
@@ -210,6 +219,17 @@ const PINS = [
   },
 ]
 
+// Pins held back on purpose: a newer release exists but upgrading breaks a dependency
+// at runtime. "check" reports them as "intentional" (not drift, exit code 0) and
+// "update" never rewrites them. Keep the reason next to the pin it protects.
+const INTENTIONAL = {
+  "pydantic": "semgrep-mcp 0.9.0 ships mcp 1.12.2, which imports pydantic._internal._typing_extra.eval_type_backport, removed in pydantic 2.12+",
+  "setuptools": "semgrep 1.135.0 imports pkg_resources, removed from setuptools 82+ (81 only deprecates it)",
+}
+
+// Written by install.sh: the only pin record when the kit runs outside its repository.
+const INSTALLED_PINS_FILE = path.join(CONFIG, "versions.json")
+
 // --- reading pins ---------------------------------------------------------
 function locate(pin) {
   const candidates = []
@@ -236,6 +256,46 @@ function readPin(pin, file) {
   const lineNo = text.slice(0, m.index).split("\n").length
   const line = text.split("\n")[lineNo - 1].replace(/\r$/, "")
   return { pinned: m.groups.version, line, lineNo, start, end, text }
+}
+
+// versions.json (written by install.sh) records every pin as { "<id>": "<version>" }.
+// It is only a fallback: a pin whose source file is present is always read from that file.
+function readInstalledPins() {
+  let text
+  try {
+    text = fs.readFileSync(INSTALLED_PINS_FILE, "utf8")
+  } catch (e) {
+    if (e.code !== "ENOENT") console.error(`⚠️  ${displayPath(INSTALLED_PINS_FILE)} unreadable: ${e.message}`)
+    return null
+  }
+  try {
+    const data = JSON.parse(text)
+    if (data?.pins && typeof data.pins === "object" && !Array.isArray(data.pins)) {
+      return { pins: data.pins, text }
+    }
+    console.error(`⚠️  ${displayPath(INSTALLED_PINS_FILE)}: no "pins" object, installed pins ignored`)
+  } catch (e) {
+    console.error(`⚠️  ${displayPath(INSTALLED_PINS_FILE)}: invalid JSON (${e.message}), installed pins ignored`)
+  }
+  return null
+}
+
+function installedPinSource(pin, installed) {
+  const value = installed.pins[pin.id]
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`pin ${pin.id} missing from ${displayPath(INSTALLED_PINS_FILE)}: rerun install.sh`)
+  }
+  const needle = `"${pin.id}"`
+  const at = installed.text.indexOf(needle)
+  const lineNo = at === -1 ? null : installed.text.slice(0, at).split("\n").length
+  return {
+    pinned: value.trim(),
+    line: lineNo === null ? `pins.${pin.id} = ${value.trim()}` : installed.text.split("\n")[lineNo - 1].trim(),
+    lineNo,
+    start: null,
+    end: null,
+    text: installed.text,
+  }
 }
 
 const normalize = (v) => v.trim().replace(/^v(?=[0-9])/i, "")
@@ -406,9 +466,16 @@ function printReport(results, skipped, summary, opts, { showDiff = false, hint =
   }
   for (const s of skipped) console.error(`⚠️  skipped (file missing): ${s.package}`)
   printTable(results)
-  console.log(`\n${summary.total} packages · ${summary.up_to_date} up to date · ${summary.drift} drift · ${summary.unknown} unknown`)
+  console.log(`\n${summary.total} packages · ${summary.up_to_date} up to date · ${summary.drift} drift · ${summary.unknown} unknown · ${summary.intentional} intentional`)
   for (const r of results.filter((r) => r.status === "unknown")) {
     console.error(`⚠️  ${r.package}: ${r.detail ?? "unknown version"}`)
+  }
+  for (const r of results.filter((r) => r.status === "intentional")) {
+    console.log(`ℹ️  intentional: ${r.package} ${r.pinned} (latest ${r.latest}) — ${r.reason}`)
+  }
+  const readonly = results.filter((r) => r.status === "drift" && r.readonly)
+  if (readonly.length) {
+    console.log(`ℹ️  ${readonly.length} drift(s) recorded in versions.json (installed config): update the kit and rerun install.sh; oc-deps never rewrites versions.json.`)
   }
   if (showDiff) {
     const changes = results.filter((r) => r.status === "drift" && r.proposed_line)
@@ -521,6 +588,26 @@ function recheck(opts) {
   })
 }
 
+// Record every readable pin as JSON on stdout. Deterministic (no timestamp) so that a
+// reinstall writes a byte-identical versions.json; install.sh applies mode 600.
+function snapshot() {
+  const pins = {}
+  for (const pin of PINS) {
+    const file = locate(pin)
+    if (!file) {
+      console.error(`⚠️  snapshot: skipped ${pin.id} (source file missing)`)
+      continue
+    }
+    pins[pin.id] = readPin(pin, file).pinned
+  }
+  const payload = { schema: 1 }
+  if (REPO) {
+    try { payload.kit_version = fs.readFileSync(path.join(REPO, "VERSION"), "utf8").trim() } catch { /* optional */ }
+  }
+  payload.pins = pins
+  process.stdout.write(JSON.stringify(payload, null, 2) + "\n")
+}
+
 function main() {
   const opts = parseArgs(process.argv.slice(2))
   if (opts.help) {
@@ -530,6 +617,10 @@ function main() {
   if (opts.command === null) die(`missing command\n\n${usage()}`)
   if (opts.command === "fix") {
     die(`"oc-deps fix" does not exist: review "oc-deps update --dry-run", then run "oc-deps update --write --yes" or edit the pin by hand.`)
+  }
+  if (opts.command === "snapshot") {
+    snapshot()
+    return
   }
   if (opts.command !== "check" && opts.command !== "update") {
     die(`unknown command: ${opts.command}\n\n${usage()}`)
@@ -568,7 +659,7 @@ function main() {
         only,
         results: [],
         skipped: [],
-        summary: { total: 0, up_to_date: 0, drift: 0, unknown: 0 },
+        summary: { total: 0, up_to_date: 0, drift: 0, unknown: 0, intentional: 0 },
       }, null, 2))
     } else {
       console.log(`No pinned ${opts.ecosystem ? `${opts.ecosystem} ` : ""}package in the kit for this filter.`)
@@ -576,15 +667,20 @@ function main() {
     return
   }
 
+  const installed = readInstalledPins()
   const skipped = []
   const checked = []
   for (const pin of selected) {
     const file = locate(pin)
-    if (!file) {
-      skipped.push({ package: pin.package, id: pin.id, reason: "source file missing" })
+    if (file) {
+      checked.push({ ...pin, file })
       continue
     }
-    checked.push({ ...pin, file })
+    if (installed && Object.prototype.hasOwnProperty.call(installed.pins, pin.id)) {
+      checked.push({ ...pin, file: null, installed })
+      continue
+    }
+    skipped.push({ package: pin.package, id: pin.id, reason: "source file missing" })
   }
   if (!checked.length) {
     die(`no source file found for ${selected.map((p) => p.package).join(", ")}`)
@@ -594,7 +690,7 @@ function main() {
   const latest = opts.offline ? fetchOffline(groups) : fetchOnline(groups, opts.refresh)
 
   const results = checked.map((pin) => {
-    const source = readPin(pin, pin.file)
+    const source = pin.file ? readPin(pin, pin.file) : installedPinSource(pin, pin.installed)
     const got = latest.get(keyOf(pin.ecosystem, pin.package))
     let status = "unknown"
     let detail = null
@@ -607,6 +703,8 @@ function main() {
         detail = "cache expired and source unreachable"
       } else if (normalize(value) === normalize(source.pinned)) {
         status = "up to date"
+      } else if (INTENTIONAL[pin.id]) {
+        status = "intentional"
       } else {
         status = "drift"
       }
@@ -620,15 +718,20 @@ function main() {
       pinned: source.pinned,
       latest: value,
       status,
-      file: displayPath(pin.file),
+      file: pin.file ? displayPath(pin.file) : displayPath(INSTALLED_PINS_FILE),
       line: source.lineNo,
       line_text: source.line,
     }
-    Object.defineProperty(result, "_absFile", { value: pin.file, enumerable: false })
+    if (pin.file) Object.defineProperty(result, "_absFile", { value: pin.file, enumerable: false })
+    else result.readonly = true
     if (got?.cached) result.cached = true
     if (got?.source) result.source = got.source
     if (detail) result.detail = detail
-    if (status === "drift" && value) {
+    if (status === "intentional") {
+      result.intentional = true
+      result.reason = INTENTIONAL[pin.id]
+    }
+    if (status === "drift" && value && pin.file) {
       result.proposed = conformVersion(source.pinned, value)
       result.proposed_line = proposedLine(source, value)
     }
@@ -640,6 +743,7 @@ function main() {
     up_to_date: results.filter((r) => r.status === "up to date").length,
     drift: results.filter((r) => r.status === "drift").length,
     unknown: results.filter((r) => r.status === "unknown").length,
+    intentional: results.filter((r) => r.status === "intentional").length,
   }
 
   if (opts.command === "update" && !opts.write) {
@@ -665,9 +769,13 @@ function main() {
           message: "no proposed change",
         }, null, 2))
       } else {
+        const readonly = results.filter((r) => r.status === "drift" && r.readonly)
+        if (readonly.length) {
+          console.log(`ℹ️  ${readonly.length} drift(s) recorded in versions.json (installed config): update the kit and rerun install.sh; oc-deps never rewrites versions.json.`)
+        }
         console.log("No proposed change; nothing to write.")
       }
-      process.exitCode = summary.unknown ? 1 : 0
+      process.exitCode = summary.unknown || summary.drift ? 1 : 0
       return
     }
 

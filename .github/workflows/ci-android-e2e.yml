@@ -1,0 +1,58 @@
+name: Android E2E (self-hosted KVM)
+
+# Full Android path on a real emulator: doctor, emulator boot, project generation,
+# assembleDebug, installDebug, am start, empty AndroidRuntime:E logcat, PNG screenshot.
+#
+# GitHub-hosted runners have no /dev/kvm, so this job only runs on a self-hosted
+# runner carrying the labels [self-hosted, linux, x64, kvm]. That runner must provide:
+#   - Linux x86_64 with hardware virtualization and an accessible /dev/kvm
+#   - rootless Podman (subuid/subgid configured)
+#   - the localhost/oc-android:latest image, built with `oc-android build-image --accept-licenses`
+#   - network access on the first Gradle build, and ~10 GB of disk for image + caches
+#   - the kit installed (`./install.sh --android`), or a checkout (the script falls back
+#     to addons/android/bin/oc-android and config/bin/oc-new-android)
+# See docs/android-e2e.md.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly, Monday 04:43 UTC. The job is long and needs dedicated hardware.
+    - cron: "43 4 * * 1"
+
+concurrency:
+  group: ci-android-e2e
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  android-e2e:
+    name: Android emulator end to end
+    runs-on: [self-hosted, linux, x64, kvm]
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      - name: Android end-to-end
+        env:
+          # Only set this repository variable to 1 if the runner is allowed to build the
+          # image (you accept the Android SDK licenses). Prefer prebuilding the image.
+          OC_ANDROID_ACCEPT_LICENSES: ${{ vars.OC_ANDROID_ACCEPT_LICENSES || '0' }}
+          OC_ANDROID_E2E_ARTIFACTS: ${{ runner.temp }}/android-e2e
+          OC_ANDROID_E2E_KEEP: "1"
+        run: ./scripts/e2e-android.sh
+
+      - name: Upload Android E2E artifacts (screenshot, project, logs)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-e2e
+          path: ${{ runner.temp }}/android-e2e
+          if-no-files-found: ignore
+          retention-days: 14

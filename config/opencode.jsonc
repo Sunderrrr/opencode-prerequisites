@@ -85,7 +85,7 @@
       // Kubernetes READ-ONLY (see k8s-mcp.toml: read_only + Secrets blocked). Uses your kubeconfig.
       "kubernetes": {
         "type": "local",
-        "command": ["npx", "-y", "kubernetes-mcp-server@0.1.1", "--config", "{env:HOME}/.config/opencode/k8s-mcp.toml"]
+        "command": ["npx", "-y", "kubernetes-mcp-server@0.1.2", "--config", "{env:HOME}/.config/opencode/k8s-mcp.toml"]
       },
       // Vulnerability / misconfiguration / secret scan (images, IaC, code). Requires `trivy` + mcp plugin (install.sh).
       "trivy": {
