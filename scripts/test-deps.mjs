@@ -83,7 +83,7 @@ const makeInstalledConfig = () => {
 // Versions published "by default": equal to the current pins (except the v prefix of GitHub tags).
 const LATEST = {
   npm: {
-    "playwright": "1.64.1",
+    "playwright": "1.65.0",
     "skills": "1.7.6",
     "kubernetes-mcp-server": "0.1.2",
     "@playwright/mcp": "0.0.84",
@@ -93,13 +93,13 @@ const LATEST = {
   },
   pypi: {
     "mempalace": "3.11.0",
-    "semgrep": "1.183.0",
+    "semgrep": "1.184.0",
     "semgrep-mcp": "0.9.0",
     "pydantic": "2.14.3",
     "setuptools": "84.2.1",
   },
   github: {
-    "aquasecurity/trivy": "v0.76.1",
+    "aquasecurity/trivy": "v0.76.2",
     "aquasecurity/trivy-plugin-mcp": "v0.0.20",
     "h4ckf0r0day/obscura": "v0.2.6",
     "astral-sh/uv": "0.13.7",
@@ -154,8 +154,8 @@ check("table: header package | pinned | latest | status",
   /^package\s+\|\s+pinned\s+\|\s+latest\s+\|\s+status\s*$/m.test(r.stdout), r.stdout)
 check("17 packages rendered (every pin in the kit)",
   r.stdout.split("\n").filter((l) => / \| /.test(l)).length === 18, r.stdout)
-check("GitHub: tag v0.76.1 compared with pin 0.76.1",
-  /aquasecurity\/trivy\s+\|\s+0\.76\.1\s+\|\s+v0\.76\.1\s+\|\s+up to date/.test(r.stdout), r.stdout)
+check("GitHub: tag v0.76.2 compared with pin 0.76.2",
+  /aquasecurity\/trivy\s+\|\s+0\.76\.2\s+\|\s+v0\.76\.2\s+\|\s+up to date/.test(r.stdout), r.stdout)
 check("pin with a v prefix kept (Trivy plugin)",
   /aquasecurity\/trivy-plugin-mcp\s+\|\s+v0\.0\.20\s+\|\s+v0\.0\.20\s+\|\s+up to date/.test(r.stdout), r.stdout)
 check("summary: 15 up to date, no drift, 2 intentional",
@@ -240,7 +240,7 @@ const snapshotText = r.stdout
 payload = jsonOf(r.stdout)
 check("snapshot: 17 pins, versions as pinned, no timestamp",
   r.status === 0 && Object.keys(payload?.pins ?? {}).length === 17
-  && payload.pins.trivy === "0.76.1"
+  && payload.pins.trivy === "0.76.2"
   && payload.pins["@mobilenext/mobile-mcp"] === "1.0.16"
   && payload.kit_version === fs.readFileSync(path.join(ROOT, "VERSION"), "utf8").trim()
   && !/generated_at/.test(r.stdout), r.stdout + r.stderr)
@@ -250,11 +250,11 @@ check("snapshot: byte-identical on a second run (idempotent install)",
 
 // --- 6. --offline: cache only, no fixture ---------------------------------
 let cache = freshCache("offline")
-seedCache(cache, "github", { "aquasecurity/trivy": "v0.76.1" })
+seedCache(cache, "github", { "aquasecurity/trivy": "v0.76.2" })
 resetFixtures({ "github\u0000aquasecurity/trivy": "v9.9.9" })
 r = run(["check", "--only", "trivy", "--offline"], { cache, fixtures: FIX })
 check("--offline: cache served and fixtures ignored",
-  r.status === 0 && /aquasecurity\/trivy\s+\|\s+0\.76\.1\s+\|\s+v0\.76\.1\s+\|\s+up to date/.test(r.stdout)
+  r.status === 0 && /aquasecurity\/trivy\s+\|\s+0\.76\.2\s+\|\s+v0\.76\.2\s+\|\s+up to date/.test(r.stdout)
   && !/9\.9\.9/.test(r.stdout), r.stdout + r.stderr)
 r = run(["check", "--only", "uv", "--offline", "--json"], { cache, fixtures: "" })
 payload = jsonOf(r.stdout)
@@ -264,7 +264,7 @@ check("--offline: absent from cache = unknown, exit 1",
 
 // Old cache accepted offline (no freshness requirement without network).
 cache = freshCache("offline-old")
-seedCache(cache, "github", { "aquasecurity/trivy": "v0.76.1" })
+seedCache(cache, "github", { "aquasecurity/trivy": "v0.76.2" })
 const old = JSON.parse(fs.readFileSync(path.join(cache, "github.json"), "utf8"))
 old.entries["aquasecurity/trivy"].fetchedAt = 0
 fs.writeFileSync(path.join(cache, "github.json"), JSON.stringify(old))
@@ -294,11 +294,11 @@ check("--ecosysteme invalid: exit 2", r.status === 2 && /unknown ecosystem/.test
 
 // --- 8. --refresh forwarded to oc-versions --------------------------------
 cache = freshCache("refresh")
-seedCache(cache, "github", { "aquasecurity/trivy": "v0.76.1" })
+seedCache(cache, "github", { "aquasecurity/trivy": "v0.76.2" })
 resetFixtures({ "github\u0000aquasecurity/trivy": "v0.77.0" })
 r = run(["check", "--only", "trivy", "--json"], { cache })
 payload = jsonOf(r.stdout)
-check("without --refresh: fresh cache served", r.status === 0 && payload?.results?.[0]?.latest === "v0.76.1", r.stdout + r.stderr)
+check("without --refresh: fresh cache served", r.status === 0 && payload?.results?.[0]?.latest === "v0.76.2", r.stdout + r.stderr)
 r = run(["check", "--only", "trivy", "--json", "--refresh"], { cache })
 payload = jsonOf(r.stdout)
 check("--refresh: source queried again and drift seen",
@@ -311,7 +311,7 @@ const before = fs.readFileSync(INSTALL_SH, "utf8")
 r = run(["check", "--only", "trivy", "--dry-run"], { cache: freshCache("dry") })
 check("--dry-run: proposed diff",
   r.status === 1 && /Proposed diff \(no file is modified\)/.test(r.stdout)
-  && r.stdout.includes('-OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.76.1}"')
+  && r.stdout.includes('-OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.76.2}"')
   && r.stdout.includes('+OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.77.0}"'), r.stdout + r.stderr)
 check("--dry-run: install.sh unchanged", fs.readFileSync(INSTALL_SH, "utf8") === before)
 
@@ -322,7 +322,7 @@ let fixtureBefore = fixtureInstallText()
 r = run(["update", "--only", "trivy", "--dry-run"], { cache: freshCache("update-dry"), tool: UPDATE_TOOL })
 check("update --dry-run: proposed diff, exit 1",
   r.status === 1 && /Proposed diff \(no file is modified\)/.test(r.stdout)
-  && r.stdout.includes('-OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.76.1}"')
+  && r.stdout.includes('-OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.76.2}"')
   && r.stdout.includes('+OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.77.0}"'), r.stdout + r.stderr)
 check("update --dry-run: fixture unchanged, no .bak-*",
   fixtureInstallText() === fixtureBefore && backupFiles().length === 0, r.stdout + r.stderr)
@@ -336,19 +336,19 @@ r = run(["update", "--only", "trivy", "--write", "--yes"], { cache: freshCache("
 check("update --write --yes: pin updated, final check passes",
   r.status === 0 && /Updated 1 pin\(s\) in 1 file\(s\)/.test(r.stdout)
   && fixtureInstallText().includes('OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.77.0}"')
-  && !fixtureInstallText().includes('OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.76.1}"'), r.stdout + r.stderr)
+  && !fixtureInstallText().includes('OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.76.2}"'), r.stdout + r.stderr)
 const backups = backupFiles()
 check("update --write --yes: one .bak-* with the old pin",
   backups.length === 1
   && fs.readFileSync(path.join(UPDATE_REPO, backups[0]), "utf8")
-    .includes('OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.76.1}"'), backups.join(", "))
+    .includes('OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.76.2}"'), backups.join(", "))
 
 resetFixtures({ "github\u0000aquasecurity/trivy": "v0.77.0" })
 makeUpdateRepo()
 fixtureBefore = fixtureInstallText()
 r = run(["check", "--only", "trivy"], { cache: freshCache("update-check-ro"), tool: UPDATE_TOOL })
 check("check remains read-only: drift reported, fixture unchanged",
-  r.status === 1 && /0\.76\.1\s+\|\s+v0\.77\.0\s+\|\s+drift/.test(r.stdout)
+  r.status === 1 && /0\.76\.2\s+\|\s+v0\.77\.0\s+\|\s+drift/.test(r.stdout)
   && fixtureInstallText() === fixtureBefore && backupFiles().length === 0, r.stdout + r.stderr)
 
 // --- 11. installed config: versions.json replaces the missing source files -----
@@ -362,7 +362,7 @@ check("installed: exit 0, 17 pins checked, none skipped",
   r.stdout + r.stderr)
 const installedTrivy = payload?.results?.find((x) => x.id === "trivy")
 check("installed: install.sh pins read from versions.json (read-only)",
-  installedTrivy?.pinned === "0.76.1" && installedTrivy.readonly === true
+  installedTrivy?.pinned === "0.76.2" && installedTrivy.readonly === true
   && /versions\.json$/.test(installedTrivy.file ?? ""), JSON.stringify(installedTrivy))
 check("installed: no \"skipped (file missing)\" on stderr",
   !/skipped \(file missing\)/.test(r.stderr), r.stderr)

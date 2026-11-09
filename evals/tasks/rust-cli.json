@@ -1,0 +1,41 @@
+{
+  "name": "rust-cli",
+  "description": "Create a small Rust CLI with a library function, CLI wiring and tests.",
+  "prompt": "You are in a small Rust crate. Implement it in place:\n\n- `src/lib.rs`: expose `pub fn greeting(name: &str) -> String` that returns exactly `Hello, <name>!`.\n- `src/main.rs`: print the greeting for the first command-line argument, defaulting to `world` when no argument is given.\n- Add at least one unit or integration test (`#[test]`) that covers the greeting.\n- Keep the existing crate name and do not add external dependencies.\n- Before finishing, run `cargo fmt`, `cargo clippy --all-targets -- -D warnings` and `cargo test` and fix any failure.\n\nWork only in the current directory. Do not commit, do not ask questions, and do not stop before the checks pass.",
+  "fixture": "rust-cli",
+  "timeout": 600,
+  "checkTimeout": 180,
+  "checks": [
+    {
+      "name": "cargo fmt",
+      "command": "cargo",
+      "args": ["fmt", "--check"]
+    },
+    {
+      "name": "cargo clippy",
+      "command": "cargo",
+      "args": ["clippy", "--all-targets", "--", "-D", "warnings"]
+    },
+    {
+      "name": "cargo test",
+      "command": "cargo",
+      "args": ["test"]
+    },
+    {
+      "name": "tests present",
+      "command": "node",
+      "args": [
+        "-e",
+        "const fs=require('fs'),path=require('path');let n=0;function walk(d){if(!fs.existsSync(d))return;for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=path.join(d,e.name);if(e.isDirectory())walk(p);else if(e.name.endsWith('.rs')&&/\\[test\\]/.test(fs.readFileSync(p,'utf8')))n++}}walk('src');walk('tests');if(n===0){console.error('no #[test] found in src/ or tests/');process.exit(1)}console.log(n+' test(s) found')"
+      ]
+    },
+    {
+      "name": "CLI output",
+      "command": "node",
+      "args": [
+        "-e",
+        "const {execFileSync}=require('child_process');function run(args){try{return execFileSync('cargo',['run','--quiet','--',...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim()}catch(e){console.error(String(e.stderr||e.message));process.exit(1)}}const named=run(['Ada']);if(named!=='Hello, Ada!'){console.error('with argument: expected Hello, Ada!, got '+JSON.stringify(named));process.exit(1)}const dflt=run([]);if(dflt!=='Hello, world!'){console.error('without argument: expected Hello, world!, got '+JSON.stringify(dflt));process.exit(1)}console.log('CLI output OK')"
+      ]
+    }
+  ]
+}

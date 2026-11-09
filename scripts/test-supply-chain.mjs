@@ -120,13 +120,13 @@ const run = (func, { version = {}, map = [] } = {}) => {
 // ---------- 1. default versions and static pinning ----------
 const install = fs.readFileSync(INSTALL, "utf8")
 const DEFAULTS = {
-  OC_TRIVY_VERSION: "0.76.1",
+  OC_TRIVY_VERSION: "0.76.2",
   OC_TRIVY_MCP_VERSION: "v0.0.20",
   OC_OBSCURA_VERSION: "0.2.6",
   OC_UV_VERSION: "0.13.7",
   OC_MEMPALACE_VERSION: "3.11.0",
-  OC_SEMGREP_VERSION: "1.183.0",
-  OC_PLAYWRIGHT_VERSION: "1.64.1",
+  OC_SEMGREP_VERSION: "1.184.0",
+  OC_PLAYWRIGHT_VERSION: "1.65.0",
   OC_SKILLS_VERSION: "1.7.6",
 }
 for (const [key, want] of Object.entries(DEFAULTS)) {

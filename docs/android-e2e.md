@@ -6,6 +6,11 @@ Kotlin/Compose project, a debug APK, installation, launch, crash log and screens
 It complements `scripts/test-android.mjs`, which uses a fake Podman and never boots an
 emulator.
 
+**Validated on 2026-11-09** on Linux x86_64 (rootless Podman 6.1.4, `/dev/kvm`, image
+`localhost/oc-android:latest`, Android 16 / API 36): 11/11 steps passed in 112 s on a warm
+host, debug APK 11,501,075 bytes, screenshot 1080×2400 PNG (30,911 bytes), no
+`AndroidRuntime:E` entry.
+
 ## What the script does
 
 1. Resolves `oc-android` and `oc-new-android` from `PATH`, or from this checkout

@@ -1,12 +1,29 @@
 # Changelog
 
-Format [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning [SemVer](https://semver.org/). Version 1.0.0 (`VERSION`); no git tag is published yet. Entries describe `main`.
+Format [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning [SemVer](https://semver.org/). Version 1.0.1 (`VERSION`); v1.0.0 is tagged and signed, v1.0.1 is tagged after this commit. Entries describe `main`.
 
-## [Unreleased]
+## [1.0.1] - 2026-11-09
 
-### 2026-11-09
+### Added
 
-#### Added
+- `oc-secrets`: OS keyring backends (`OC_SECRETS_BACKEND=auto|file|keyring`: Linux Secret Service via `secret-tool`, macOS Keychain via `security`, Windows DPAPI via PowerShell) and the `backend` (active backend and why) and `migrate` (file to keyring, plaintext backup tar, read-back verification, file kept on mismatch) subcommands; `scripts/test-secrets.mjs` (96 checks), `docs/secrets.md`.
+- Agent eval harness: `scripts/eval.mjs` + `evals/` with three tasks (`rust-cli`, `web-ui`, `bugfix`), one fixture per task, objective PASS/FAIL checks, JSON/Markdown results and `--dry-run`/`--json`/`--keep`; `scripts/test-eval.mjs` (63 hermetic checks), `docs/evals.md`; a real `rust-cli` run passed 5/5 checks on 2026-11-09 (39.6 s, 59,865 tokens).
+- Android E2E validated locally on 2026-11-09: `scripts/e2e-android.sh` passed 11/11 steps in 112 s (KVM emulator, 11.5 MB debug APK installed and launched, no `AndroidRuntime:E`, 1080x2400 PNG screenshot); `.github/workflows/ci-android-e2e.yml` still needs a self-hosted KVM runner.
+- Live Chrome DevTools MCP validated locally on 2026-11-09: `scripts/test-chrome-devtools-live.mjs` passed 17/17 checks against a real Chrome/Chromium binary (page, snapshot, PNG screenshot).
+
+### Changed
+
+- Pins refreshed after `oc-deps check`: trivy 0.76.2 (was 0.76.1), semgrep 1.184.0 (was 1.183.0), playwright 1.65.0 (was 1.64.1); README pin references corrected to mobile-mcp 1.0.16 and kubernetes-mcp-server 0.1.2.
+- `versions.json` / intentional pins: `install.sh` writes `<config>/versions.json` (mode 600), so `oc-deps check` works outside the repository; pydantic and setuptools (constrained by `semgrep-mcp`) are reported as `intentional`, never drift; `oc-deps check` reports 17 packages, 15 up to date, 0 drift and 2 intentional pins.
+- README, ROADMAP and CHANGELOG updated for 1.0.1 (keyring, evals, local validations, tag status).
+
+### Fixed
+
+- Documentation: stale `test-secrets` count (30 -> 96), mobile-mcp 1.0.15 -> 1.0.16 and kubernetes-mcp-server 0.1.1 -> 0.1.2; "What is not verified" now reflects the local Chrome/Android validations and the remaining KVM runner gap.
+
+## [1.0.0] - 2026-11-09
+
+### Added
 
 - `oc-export-claude` (`config/bin/oc-export-claude`, `scripts/export-claude.mjs`): deterministic, idempotent Claude Code export of agents, skills, commands, MCP servers and the guard/notify hooks; haiku/sonnet/opus routing, fixed variants (`rust-haiku`, `review-opus`, `architect-opus`), project `.mcp.json` at the root; `scripts/test-claude-export.mjs` (170 checks), `docs/claude-code.md`.
 - Native Windows support (config-only): `install.ps1`, `uninstall.ps1`, `doctor.ps1` and `scripts/test-windows.ps1` (66 helper checks plus the end-to-end native path), `.cmd` shims, user `PATH` (`HKCU\Environment`), PowerShell profile and `opencode.jsonc` path rewrite; `.github/workflows/ci-windows.yml` (`windows-latest` full suite, `ubuntu-24.04` helpers-only); `docs/windows.md`.
@@ -20,14 +37,14 @@ Format [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning [Sem
 - `VERSION` 1.0.0 and `./install.sh --version`.
 - Renovate custom managers (`.github/renovate.json`) for `install.sh` pins, launchers, `opencode.jsonc`, workflow actions/images and the Android `Containerfile`.
 
-#### Changed
+### Changed
 
 - CI diet: pull requests run 3 distributions (Arch, Debian 12, Rocky 9), pushes to `main` run all 7; `concurrency` cancels outdated runs; new steps for ops tools (`scripts/test-ops.mjs`, 47 checks), the web generator and the Claude Code export.
 - README, ROADMAP and CHANGELOG document packs, operational tools, the web generator, `VERSION`, Renovate, Claude Code, native Windows, `oc-secrets`, the Chrome live test, the Android E2E harness and the installed pin record.
 
-#### Fixed
+### Fixed
 
-- Documentation: removed the stale "Windows requires WSL" claim (native config-only is supported; WSL2 is only needed for the full toolchain and Android/Podman); the version status now says `VERSION` 1.0.0 with no git tag.
+- Documentation: removed the stale "Windows requires WSL" claim (native config-only is supported; WSL2 is only needed for the full toolchain and Android/Podman); the version status now says `VERSION` 1.0.0.
 
 ### 2026-11-08
 
@@ -83,4 +100,4 @@ Format [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning [Sem
 
 ## Earlier history
 
-No tags. `git log --oneline` is authoritative; the README describes the functional state.
+Tags: `v1.0.0`. `git log --oneline` is authoritative; the README describes the functional state.

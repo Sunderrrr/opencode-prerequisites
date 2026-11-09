@@ -1,0 +1,34 @@
+{
+  "name": "web-ui",
+  "description": "Create a tiny static page with a heading, a button and an accessible label.",
+  "prompt": "Create a static `index.html` in the current directory. No build step and no dependencies.\n\nIt must contain:\n- `<html lang=\"en\">` and a `<meta name=\"viewport\">` tag;\n- a non-empty `<h1>` heading;\n- a `<button>` with an accessible name, using either `aria-label`/`aria-labelledby` or a `<label for>` tied to the button id.\n\nKeep everything in `index.html`. Work only in the current directory. Do not commit and do not ask questions.",
+  "fixture": "web-ui",
+  "timeout": 300,
+  "checkTimeout": 60,
+  "checks": [
+    {
+      "name": "index.html exists",
+      "command": "node",
+      "args": [
+        "-e",
+        "const fs=require('fs');if(!fs.existsSync('index.html')){console.error('index.html missing');process.exit(1)}console.log('index.html found')"
+      ]
+    },
+    {
+      "name": "heading, button and accessible label",
+      "command": "node",
+      "args": [
+        "-e",
+        "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const h1=h.match(/<h1[^>]*>([\\s\\S]*?)<\\/h1>/i);if(!h1||!h1[1].replace(/<[^>]*>/g,'').trim()){console.error('missing non-empty <h1>');process.exit(1)}const b=h.match(/<button[^>]*>/i);if(!b){console.error('missing <button>');process.exit(1)}const tag=b[0];const aria=/\\baria-label\\s*=\\s*[\"'][^\"']+[\"']/i.test(tag)||/\\baria-labelledby\\s*=\\s*[\"'][^\"']+[\"']/i.test(tag);const labelled=/\\bid\\s*=\\s*[\"'][^\"']+[\"']/i.test(tag)&&/<label[^>]*\\bfor\\s*=\\s*[\"'][^\"']+[\"']/i.test(h);if(!aria&&!labelled){console.error('button has no accessible label');process.exit(1)}console.log('heading, button and label OK')"
+      ]
+    },
+    {
+      "name": "lang and viewport",
+      "command": "node",
+      "args": [
+        "-e",
+        "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');if(!/<html[^>]*\\blang\\s*=\\s*[\"'][^\"']+[\"']/i.test(h)){console.error('missing html lang');process.exit(1)}if(!/<meta[^>]*\\bname\\s*=\\s*[\"']viewport[\"'][^>]*>/i.test(h)){console.error('missing viewport meta');process.exit(1)}console.log('lang and viewport OK')"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "bugfix",
+  "description": "Fix a failing Node test without touching the tests.",
+  "prompt": "The Node test suite in this project fails. Fix the bug in `src/sum.js` so that `node --test` passes. Do not modify the test files. Run `node --test` to verify.\n\nWork only in the current directory. Do not commit and do not ask questions.",
+  "fixture": "bugfix",
+  "timeout": 300,
+  "checkTimeout": 60,
+  "checks": [
+    {
+      "name": "node --test",
+      "command": "node",
+      "args": ["--test"]
+    }
+  ]
+}
