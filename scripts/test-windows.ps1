@@ -316,8 +316,29 @@ public class Program {
 }
 '@
         $fakeExe = Join-Path $fakeBin 'opencode.exe'
-        Add-Type -TypeDefinition $fakeSource -OutputAssembly $fakeExe -OutputType ConsoleApplication
-        Assert 'integration: fake opencode.exe built' (Test-Path -LiteralPath $fakeExe)
+        $fakeCs = Join-Path $script:TempRoot 'opencode-fake.cs'
+        $fakeBuilder = Join-Path $script:TempRoot 'build-fake.ps1'
+        [IO.File]::WriteAllText($fakeCs, $fakeSource)
+        [IO.File]::WriteAllText($fakeBuilder, @'
+param([string]$SourceFile, [string]$OutFile)
+Add-Type -TypeDefinition (Get-Content -LiteralPath $SourceFile -Raw) -OutputAssembly $OutFile -OutputType ConsoleApplication
+'@)
+        # PowerShell 7.6 dropped -OutputType ConsoleApplication; Windows PowerShell
+        # 5.1 still ships the C# compiler pipeline, so delegate the build to it.
+        $ps51 = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        $buildExit = -1
+        $buildOutput = ''
+        if (-not (Test-Path -LiteralPath $ps51)) {
+          Assert 'integration: fake opencode.exe built' $false "Windows PowerShell 5.1 not found: $ps51"
+        } else {
+          try {
+            $buildOutput = (& $ps51 -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $fakeBuilder -SourceFile $fakeCs -OutFile $fakeExe 2>&1 | Out-String).Trim()
+            $buildExit = $LASTEXITCODE
+          } catch {
+            $buildOutput = $_.Exception.Message
+          }
+          Assert 'integration: fake opencode.exe built' ((Test-Path -LiteralPath $fakeExe) -and ($buildExit -eq 0)) "exit=$buildExit exe=$fakeExe output=$buildOutput"
+        }
 
         $savedEnv = @{
           PATH                = $env:PATH
