@@ -103,28 +103,34 @@ async function load(name) {
   await cleanup(); check("guard: cleanup (dispose)", disposed)
 }
 
-// --- notify (with a fake notify-send) ---
+// --- notify (deterministic dry-run, no desktop dependency on any platform) ---
 {
   const plugin = await load("notify")
   check("notify: v2 definition (id + setup)", typeof plugin.id === "string" && typeof plugin.setup === "function")
-  const bin = path.join(tmp, "bin"); fs.mkdirSync(bin)
-  const log = path.join(tmp, "notified.log")
-  fs.writeFileSync(path.join(bin, "notify-send"), `#!/bin/sh\necho "$@" >> "${log}"\n`, { mode: 0o755 })
-  process.env.PATH = `${bin}${path.delimiter}${process.env.PATH}`
   let subscribeOptions
   const events = [{ type: "session.idle" }, { type: "session.idle" }, { type: "session.created" }]
   const ctx = { event: { subscribe: (options) => { subscribeOptions = options; return (async function* () { for (const e of events) yield e })() } } }
-  const cleanup = await plugin.setup(ctx)
-  await new Promise((r) => setTimeout(r, 500))
-  check("notify: subscribes to session.idle", JSON.stringify(subscribeOptions?.types) === JSON.stringify(["session.idle"]))
-  const lines = fs.existsSync(log) ? fs.readFileSync(log, "utf8").trim().split("\n").filter(Boolean) : []
-  if (process.platform === "darwin") check("notify: (macOS) test skipped", true)
-  else {
-    check("notify: sends a notification with the neutral message",
-      lines.length >= 1 && lines.some((line) => line.includes("OpenCode Turn finished (check running tasks)")),
-      `lines=${lines.length} content=${lines.join(" / ")}`)
-    check("notify: anti-burst (2 close idle events = 1 notification)", lines.length === 1, `lines=${lines.length}`)
+  // The plugin prints one deterministic line instead of calling notify-send/osascript/PowerShell.
+  process.env.OC_NOTIFY_DRY_RUN = "1"
+  const writes = []
+  const realWrite = process.stdout.write
+  process.stdout.write = (chunk) => { writes.push(String(chunk)); return true }
+  let cleanup
+  try {
+    cleanup = await plugin.setup(ctx)
+    const deadline = Date.now() + 5000
+    while (writes.length === 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 10))
+    await new Promise((r) => setTimeout(r, 250)) // give a wrong second notification time to land
+  } finally {
+    process.stdout.write = realWrite
+    delete process.env.OC_NOTIFY_DRY_RUN
   }
+  check("notify: subscribes to session.idle", JSON.stringify(subscribeOptions?.types) === JSON.stringify(["session.idle"]))
+  const lines = writes.join("").split(/\r?\n/).filter(Boolean)
+  check("notify: sends one deterministic notification (dry-run, all platforms)",
+    lines.length === 1 && lines[0] === "notify:dry-run",
+    `lines=${lines.length} content=${lines.join(" / ")}`)
+  check("notify: anti-burst (2 close idle events = 1 notification)", lines.length === 1, `lines=${lines.length}`)
   check("notify: cleanup function", typeof cleanup === "function"); cleanup()
 }
 

@@ -22,6 +22,9 @@ const agentNames = () => (fs.existsSync(AGENTS) ? fs.readdirSync(AGENTS).filter(
 const normalize = (id) => { const m = id.includes("/") ? id : `${PROVIDER}/${id}`; if (!ID_RE.test(m)) die(`Invalid model identifier: "${id}" (expected: provider/model, e.g. ${PROVIDER}/deepseek-v4.1-flash)`); return m }
 
 // --- reading / writing config files ---
+// Frontmatter may come from a Windows checkout or editor (CRLF): normalize before matching.
+const lf = (text) => text.replace(/\r\n/g, "\n")
+const frontmatter = (text) => lf(text).match(/^---\n([\s\S]*?)\n---\n/)
 function cfgValue(key) {
   if (!fs.existsSync(CFG)) return undefined
   return fs.readFileSync(CFG, "utf8").match(new RegExp(`^\\s*"${key}"\\s*:\\s*"([^"]*)"`, "m"))?.[1]
@@ -35,17 +38,20 @@ function setCfgValue(key, value) {
 }
 function agentModel(name) {
   const f = path.join(AGENTS, `${name}.md`)
-  const m = fs.readFileSync(f, "utf8").match(/^---\n([\s\S]*?)\n---\n/)
+  const m = frontmatter(fs.readFileSync(f, "utf8"))
   return m?.[1].split("\n").find((l) => /^model:\s*/.test(l))?.replace(/^model:\s*/, "").trim()
 }
 function setAgentModel(name, model) {
   const f = path.join(AGENTS, `${name}.md`)
-  const t = fs.readFileSync(f, "utf8")
+  const raw = fs.readFileSync(f, "utf8")
+  const eol = raw.includes("\r\n") ? "\r\n" : "\n"
+  const t = lf(raw)
   const m = t.match(/^---\n([\s\S]*?)\n---\n/)
   if (!m) die(`${f}: frontmatter not found`)
   const lines = m[1].split("\n").filter((l) => !/^model:\s*/.test(l))
   if (model) { const i = lines.findIndex((l) => /^mode:/.test(l)); lines.splice(i >= 0 ? i + 1 : lines.length, 0, `model: ${model}`) }
-  fs.writeFileSync(f, t.replace(m[0], `---\n${lines.join("\n")}\n---\n`))
+  const updated = t.replace(m[0], `---\n${lines.join("\n")}\n---\n`)
+  fs.writeFileSync(f, eol === "\n" ? updated : updated.replace(/\n/g, "\r\n"))
 }
 
 // --- optional check against the online list ---

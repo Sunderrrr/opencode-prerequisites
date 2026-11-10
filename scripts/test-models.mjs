@@ -14,7 +14,7 @@ const env = { ...process.env, OPENCODE_CONFIG_DIR: dest, OC_MODELS_OFFLINE: "1" 
 const oc = (...a) => spawnSync(process.execPath, [path.join(dest, "libexec", "oc-models.mjs"), ...a], { encoding: "utf8", env })
 let failed = 0
 const check = (name, cond, detail = "") => { if (!cond) failed++; console.log(`${cond ? "✅" : "❌"} ${name}${cond || !detail ? "" : ` — ${detail}`}`) }
-const model = (n) => fs.readFileSync(path.join(dest, "agents", `${n}.md`), "utf8").match(/^model:\s*(.+)$/m)?.[1]
+const model = (n) => fs.readFileSync(path.join(dest, "agents", `${n}.md`), "utf8").replace(/\r\n/g, "\n").match(/^model:\s*(.+)$/m)?.[1]?.trim()
 const cfg = () => parseJsonc(fs.readFileSync(path.join(dest, "opencode.jsonc"), "utf8"))
 
 check("start: Flash everywhere, no per-agent model", cfg().model === "opencode-go/deepseek-v4.1-flash" && !model("ceo") && !model("security"))
@@ -38,6 +38,21 @@ r = oc("reset", "ceo"); check("reset ceo: removes its per-agent model", r.status
 r = oc("set", "all", "opencode-go/deepseek-v4.1-flash")
 check("set all: everything on one model, no per-agent model left", r.status === 0 && !model("security") && cfg().model === "opencode-go/deepseek-v4.1-flash" && cfg().small_model === "opencode-go/deepseek-v4.1-flash")
 r = oc("reset", "all"); check("reset all: deletes oc-models.json", r.status === 0 && !fs.existsSync(path.join(dest, "oc-models.json")))
+
+// CRLF checkout (Windows editor / older checkout): frontmatter parsing and rewriting tolerate \r\n.
+const rustFile = path.join(dest, "agents", "rust.md")
+fs.writeFileSync(rustFile, fs.readFileSync(rustFile, "utf8").replace(/\r\n/g, "\n").replace(/\n/g, "\r\n"))
+const crlfBefore = fs.readFileSync(rustFile, "utf8")
+check("CRLF agent: fixture is pure CRLF", crlfBefore.includes("\r\n") && !/[^\r]\n/.test(crlfBefore))
+r = oc("list"); check("CRLF agent: list reads its frontmatter", r.status === 0 && r.stdout.includes("rust"), r.stderr)
+r = oc("set", "rust", "deepseek-v4-pro")
+check("CRLF agent: set parses frontmatter and applies the model", r.status === 0 && model("rust") === "opencode-go/deepseek-v4-pro", r.stderr || r.stdout)
+const crlfAfter = fs.readFileSync(rustFile, "utf8")
+check("CRLF agent: line endings stay CRLF (no mixed endings)", !/[^\r]\n/.test(crlfAfter) && !/\r\r/.test(crlfAfter), JSON.stringify(crlfAfter.slice(0, 60)))
+check("CRLF agent: rest of the frontmatter intact", /^mode:\s*\S+/m.test(crlfAfter.replace(/\r\n/g, "\n")))
+r = oc("reset", "rust"); check("CRLF agent: reset removes its model", r.status === 0 && !model("rust"), r.stderr)
+const crlfFinal = fs.readFileSync(rustFile, "utf8")
+check("CRLF agent: reset keeps pure CRLF and a valid frontmatter", !/[^\r]\n/.test(crlfFinal) && /^---\r\n[\s\S]*?\r\n---\r\n/.test(crlfFinal))
 
 check("unknown agent: clear error", oc("set", "nonexistent", "x/y").status !== 0)
 check("invalid identifier: clear error", oc("set", "ceo", "not valid!").status !== 0)

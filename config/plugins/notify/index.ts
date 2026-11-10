@@ -37,6 +37,12 @@ function notifyWindows() {
 }
 
 function notify() {
+  // Test-only seam: deterministic, platform-independent output before any platform dispatch.
+  // Never set outside the test suite; production behavior is unchanged.
+  if (process.env.OC_NOTIFY_DRY_RUN) {
+    process.stdout.write("notify:dry-run\n")
+    return
+  }
   if (process.platform === "darwin") {
     execFile("osascript", ["-e", `display notification "${MESSAGE}" with title "OpenCode"`], () => {})
   } else if (process.platform === "win32") {
