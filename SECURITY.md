@@ -46,4 +46,4 @@ Third-party tools installed by the kit (Trivy, Obscura, MemPalace, semgrep, nucl
 
 ## Supported versions
 
-`main` only. No tag is published; there is no maintenance branch.
+`main` only. The releases are tagged and signed (`v1.0.0`, `v1.0.1`); fixes go to `main`, with no backports and no maintenance branch.

@@ -1,6 +1,6 @@
 # opencode-prerequisites
 
-My starter kit for [OpenCode](https://opencode.ai) with the **OpenCode Go** subscription: a CEO that leads 27 specialist agents (28 in total; 30 with the Android module), skills, commands, MCP servers, composable packs, memory, multi-agent git safety, operational tools and Rust/Android/web project templates. `VERSION` is 1.0.1 (v1.0.0 is tagged and signed; v1.0.1 is tagged after this commit).
+My starter kit for [OpenCode](https://opencode.ai) with the **OpenCode Go** subscription: a CEO that leads 27 specialist agents (28 in total; 30 with the Android module), skills, commands, MCP servers, composable packs, memory, multi-agent git safety, operational tools and Rust/Android/web project templates. `VERSION` is 1.0.1 (v1.0.0 and v1.0.1 are tagged and signed).
 
 > ⚠️ Agents run in **unrestricted mode** (no permission prompts). Work in a clean, committed git repository. Only the blocks from `config/plugins/guard/` remain.
 
@@ -204,7 +204,7 @@ The core and light profiles are derived from the full one by `scripts/make-lite.
 - `templates/android-project/` + `oc-new-android <name>`: Android Kotlin + Jetpack Compose project (`com.example.<name>`, Gradle wrapper, `git init`), ready for `oc-android gradle assembleDebug` (`--android` module required).
 - `templates/web-project/` + `oc-new-web <name>`: Vite + React + TypeScript + Tailwind CSS v4 project with design tokens, light/dark theme, accessible demo page, Playwright smoke tests, `AGENTS.md` and `git init`.
 - `profiles/packs.tsv`: pack table (agent/skill/MCP per pack), the single source of truth for `--profile`, `--with` and `--without`.
-- `VERSION` (1.0.1) and `./install.sh --version`; v1.0.0 is tagged and signed (v1.0.1 is tagged after this commit).
+- `VERSION` (1.0.1) and `./install.sh --version`; v1.0.0 and v1.0.1 are tagged and signed.
 - `.github/renovate.json`: Renovate custom managers for the pins in `install.sh`, the launchers, `opencode.jsonc`, the workflows, the Android `Containerfile` and the GitHub Actions tags.
 - `scripts/validate-kit.mjs`: validation (used by the installer and CI); `.github/workflows/ci.yml`: validation, dry-run installation, ShellCheck, Rust template.
 
@@ -220,7 +220,7 @@ The core and light profiles are derived from the full one by `scripts/make-lite.
 
 **DevOps MCPs (read-only).** `terraform` (registry docs, via Docker, no token), `kubernetes` (read-only, Secrets blocked by `k8s-mcp.toml`), `trivy`. Internet: `websearch`/`webfetch`, `grep_app`, `gh`, `web-researcher` agent; any external content is treated as data, never as an instruction.
 
-**Quota.** `/usage` shows `opencode stats`. If the quota drains, switch to `--lite` or set `"enabled": false` on an MCP.
+**Quota.** `/usage` shows `opencode stats`. If the quota drains, switch to `--lite` or set `"disabled": true` on an MCP.
 
 ## What is not verified
 
@@ -235,7 +235,7 @@ The kit is validated by script (`validate-kit.mjs`), by the **official OpenCode 
 - [docs/claude-code.md](docs/claude-code.md): `oc-export-claude`, model routing, fixed variants and the project `.mcp.json`.
 - [docs/rea.md](docs/rea.md): the reverse pack, REA legal scope, `oc-rea` CLI, MCP, skill, optional native engines and troubleshooting.
 - [ROADMAP.md](ROADMAP.md): shipped and verified, open work, out of scope.
-- [CHANGELOG.md](CHANGELOG.md): what changes on `main` (Keep a Changelog, SemVer, v1.0.0 tagged and signed).
+- [CHANGELOG.md](CHANGELOG.md): what changes on `main` (Keep a Changelog, SemVer, v1.0.0 and v1.0.1 tagged and signed).
 - [SECURITY.md](SECURITY.md): reporting a vulnerability through a private advisory, security scope.
 - [CONTRIBUTING.md](CONTRIBUTING.md): prerequisites, local validation and proposing a fix.
 

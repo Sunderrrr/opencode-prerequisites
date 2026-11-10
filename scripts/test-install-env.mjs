@@ -10,7 +10,7 @@ import os from "node:os"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
-import { parseJsonc } from "./lib/jsonc.mjs"
+import { parseJsonc, frontmatter } from "./lib/jsonc.mjs"
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "oc-envtest-"))
@@ -590,6 +590,20 @@ const out = r.stdout
 check("doctor: reports the OpenCode started before the installation", /PID 4242/.test(out) && /service restart/.test(out), out.split("\n").filter((l) => /PID|running/.test(l)).join(" | "))
 check("doctor: ignores an OpenCode newer than the installation and other processes", !/PID 5151/.test(out) && !/PID 777/.test(out))
 
+// ---------- 4. frontmatter: a Windows checkout may deliver CRLF ----------
+const crlfAgent = path.join(tmp, "crlf-agent.md")
+write(crlfAgent, "---\r\ndescription: CRLF agent\r\nmode: primary\r\n---\r\n\r\nBody.\r\n")
+const crlfFm = frontmatter(fs.readFileSync(crlfAgent, "utf8"))
+check("frontmatter: a CRLF agent Markdown is parsed (description + mode)",
+  crlfFm?.description === "CRLF agent" && crlfFm?.mode === "primary", JSON.stringify(crlfFm))
+const crlfCommand = path.join(tmp, "crlf-command.md")
+write(crlfCommand, "---\r\ndescription: CRLF command\r\nagent: ceo\r\n---\r\n\r\nRun it.\r\n")
+const crlfCmdFm = frontmatter(fs.readFileSync(crlfCommand, "utf8"))
+check("frontmatter: a CRLF command Markdown is parsed (description + agent)",
+  crlfCmdFm?.description === "CRLF command" && crlfCmdFm?.agent === "ceo", JSON.stringify(crlfCmdFm))
+const lfFm = frontmatter("---\ndescription: LF agent\n---\nbody\n")
+check("frontmatter: LF Markdown still parsed", lfFm?.description === "LF agent", JSON.stringify(lfFm))
+
 fs.rmSync(tmp, { recursive: true, force: true })
-console.log(failed ? `\n❌ ${failed} test(s) failed` : "\n✅ Machine-side installer OK (environment, template, backups, MCP state, uninstall, MemPalace, diagnostic)")
+console.log(failed ? `\n❌ ${failed} test(s) failed` : "\n✅ Machine-side installer OK (environment, template, backups, MCP state, uninstall, MemPalace, diagnostic, frontmatter)")
 process.exit(failed ? 1 : 0)

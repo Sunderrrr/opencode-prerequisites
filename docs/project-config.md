@@ -2,7 +2,7 @@
 
 The kit installs a **global** OpenCode configuration in `~/.config/opencode` (agents, skills,
 commands, plugins and the default MCP servers). Some MCP servers only make sense for one machine
-or one repository: a document server bound to `~/Documents/memoire`, an internal API, a database
+or one repository: a document server bound to `~/Documents/notes`, an internal API, a database
 client. Those belong in the **project** configuration, not in the kit.
 
 This page explains how OpenCode merges the two, with the WordCraft server as an example.
@@ -26,9 +26,9 @@ trailing commas). It can be committed: it must not contain a secret.
 
 ## WordCraft example
 
-The WordCraft server is a local MCP whose documents are confined to `~/Documents/memoire`; it was
+The WordCraft server is a local MCP whose documents are confined to `~/Documents/notes`; it was
 deliberately kept out of the kit because that path is specific to one machine. Put it in the
-project that needs it — here `~/Documents/memoire/opencode.jsonc`:
+project that needs it — here `~/Documents/notes/opencode.jsonc`:
 
 ```jsonc
 {
@@ -39,10 +39,9 @@ project that needs it — here `~/Documents/memoire/opencode.jsonc`:
       "command": [
         "/usr/bin/wordcraft-cli",
         "mcp",
-        "--automation-read-root", "{env:HOME}/Documents/memoire",
-        "--automation-write-root", "{env:HOME}/Documents/memoire"
-      ],
-      "enabled": true
+        "--automation-read-root", "{env:HOME}/Documents/notes",
+        "--automation-write-root", "{env:HOME}/Documents/notes"
+      ]
     }
   }
 }
@@ -74,7 +73,7 @@ exits when there is no `kubectl` context):
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "kubernetes": { "enabled": false }
+    "kubernetes": { "disabled": true }
   }
 }
 ```

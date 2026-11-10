@@ -23,8 +23,10 @@ export function parseJsonc(text) {
 }
 
 // Minimal YAML frontmatter: top-level "key: value" pairs.
+// Accepts LF and CRLF (a Windows checkout may convert the Markdown files).
 export function frontmatter(md) {
-  const m = md.match(/^---\n([\s\S]*?)\n---\n/)
+  const text = md.replace(/\r\n/g, "\n")
+  const m = text.match(/^---\n([\s\S]*?)\n---\n/)
   if (!m) return null
   const fm = {}
   for (const line of m[1].split("\n")) {
