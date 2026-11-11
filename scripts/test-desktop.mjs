@@ -52,29 +52,36 @@ const probe = (pathValue, extra = {}) => {
     timeout: 20_000,
   })
 }
-const desired = [
+// System directories are never moved to the front: existing entries keep their order and a
+// missing system directory is appended at the very end.
+const userDirs = [
   path.join(HOME1, ".local", "bin"),
   path.join(HOME1, ".local", "share", "mise", "shims"),
   path.join(HOME1, ".cargo", "bin"),
   path.join(HOME1, ".bun", "bin"),
   path.join(HOME1, ".npm-global", "bin"),
-  "/usr/local/bin", "/usr/bin", "/bin",
 ].join(":")
+const fakeGitDir = path.join(TMP, "fake-git")
 
 let r = probe("/usr/bin:/bin")
 let lines = (r.stdout || "").trim().split("\n")
 check("desktop-env: exits 0", r.status === 0, r.stderr)
-check("desktop-env: user dirs first, then system dirs", lines[0] === desired, lines[0])
+check("desktop-env: user dirs first, then existing PATH order, missing system dir appended",
+  lines[0] === `${userDirs}:/usr/bin:/bin:/usr/local/bin`, lines[0])
 check("desktop-env: sourcing twice is idempotent", lines[1] === lines[0], lines[1])
 check("desktop-env: no duplicate PATH entry", new Set(lines[0].split(":")).size === lines[0].split(":").length)
 check("desktop-env: OC_NODE_BIN resolved from ~/.local/bin", lines[2].split("|")[0] === path.join(HOME1, ".local", "bin", "node"), lines[2])
 check("desktop-env: OC_NPX_BIN resolved", lines[2].split("|")[1] === path.join(HOME1, ".local", "bin", "npx"), lines[2])
 check("desktop-env: OC_BASH_BIN resolved", /\/bash$/.test(lines[2].split("|")[2]), lines[2])
 
-r = probe("/opt/custom:/usr/bin:/bin:/usr/bin:/opt/custom")
+// Regression: a git shim directory placed first in PATH must stay before /usr/bin, otherwise
+// the real /usr/bin/git shadows it (macOS CI: agent-wt list).
+r = probe(`${fakeGitDir}:/usr/bin:/bin:${fakeGitDir}:/opt/custom:/usr/bin`)
 lines = (r.stdout || "").trim().split("\n")
-check("desktop-env: existing extra entry kept after the system dirs", lines[0] === `${desired}:/opt/custom`, lines[0])
-check("desktop-env: pre-existing duplicate removed", lines[0].split(":").filter((d) => d === "/opt/custom").length === 1, lines[0])
+check("desktop-env: existing shim dir kept before /usr/bin",
+  lines[0] === `${userDirs}:${fakeGitDir}:/usr/bin:/bin:/opt/custom:/usr/local/bin`
+  && lines[0].indexOf(fakeGitDir) < lines[0].indexOf("/usr/bin"), lines[0])
+check("desktop-env: pre-existing duplicate removed", lines[0].split(":").filter((d) => d === fakeGitDir).length === 1, lines[0])
 
 // --- 2. every launcher sources desktop-env.sh ------------------------------------------------
 const launchers = [
