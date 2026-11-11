@@ -36,6 +36,8 @@ jobs:
         run: node scripts/test-deps.mjs
       - name: "chrome-devtools MCP launcher (fake npx/browsers: resolution order, exact pin, telemetry off, doctor)"
         run: node scripts/test-chrome-devtools.mjs
+      - name: "Playwright MCP launcher (dedicated self-healing install, --check/--repair, npx fallback, doctor)"
+        run: node scripts/test-playwright-mcp.mjs
       - name: "REA integration (pinned CLI/MCP, Node gate, skill, docs, doctor)"
         run: node scripts/test-rea.mjs
       - name: "OpenCode Desktop on Linux (GUI PATH, environment.d, .desktop override, uninstall, doctor)"
@@ -238,8 +240,17 @@ jobs:
         run: |
           mkdir -p /tmp/fake && cd /tmp/fake
           printf '%s\n' '#!/bin/sh' "echo \"[npx] \$*\"" > npx && chmod +x npx
+          printf '%s\n' '#!/bin/sh' 'echo "[node] $*"' > node && chmod +x node
+          printf '%s\n' '#!/bin/sh' 'exit 1' > npm && chmod +x npm
           printf '%s\n' '#!/bin/sh' "[ \"\$1\" = info ] && exit 0" "echo \"[podman] \$*\"" > podman && chmod +x podman
           printf '#!/bin/sh\n' > chromium && chmod +x chromium
-          PATH=/tmp/fake:$PATH /tmp/oc-bin/oc-playwright-mcp | grep -- "--executable-path /tmp/fake/chromium"
+          # Dedicated Playwright MCP layout (the launcher must use it, not npm/npx).
+          MCP_DATA=/tmp/oc-mcp-data
+          MCP_DIR="$MCP_DATA/opencode-prerequisites/mcp/playwright/node_modules"
+          mkdir -p "$MCP_DIR/@playwright/mcp" "$MCP_DIR/playwright-core/lib"
+          printf '{}\n' > "$MCP_DIR/@playwright/mcp/package.json"
+          : > "$MCP_DIR/@playwright/mcp/cli.js"
+          : > "$MCP_DIR/playwright-core/lib/utilsBundle.js"
+          XDG_DATA_HOME=$MCP_DATA PATH=/tmp/fake:$PATH /tmp/oc-bin/oc-playwright-mcp | grep -- "cli.js --executable-path /tmp/fake/chromium"
           PATH=/tmp/fake:/usr/bin:/bin /tmp/oc-bin/oc-terraform-mcp | grep -E "\[(podman|docker)\] run"
 

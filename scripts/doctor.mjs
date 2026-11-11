@@ -208,6 +208,13 @@ for (const [name, m] of Object.entries(mcpServers(cfg))) {
     continue
   }
   if (bin.endsWith("oc-playwright-mcp")) {
+    // Dedicated install (~/.local/share/opencode-prerequisites/mcp/playwright): --check only
+    // inspects the files, it never runs npm and never touches the network.
+    const inst = run(bin, ["--check"], 15000)
+    const detail = squash(inst.stderr || inst.stdout, 4)
+    inst.status === 0
+      ? ok(`${name}: ${(inst.stdout ?? "").trim()}`)
+      : wa(`${name}: ${detail || "dedicated install missing"}${/--repair/.test(detail) ? "" : " → oc-playwright-mcp --repair"}`)
     const sys = ["chromium", "chromium-browser", "google-chrome-stable", "google-chrome", "brave-browser", "brave"].find(has)
     const cache = path.join(HOME, ".cache", "ms-playwright")
     sys ? ok(`${name}: system browser (${sys})`)

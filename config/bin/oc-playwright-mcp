@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 # Starts the Playwright MCP server (Microsoft) with the system browser when one exists
 # (Arch/Omarchy, Fedora, Debian, Ubuntu...), otherwise with the Chromium downloaded by Playwright.
+#   oc-playwright-mcp            MCP server (stdio), used by OpenCode
+#   oc-playwright-mcp --check    verify the dedicated install (no network, exit 0/1)
+#   oc-playwright-mcp --repair   force a reinstall, then --check
+#
+# The package is installed in its own directory, never in the shared npx cache
+# (~/.npm/_npx/<hash>) whose corruption made the MCP die with MODULE_NOT_FOUND:
+#   $XDG_DATA_HOME/opencode-prerequisites/mcp/playwright  (default ~/.local/share/...)
+# A missing or incomplete install is repaired automatically on startup. If npm itself fails
+# (offline), the launcher falls back to npx with a dedicated cache: ~/.cache/oc-npm.
+#
 #   OC_PLAYWRIGHT_HEADED=1   visible window (otherwise: headless when using the system browser)
 #   OC_PLAYWRIGHT_BROWSER=/path/to/browser   force a specific browser
 set -Eeuo pipefail
@@ -9,6 +19,86 @@ set -Eeuo pipefail
 # shellcheck disable=SC1091
 for d in "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/libexec" "$HOME/.config/opencode/libexec" "$(cd "${BASH_SOURCE[0]%/*}/../libexec" 2>/dev/null && pwd)"; do [ -r "$d/desktop-env.sh" ] && . "$d/desktop-env.sh" && break; done
 
+: "${HOME:?HOME is not set (needed for the Playwright MCP data directory)}"
+
+MCP_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/opencode-prerequisites/mcp/playwright"
+# Pinned version (last verified stable: 0.0.84): no surprise @latest at startup.
+pkg="@playwright/mcp@0.0.84"
+# npm view @playwright/mcp@0.0.84 bin → { "playwright-mcp": "cli.js" }
+# npm view @playwright/mcp@0.0.84 dependencies → playwright-core (utilsBundle.js lives there).
+MCP_DIR="$MCP_HOME/node_modules/@playwright/mcp"
+MCP_ENTRY="$MCP_DIR/cli.js"
+MCP_UTILS="$MCP_HOME/node_modules/playwright-core/lib/utilsBundle.js"
+
+usage() {
+  printf '%s\n' \
+    'Usage: oc-playwright-mcp [--check|--repair|--help] [MCP arguments...]' \
+    "  --check    verify the dedicated install in $MCP_HOME (no network)" \
+    '  --repair   reinstall @playwright/mcp@0.0.84, then --check' \
+    '  --help     show this help'
+}
+
+installed() {
+  [ -f "$MCP_DIR/package.json" ] && [ -f "$MCP_ENTRY" ] && [ -f "$MCP_UTILS" ]
+}
+
+check_install() {
+  command -v node >/dev/null 2>&1 || {
+    printf '%s\n' 'playwright-mcp: node not found (Node.js 18+ is required).' \
+      '  Install Node.js, then run: oc-playwright-mcp --repair' >&2
+    return 1
+  }
+  if installed; then
+    printf 'playwright-mcp 0.0.84: installed in %s\n' "$MCP_HOME"
+    return 0
+  fi
+  printf '%s\n' \
+    "playwright-mcp: dedicated install missing or incomplete: $MCP_HOME" \
+    '  Fix: oc-playwright-mcp --repair' >&2
+  return 1
+}
+
+install_mcp() {
+  command -v npm >/dev/null 2>&1 || {
+    printf '%s\n' 'playwright-mcp: npm not found (Node.js 18+ is required).' >&2
+    return 1
+  }
+  rm -rf -- "$MCP_HOME"
+  mkdir -p -- "$MCP_HOME"
+  npm install --prefix "$MCP_HOME" --no-audit --no-fund --silent "$pkg"
+}
+
+ensure() {
+  installed && return 0
+  printf 'playwright-mcp: installing %s in %s...\n' "$pkg" "$MCP_HOME" >&2
+  if install_mcp && installed; then return 0; fi
+  printf '%s\n' \
+    'playwright-mcp: dedicated npm install failed; falling back to npx with the dedicated cache.' \
+    "  cache: $HOME/.cache/oc-npm (not the shared ~/.npm/_npx)" >&2
+  return 1
+}
+
+case "${1:-}" in
+  --help|-h)
+    usage
+    exit 0
+    ;;
+  --check)
+    check_install
+    exit $?
+    ;;
+  --repair)
+    if install_mcp && installed; then
+      check_install
+      exit 0
+    fi
+    printf '%s\n' \
+      "playwright-mcp: repair failed: npm could not install $pkg in $MCP_HOME" \
+      '  Check the network and npm, then rerun: oc-playwright-mcp --repair' >&2
+    exit 1
+    ;;
+esac
+
 exe="${OC_PLAYWRIGHT_BROWSER:-}"
 if [ -z "$exe" ]; then
   for c in chromium chromium-browser google-chrome-stable google-chrome brave-browser brave; do
@@ -16,18 +106,30 @@ if [ -z "$exe" ]; then
   done
 fi
 
-# Pinned version (last verified stable: 0.0.84): no surprise @latest at startup.
-pkg="@playwright/mcp@0.0.84"
-
 # Without a system browser, args would stay empty: in bash 3.2 (macOS), "${args[@]}" with set -u
-# fails ("unbound variable"). So npx runs in two distinct branches.
+# fails ("unbound variable"). So the server runs in two distinct branches.
+if ensure; then
+  if [ -z "$exe" ]; then
+    exec node "$MCP_ENTRY" "$@"
+  fi
+  args=(--executable-path "$exe")
+  [ "${OC_PLAYWRIGHT_HEADED:-0}" = 1 ] || args+=(--headless)
+  # Browser running as root (container): the Chromium sandbox is impossible
+  [ "$EUID" -ne 0 ] || args+=(--no-sandbox)
+  exec node "$MCP_ENTRY" "${args[@]}" "$@"
+fi
+
+# Last resort: npx, but in a dedicated cache, never the shared ~/.npm/_npx one.
+command -v npx >/dev/null 2>&1 || {
+  printf '%s\n' 'playwright-mcp: npx not found either (Node.js 18+ is required).' \
+    '  Install Node.js, then run: oc-playwright-mcp --repair' >&2
+  exit 1
+}
+export npm_config_cache="$HOME/.cache/oc-npm"
 if [ -z "$exe" ]; then
   exec npx -y "$pkg" "$@"
 fi
-
 args=(--executable-path "$exe")
 [ "${OC_PLAYWRIGHT_HEADED:-0}" = 1 ] || args+=(--headless)
-# Browser running as root (container): the Chromium sandbox is impossible
-[ "$(id -u)" -ne 0 ] || args+=(--no-sandbox)
-
+[ "$EUID" -ne 0 ] || args+=(--no-sandbox)
 exec npx -y "$pkg" "${args[@]}" "$@"

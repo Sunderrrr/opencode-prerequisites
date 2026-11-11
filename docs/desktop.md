@@ -57,6 +57,9 @@ official `.deb`, `.rpm` or AppImage.
 
 - `spawn ENOENT` or `npx not found` in an MCP server: run `./install.sh --desktop`, fully quit and
   relaunch, then `./doctor.sh --desktop` (`node`, `npx` and `bash` must resolve).
+- Playwright MCP `MODULE_NOT_FOUND` or corrupt shared npx cache: the kit installs it in
+  `~/.local/share/opencode-prerequisites/mcp/playwright`; run `oc-playwright-mcp --repair`
+  (immediate workaround: `rm -rf ~/.npm/_npx/<hash>`, the hash shown in the error).
 - The new `PATH` is not picked up: log out and back in, or run
   `systemctl --user import-environment PATH` and restart the app.
 - Logs: `~/.config/ai.opencode.desktop/logs`.

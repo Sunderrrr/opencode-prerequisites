@@ -1372,6 +1372,25 @@ fi
 # 5. Tools (full profile only)
 if [ "$TOOLS" = 1 ]; then
   need npx || die "npx (Node.js) is required for context7/playwright."
+
+  # Playwright MCP: dedicated, self-healing install (never the shared ~/.npm/_npx cache).
+  # Best-effort: offline must not fail the installation; the launcher retries on first start.
+  PLAYWRIGHT_MCP_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/opencode-prerequisites/mcp/playwright"
+  if need npm; then
+    if "$BIN/oc-playwright-mcp" --check >/dev/null 2>&1; then
+      echo "✅ Playwright MCP @playwright/mcp@0.0.84 already installed in $PLAYWRIGHT_MCP_HOME"
+    else
+      echo "⬇️  Playwright MCP @playwright/mcp@0.0.84 (dedicated install)..."
+      if "$BIN/oc-playwright-mcp" --repair; then
+        echo "✅ Playwright MCP installed in $PLAYWRIGHT_MCP_HOME"
+      else
+        warn "Playwright MCP preinstall failed (offline?): oc-playwright-mcp will retry on first start."
+      fi
+    fi
+  else
+    warn "npm not found: Playwright MCP not preinstalled (run ./install.sh once Node.js is available)."
+  fi
+
   SYSBROWSER=""
   for c in chromium chromium-browser google-chrome-stable google-chrome brave-browser brave; do
     if need "$c"; then SYSBROWSER="$(command -v "$c")"; break; fi
