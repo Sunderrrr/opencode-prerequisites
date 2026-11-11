@@ -211,8 +211,13 @@ function Invoke-BashUninstall {
     $env:PATH = (($Git.Bin, $Git.UsrBin, $env:PATH) -join ';')
     Push-Location $PSScriptRoot
     try {
-      & $Git.Bash $posixUninstall
-      return $LASTEXITCODE
+      # Capture bash stdout/stderr separately from the exit code: piping them
+      # into the pipeline would make this function return an array, and callers
+      # comparing the result with -eq 0 would then misbehave.
+      $out = @(& $Git.Bash $posixUninstall 2>&1)
+      $rc = $LASTEXITCODE
+      if ($out.Count -gt 0) { $out | Write-Host }
+      return [int]$rc
     } finally { Pop-Location }
   } finally {
     foreach ($key in $saved.Keys) {

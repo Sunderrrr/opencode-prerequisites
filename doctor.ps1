@@ -284,8 +284,15 @@ function Invoke-BashDoctor {
     $env:PATH = (($Git.Bin, $Git.UsrBin, $env:PATH, $BinDir) -join ';')
     Push-Location $PSScriptRoot
     try {
-      if ($OfflineMode) { & $Git.Bash $posixDoctor '--offline' } else { & $Git.Bash $posixDoctor }
-      return $LASTEXITCODE
+      # Capture bash stdout/stderr separately from the exit code: piping them
+      # into the pipeline would make this function return an array, and callers
+      # comparing the result with -eq 0 would then misbehave.
+      $out = @()
+      if ($OfflineMode) { $out = @(& $Git.Bash $posixDoctor '--offline' 2>&1) }
+      else { $out = @(& $Git.Bash $posixDoctor 2>&1) }
+      $rc = $LASTEXITCODE
+      if ($out.Count -gt 0) { $out | Write-Host }
+      return [int]$rc
     } finally { Pop-Location }
   } finally {
     foreach ($key in $saved.Keys) {
@@ -305,14 +312,62 @@ function Invoke-Repair {
   try {
     $env:OPENCODE_CONFIG_DIR = $ConfigDir
     $env:OBSCURA_BIN_DIR = $BinDir
-    & $pwsh -NoProfile -ExecutionPolicy Bypass -File $installPs1 -RepairOnly -NoTools -ProfilePath $ProfileFile
-    return $LASTEXITCODE
+    $out = @(& $pwsh -NoProfile -ExecutionPolicy Bypass -File $installPs1 -RepairOnly -NoTools -ProfilePath $ProfileFile 2>&1)
+    $rc = $LASTEXITCODE
+    if ($out.Count -gt 0) { $out | Write-Host }
+    return [int]$rc
   } finally {
     if ($null -eq $savedConfig) { Remove-Item -Path Env:OPENCODE_CONFIG_DIR -ErrorAction SilentlyContinue }
     else { $env:OPENCODE_CONFIG_DIR = $savedConfig }
     if ($null -eq $savedBin) { Remove-Item -Path Env:OBSCURA_BIN_DIR -ErrorAction SilentlyContinue }
     else { $env:OBSCURA_BIN_DIR = $savedBin }
   }
+}
+
+# Returns the text of the first `"Name": { ... }` block (balanced braces,
+# strings and comments ignored), or $null when the block is absent.
+function Get-JsoncServerBlock {
+  param([string]$Text, [string]$Name)
+  $m = [regex]::Match($Text, '"' + [regex]::Escape($Name) + '"\s*:\s*\{')
+  if (-not $m.Success) { return $null }
+  $start = $m.Index + $m.Length - 1
+  $depth = 0
+  $inString = $false
+  $inLineComment = $false
+  $inBlockComment = $false
+  for ($i = $start; $i -lt $Text.Length; $i++) {
+    $c = $Text[$i]
+    $next = if ($i + 1 -lt $Text.Length) { $Text[$i + 1] } else { [char]0 }
+    if ($inLineComment) {
+      if ($c -eq "`n") { $inLineComment = $false }
+      continue
+    }
+    if ($inBlockComment) {
+      if ($c -eq '*' -and $next -eq '/') { $inBlockComment = $false; $i++ }
+      continue
+    }
+    if ($inString) {
+      if ($c -eq '\') { $i++ }
+      elseif ($c -eq '"') { $inString = $false }
+      continue
+    }
+    if ($c -eq '/' -and $next -eq '/') { $inLineComment = $true; $i++; continue }
+    if ($c -eq '/' -and $next -eq '*') { $inBlockComment = $true; $i++; continue }
+    if ($c -eq '"') { $inString = $true; continue }
+    if ($c -eq '{') { $depth++ }
+    elseif ($c -eq '}') {
+      $depth--
+      if ($depth -eq 0) { return $Text.Substring($start, $i - $start + 1) }
+    }
+  }
+  return $null
+}
+
+function Test-JsoncServerDisabled {
+  param([string]$Text, [string]$Name)
+  $block = Get-JsoncServerBlock -Text $Text -Name $Name
+  if (-not $block) { return $false }
+  return [bool]($block -match '"disabled"\s*:\s*true\b')
 }
 
 function Test-ConfigLaunchers {
@@ -329,7 +384,12 @@ function Test-ConfigLaunchers {
   $bad = New-Object System.Collections.Generic.List[string]
   foreach ($name in $mcpLaunchers) {
     $withoutCmd = '/.local/bin/' + $name + '"'
-    if ($text.Contains($withoutCmd)) { $bad.Add($name) }
+    if (-not $text.Contains($withoutCmd)) { continue }
+    # A disabled server never launches its command: an old non-.cmd path is
+    # harmless, so do not fail the diagnostic on it.
+    $server = $name -replace '^oc-', '' -replace '-mcp$', ''
+    if (Test-JsoncServerDisabled -Text $text -Name $server) { continue }
+    $bad.Add($name)
   }
   Check 'MCP launchers point to .cmd shims' ($bad.Count -eq 0) ($bad -join ', ')
 }

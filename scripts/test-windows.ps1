@@ -138,6 +138,19 @@ try {
     Write-Host 'Parse failed: skipping the remaining tests.' -ForegroundColor Red
   } else {
     # ---------------------------------------------------------------------
+    # Reserved automatic variables must never be assigned: $HOME is read-only
+    # in PowerShell 7.6+ and a failed assignment aborts install.ps1.
+    # ---------------------------------------------------------------------
+    Write-TestHeader 'Reserved automatic variables'
+    $reserved = 'home|pid|pwd|input|args|error|host|true|false|null'
+    foreach ($file in @($installPs1, $uninstallPs1, $doctorPs1, $testPs1)) {
+      $text = [IO.File]::ReadAllText($file)
+      $hits = [regex]::Matches($text, '(?im)^\s*\$(?:' + $reserved + ')\s*=')
+      $leaf = Split-Path -Leaf $file
+      Assert "automatic variables: no assignment in $leaf" ($hits.Count -eq 0) (($hits | ForEach-Object { $_.Value.Trim() }) -join ', ')
+    }
+
+    # ---------------------------------------------------------------------
     # install.ps1: dot-sourcing runs the param block but not Main.
     # ---------------------------------------------------------------------
     Write-TestHeader 'install.ps1 helpers'
@@ -180,6 +193,9 @@ try {
     Assert 'config: custom bin dir is absolute' ($customDirs.Contains('D:/oc/bin/oc-models.cmd'))
     $customConfig = Update-OpenCodeConfigText -Text '"{env:HOME}/.config/opencode/x"' -ConfigDir 'D:\oc\config' -BinDir 'D:\oc\bin' -LauncherNames @() -UserProfile 'C:\Users\me'
     Assert 'config: custom config dir is absolute' ($customConfig.Contains('D:/oc/config/x'))
+    $mobileConfig = Update-OpenCodeConfigText -Text '{"mobile":{"disabled":true,"command":["{env:HOME}/.local/bin/oc-mobile-mcp"]}}' -ConfigDir 'C:\Users\me\.config\opencode' -BinDir 'C:\Users\me\.local\bin' -LauncherNames @() -UserProfile 'C:\Users\me'
+    Assert 'config: disabled mobile launcher gets a .cmd suffix' ($mobileConfig.Contains('{env:USERPROFILE}/.local/bin/oc-mobile-mcp.cmd"'))
+    Assert 'config: mobile keeps no {env:HOME}' (-not $mobileConfig.Contains('{env:HOME}'))
     Assert-Throws 'config: empty UserProfile is rejected' { Update-OpenCodeConfigText -Text 'x' -ConfigDir 'c' -BinDir 'b' -LauncherNames @() -UserProfile '' }
 
     $profileText = Update-ProfileText -Text '' -ConfigDir 'C:\Users\me\.config\opencode' -MemPython ''
@@ -287,6 +303,20 @@ try {
     [IO.File]::WriteAllText($goodConfigFile, '{"mcp":{"playwright":{"command":["{env:USERPROFILE}/.local/bin/oc-playwright-mcp.cmd"]}}}')
     Test-ConfigLaunchers -ConfigFile $goodConfigFile -ConfigDir $layoutConfig -BinDir $layoutBin -LauncherNames $launcherNames 6>$null
     Assert 'doctor: accepts a Windows-ready opencode.jsonc' ($script:CheckErrors -eq 0) "errors=$($script:CheckErrors)"
+
+    $script:CheckPassed = 0
+    $script:CheckErrors = 0
+    $disabledConfigFile = Join-Path $script:TempRoot 'opencode-disabled.jsonc'
+    [IO.File]::WriteAllText($disabledConfigFile, '{"mcp":{"servers":{"mobile":{"disabled":true,"command":["{env:USERPROFILE}/.local/bin/oc-mobile-mcp"]}}}}')
+    Test-ConfigLaunchers -ConfigFile $disabledConfigFile -ConfigDir $layoutConfig -BinDir $layoutBin -LauncherNames $launcherNames 6>$null
+    Assert 'doctor: ignores a disabled MCP without .cmd' ($script:CheckErrors -eq 0) "errors=$($script:CheckErrors)"
+
+    $script:CheckPassed = 0
+    $script:CheckErrors = 0
+    $enabledConfigFile = Join-Path $script:TempRoot 'opencode-enabled.jsonc'
+    [IO.File]::WriteAllText($enabledConfigFile, '{"mcp":{"servers":{"mobile":{"disabled":false,"command":["{env:USERPROFILE}/.local/bin/oc-mobile-mcp"]}}}}')
+    Test-ConfigLaunchers -ConfigFile $enabledConfigFile -ConfigDir $layoutConfig -BinDir $layoutBin -LauncherNames $launcherNames 6>$null
+    Assert 'doctor: still flags an enabled MCP without .cmd' ($script:CheckErrors -ge 1) "errors=$($script:CheckErrors)"
 
     # ---------------------------------------------------------------------
     # Windows-only end-to-end path.

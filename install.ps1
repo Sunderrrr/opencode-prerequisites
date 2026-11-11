@@ -269,10 +269,10 @@ function Find-Chrome {
 
 function Get-MemPalacePython {
   if ($env:MEMPALACE_ADAPTER_PYTHON) { return $env:MEMPALACE_ADAPTER_PYTHON }
-  $home = Get-UserProfile
+  $userHome = Get-UserProfile
   foreach ($candidate in @(
-      (Join-Path $home '.mempalace\venv\Scripts\python.exe'),
-      (Join-Path $home '.mempalace\venv\bin\python'))) {
+      (Join-Path $userHome '.mempalace\venv\Scripts\python.exe'),
+      (Join-Path $userHome '.mempalace\venv\bin\python'))) {
     if (Test-Path -LiteralPath $candidate) { return $candidate }
   }
   return $null
@@ -347,7 +347,15 @@ function Update-OpenCodeConfigText {
     $cfgRef = (Normalize-WinPath $ConfigDir).Replace('\', '/')
   }
 
-  foreach ($name in $LauncherNames) {
+  # Some launchers stay in opencode.jsonc even when they are not installed
+  # (mobile is disabled by install.sh without the Android module). Suffix them
+  # anyway: the reference points at the generated .cmd shim once installed, and
+  # a dangling .cmd is harmless while the server is disabled.
+  $cmdLaunchers = @($LauncherNames)
+  foreach ($extra in @('oc-mobile-mcp')) {
+    if ($cmdLaunchers -notcontains $extra) { $cmdLaunchers += $extra }
+  }
+  foreach ($name in $cmdLaunchers) {
     $pattern = '\{env:HOME\}/\.local/bin/' + [regex]::Escape($name) + '(?=["\s]|$)'
     $placeholder = '__OC_SHIM_' + [guid]::NewGuid().ToString('N') + '__'
     $Text = [regex]::Replace($Text, $pattern, $placeholder)
