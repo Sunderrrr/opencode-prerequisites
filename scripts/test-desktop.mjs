@@ -254,6 +254,58 @@ r = doctor(D.home)
 check("package binary: doctor --desktop resolves TryExec",
   r.status === 0 && r.stdout.includes(`TryExec resolves: ${pkgBin}`), r.stderr + r.stdout)
 
+// A directory passes [ -x ]: a TryExec pointing at one must be rejected as unresolved.
+const E = makeHome("home-tryexec-dir", { desktop: false })
+const eBin = path.join(E.home, "opt", "ai.opencode")
+write(eBin, "#!/bin/sh\nexit 0\n")
+fs.chmodSync(eBin, 0o755)
+const eDir = path.join(E.home, "opt")
+fs.mkdirSync(path.join(E.home, ".config", "ai.opencode.desktop"), { recursive: true })
+const eXdg = path.join(TMP, "xdg-tryexec-dir")
+write(path.join(eXdg, "applications", "ai.opencode.desktop.desktop"), `[Desktop Entry]
+Type=Application
+Name=OpenCode
+Exec=${eBin} %U
+TryExec=${eDir}
+`)
+res = install(E.home, ["--no-tools", "--desktop"], { XDG_DATA_DIRS: eXdg })
+const eDesktop = path.join(E.home, ".local", "share", "applications", "ai.opencode.desktop.desktop")
+const eText = exists(eDesktop) ? read(eDesktop) : ""
+const eTryexec = eText.split("\n").find((l) => l.startsWith("TryExec="))
+check("directory TryExec: install drops it and reuses the Exec target", res.status === 0 && eTryexec === `TryExec=${eBin}`, eTryexec)
+r = doctor(E.home)
+check("directory TryExec: doctor reports the resolved executor",
+  r.status === 0 && r.stdout.includes(`TryExec resolves: ${eBin}`), r.stderr + r.stdout)
+
+// A distro package can ship a bare Exec target (Exec=ai.opencode %U): resolve it through PATH.
+const F = makeHome("home-bare-exec", { desktop: false })
+const bareBin = path.join(F.home, ".local", "bin", "ai.opencode")
+write(bareBin, "#!/bin/sh\nexit 0\n")
+fs.chmodSync(bareBin, 0o755)
+fs.mkdirSync(path.join(F.home, ".config", "ai.opencode.desktop"), { recursive: true })
+const fXdg = path.join(TMP, "xdg-bare-exec")
+write(path.join(fXdg, "applications", "ai.opencode.desktop.desktop"), `[Desktop Entry]
+Type=Application
+Name=OpenCode
+Exec=ai.opencode %U
+`)
+res = install(F.home, ["--no-tools", "--desktop"], { XDG_DATA_DIRS: fXdg })
+const fDesktop = path.join(F.home, ".local", "share", "applications", "ai.opencode.desktop.desktop")
+const fText = exists(fDesktop) ? read(fDesktop) : ""
+const fTryexec = fText.split("\n").find((l) => l.startsWith("TryExec="))
+check("bare Exec: TryExec resolved to the absolute PATH target",
+  res.status === 0 && fTryexec === `TryExec=${bareBin}`, fTryexec)
+r = doctor(F.home)
+check("bare Exec: doctor --desktop resolves TryExec",
+  r.status === 0 && r.stdout.includes(`TryExec resolves: ${bareBin}`), r.stderr + r.stdout)
+
+// Many TryExec= lines must not abort the doctor: sed|head raised SIGPIPE (141) under pipefail.
+const manyTryexec = Array.from({ length: 40_000 }, (_, i) => `TryExec=/nonexistent-tryexec-${i}`).join("\n")
+fs.appendFileSync(fDesktop, `${manyTryexec}\n`)
+r = doctor(F.home)
+check("many TryExec lines: doctor does not abort and reads the first one",
+  r.status === 0 && r.stdout.includes(`TryExec resolves: ${bareBin}`), r.stderr.split("\n").slice(-3).join("\n") + r.stdout.slice(-300))
+
 // --- 7. uninstall: desktop wiring removed, unrelated files untouched ------------------------
 const uninstall = (home) => spawnSync("bash", [path.join(ROOT, "uninstall.sh")], {
   encoding: "utf8",

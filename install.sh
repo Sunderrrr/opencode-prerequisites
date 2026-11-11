@@ -420,7 +420,7 @@ write_desktop_environment() {
 
 # User desktop override: a complete entry, so it works even without desktop-file-utils.
 write_desktop_override() {
-  local base path name comment icon categories tryexec original_exec stored_exec candidate
+  local base path name comment icon categories tryexec original_exec stored_exec candidate resolved
   base="ai.opencode.desktop.desktop"
   if desktop_system_file >/dev/null 2>&1; then
     base="$(basename "$(desktop_system_file)")"
@@ -467,7 +467,7 @@ write_desktop_override() {
   # which also covers packages whose binary is not named "opencode-desktop" (e.g. ai.opencode).
   if [ -n "$tryexec" ]; then
     case "$tryexec" in
-      /*) if [ ! -x "$tryexec" ]; then tryexec=""; fi ;;
+      /*) if [ ! -f "$tryexec" ] || [ ! -x "$tryexec" ]; then tryexec=""; fi ;;
       *) if ! command -v "$tryexec" >/dev/null 2>&1; then tryexec=""; fi ;;
     esac
   fi
@@ -475,7 +475,8 @@ write_desktop_override() {
   if [ -z "$tryexec" ] && [ -n "$original_exec" ]; then
     candidate="$(desktop_first_command "$original_exec")"
     case "$candidate" in
-      /*) if [ -x "$candidate" ]; then tryexec="$candidate"; fi ;;
+      /*) if [ -f "$candidate" ] && [ -x "$candidate" ]; then tryexec="$candidate"; fi ;;
+      *) if resolved="$(command -v "$candidate" 2>/dev/null)" && [ -f "$resolved" ] && [ -x "$resolved" ]; then tryexec="$resolved"; fi ;;
     esac
   fi
   [ -n "$tryexec" ] || tryexec="opencode-desktop"

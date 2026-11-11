@@ -80,13 +80,13 @@ desktop_doctor() {
       dko "Exec does not inject PATH in $APP_FILE"
     fi
     if grep -q '^StartupWMClass=ai.opencode.desktop$' "$APP_FILE"; then dok "StartupWMClass=ai.opencode.desktop"; else dko "StartupWMClass=ai.opencode.desktop missing"; fi
-    tryexec_val="$(sed -n 's/^TryExec=//p' "$APP_FILE" | head -n 1)"
+    tryexec_val="$(awk 'index($0, "TryExec=") == 1 { print substr($0, 9); exit }' "$APP_FILE")"
     if [ -z "$tryexec_val" ]; then
       dko "TryExec missing"
     else
       case "$tryexec_val" in
         /*)
-          if [ -x "$tryexec_val" ]; then
+          if [ -f "$tryexec_val" ] && [ -x "$tryexec_val" ]; then
             dok "TryExec resolves: $tryexec_val"
           else
             dko "TryExec does not exist: $tryexec_val (the desktop environment hides the launcher)"

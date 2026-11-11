@@ -263,7 +263,7 @@ check("--fix: permissions counted as one fix", /fixed: 1, skipped: 0/.test(r.std
 // A greedy /.../log... regex matched the "home /home/logan" line, then readFileSync() got a
 // directory (EISDIR). The log path must come from the "log" line only.
 setConfig({ jsonc: HEALTHY })
-const logHome = path.join(tmp, "home-logan")
+const logHome = path.join(tmp, "home", "logan")
 fs.mkdirSync(path.join(logHome, ".cache"), { recursive: true })
 const realLogDir = path.join(tmp, "logs-real")
 fs.mkdirSync(realLogDir, { recursive: true })
