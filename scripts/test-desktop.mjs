@@ -22,6 +22,8 @@ const read = (file) => fs.readFileSync(file, "utf8")
 const mode = (file) => fs.statSync(file).mode & 0o777
 const exists = (file) => fs.existsSync(file)
 const baseEnv = (home, pathValue, extra = {}) => ({ HOME: home, PATH: pathValue, TMPDIR: os.tmpdir(), LANG: "C", ...extra })
+// An absolute bash: the empty-PATH probe cannot resolve "bash" through PATH.
+const BASH = ["/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"].find(exists) || "bash"
 
 // A fake HOME with a "GUI-visible" node (wrapper writes a marker, proving desktop-env.sh put
 // ~/.local/bin first even when /usr/bin/node also exists), npx and opencode-desktop.
@@ -46,14 +48,14 @@ const HOME1 = makeHome("home-env").home
 const DENV = path.join(ROOT, "config", "libexec", "desktop-env.sh")
 const probe = (pathValue, extra = {}) => {
   const script = '. "$1"; printf "%s\\n" "$PATH"; . "$1"; printf "%s\\n" "$PATH"; printf "%s|%s|%s\\n" "$OC_NODE_BIN" "$OC_NPX_BIN" "$OC_BASH_BIN"'
-  return spawnSync("bash", ["-c", script, "bash", DENV], {
+  return spawnSync(BASH, ["-c", script, "bash", DENV], {
     encoding: "utf8",
     env: baseEnv(HOME1, pathValue, extra),
     timeout: 20_000,
   })
 }
-// System directories are never moved to the front: existing entries keep their order and a
-// missing system directory is appended at the very end.
+// A non-empty PATH keeps its exact order: user directories are prepended, and no system
+// directory is appended (a deliberately minimal PATH must stay minimal).
 const userDirs = [
   path.join(HOME1, ".local", "bin"),
   path.join(HOME1, ".local", "share", "mise", "shims"),
@@ -66,20 +68,27 @@ const fakeGitDir = path.join(TMP, "fake-git")
 let r = probe("/usr/bin:/bin")
 let lines = (r.stdout || "").trim().split("\n")
 check("desktop-env: exits 0", r.status === 0, r.stderr)
-check("desktop-env: user dirs first, then existing PATH order, missing system dir appended",
-  lines[0] === `${userDirs}:/usr/bin:/bin:/usr/local/bin`, lines[0])
+check("desktop-env: user dirs first, then existing PATH order, no system dir appended",
+  lines[0] === `${userDirs}:/usr/bin:/bin`, lines[0])
 check("desktop-env: sourcing twice is idempotent", lines[1] === lines[0], lines[1])
 check("desktop-env: no duplicate PATH entry", new Set(lines[0].split(":")).size === lines[0].split(":").length)
 check("desktop-env: OC_NODE_BIN resolved from ~/.local/bin", lines[2].split("|")[0] === path.join(HOME1, ".local", "bin", "node"), lines[2])
 check("desktop-env: OC_NPX_BIN resolved", lines[2].split("|")[1] === path.join(HOME1, ".local", "bin", "npx"), lines[2])
 check("desktop-env: OC_BASH_BIN resolved", /\/bash$/.test(lines[2].split("|")[2]), lines[2])
 
+// An empty PATH (GUI process without a session PATH) falls back to the minimal system PATH,
+// once, and a second sourcing keeps it idempotent.
+r = probe("")
+lines = (r.stdout || "").trim().split("\n")
+check("desktop-env: empty PATH gets /usr/local/bin:/usr/bin:/bin once",
+  lines[0] === `${userDirs}:/usr/local/bin:/usr/bin:/bin` && lines[1] === lines[0], lines[0])
+
 // Regression: a git shim directory placed first in PATH must stay before /usr/bin, otherwise
 // the real /usr/bin/git shadows it (macOS CI: agent-wt list).
 r = probe(`${fakeGitDir}:/usr/bin:/bin:${fakeGitDir}:/opt/custom:/usr/bin`)
 lines = (r.stdout || "").trim().split("\n")
 check("desktop-env: existing shim dir kept before /usr/bin",
-  lines[0] === `${userDirs}:${fakeGitDir}:/usr/bin:/bin:/opt/custom:/usr/local/bin`
+  lines[0] === `${userDirs}:${fakeGitDir}:/usr/bin:/bin:/opt/custom`
   && lines[0].indexOf(fakeGitDir) < lines[0].indexOf("/usr/bin"), lines[0])
 check("desktop-env: pre-existing duplicate removed", lines[0].split(":").filter((d) => d === fakeGitDir).length === 1, lines[0])
 

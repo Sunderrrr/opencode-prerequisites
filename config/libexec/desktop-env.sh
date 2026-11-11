@@ -2,9 +2,11 @@
 # desktop-env.sh: PATH for OpenCode Desktop on Linux (Electron does not read ~/.bashrc, ~/.zshenv
 # or the shell environment: a GUI-launched app sees the systemd user-session PATH only).
 # Sourced by the kit launchers (and only by them): it prepends the usual user tool directories,
-# then keeps every existing entry in its exact order, then appends the system directories only
-# when they are missing. Never moves /usr/local/bin, /usr/bin or /bin ahead of an existing
-# entry (a shim directory, for example). Bash 3.2+, idempotent, no duplicates.
+# then keeps every existing entry in its exact order. A non-empty PATH is never extended with
+# system directories (a deliberately minimal PATH stays minimal, which the tests rely on); only
+# an empty or unset PATH falls back to /usr/local/bin:/usr/bin:/bin. Never moves those system
+# directories ahead of an existing entry (a shim directory, for example).
+# Bash 3.2+, idempotent, no duplicates.
 # shellcheck shell=bash
 
 oc_desktop_env_apply() {
@@ -50,17 +52,12 @@ oc_desktop_env_apply() {
       out+=("$entry")
     done
   fi
-  # 3. System directories at the end, only when no entry already covers them.
-  for dir in /usr/local/bin /usr/bin /bin; do
-    skip=0
-    if [ "${#out[@]}" -gt 0 ]; then
-      for entry in "${out[@]}"; do
-        [ "$entry" = "$dir" ] && { skip=1; break; }
-      done
-    fi
-    [ "$skip" = 1 ] && continue
-    out+=("$dir")
-  done
+  # 3. An empty or unset PATH (GUI process without a session PATH): minimal system PATH only.
+  #    With a non-empty PATH nothing is appended: adding /usr/bin would make a deliberately
+  #    minimal PATH find tools it must not see (the missing-Python test, for example).
+  if [ "${#existing[@]}" -eq 0 ]; then
+    out+=(/usr/local/bin /usr/bin /bin)
+  fi
 
   for dir in "${out[@]}"; do
     if [ "$first" = 1 ]; then first=0; else joined="$joined:"; fi
