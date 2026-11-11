@@ -230,6 +230,30 @@ fs.mkdirSync(emptyHome, { recursive: true })
 r = doctor(emptyHome)
 check("doctor --desktop: fails without installation", r.status === 1 && /Config directory missing/.test(r.stdout), r.stdout)
 
+// A distro package may name the binary differently (ai.opencode): TryExec must point at the
+// real Exec target, otherwise GNOME hides the launcher because TryExec does not resolve.
+const D = makeHome("home-package", { desktop: false })
+const pkgBin = path.join(D.home, "opt", "ai.opencode")
+write(pkgBin, "#!/bin/sh\nexit 0\n")
+fs.chmodSync(pkgBin, 0o755)
+fs.mkdirSync(path.join(D.home, ".config", "ai.opencode.desktop"), { recursive: true })
+const pkgXdg = path.join(TMP, "xdg-package")
+write(path.join(pkgXdg, "applications", "ai.opencode.desktop.desktop"), `[Desktop Entry]
+Type=Application
+Name=OpenCode
+Exec=${pkgBin} %U
+`)
+res = install(D.home, ["--no-tools", "--desktop"], { XDG_DATA_DIRS: pkgXdg })
+const pkgDesktop = path.join(D.home, ".local", "share", "applications", "ai.opencode.desktop.desktop")
+const pkgText = exists(pkgDesktop) ? read(pkgDesktop) : ""
+check("package binary: install detects the data directory", res.status === 0 && /data directory detected/.test(res.stdout), res.stdout)
+check("package binary: TryExec reuses the absolute Exec target",
+  pkgText.includes(`TryExec=${pkgBin}`) && !/^TryExec=opencode-desktop$/m.test(pkgText),
+  pkgText.split("\n").find((l) => l.startsWith("TryExec=")))
+r = doctor(D.home)
+check("package binary: doctor --desktop resolves TryExec",
+  r.status === 0 && r.stdout.includes(`TryExec resolves: ${pkgBin}`), r.stderr + r.stdout)
+
 // --- 7. uninstall: desktop wiring removed, unrelated files untouched ------------------------
 const uninstall = (home) => spawnSync("bash", [path.join(ROOT, "uninstall.sh")], {
   encoding: "utf8",

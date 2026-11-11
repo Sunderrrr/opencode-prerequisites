@@ -367,6 +367,15 @@ desktop_exec_of() {  # first Exec= of a desktop entry
   awk 'index($0, "Exec=") == 1 { print substr($0, 6); exit }' "$1"
 }
 
+desktop_first_command() {  # first command of an Exec line, unquoted (absolute path or bare name)
+  local first="$1"
+  case "$first" in
+    \"*) first="${first#\"}"; first="${first%%\"*}" ;;
+    *) first="${first%% *}" ;;
+  esac
+  printf '%s\n' "$first"
+}
+
 desktop_strip_field_codes() {  # drop %U %F… so the generated Exec can append exactly one %U
   printf '%s\n' "$1" | awk '{ gsub(/[[:space:]]+%[UuFfDdNnickvm]/, ""); sub(/[[:space:]]+$/, ""); print }'
 }
@@ -411,7 +420,7 @@ write_desktop_environment() {
 
 # User desktop override: a complete entry, so it works even without desktop-file-utils.
 write_desktop_override() {
-  local base path name comment icon categories tryexec original_exec stored_exec
+  local base path name comment icon categories tryexec original_exec stored_exec candidate
   base="ai.opencode.desktop.desktop"
   if desktop_system_file >/dev/null 2>&1; then
     base="$(basename "$(desktop_system_file)")"
@@ -454,7 +463,21 @@ write_desktop_override() {
     categories="$(desktop_key "$DESKTOP_FILE" Categories)"
     tryexec="$(desktop_key "$DESKTOP_FILE" TryExec)"
   fi
+  # A TryExec that does not resolve hides the launcher (GNOME): prefer the real Exec target,
+  # which also covers packages whose binary is not named "opencode-desktop" (e.g. ai.opencode).
+  if [ -n "$tryexec" ]; then
+    case "$tryexec" in
+      /*) if [ ! -x "$tryexec" ]; then tryexec=""; fi ;;
+      *) if ! command -v "$tryexec" >/dev/null 2>&1; then tryexec=""; fi ;;
+    esac
+  fi
   [ -n "$tryexec" ] || tryexec="$DESKTOP_APP_BIN"
+  if [ -z "$tryexec" ] && [ -n "$original_exec" ]; then
+    candidate="$(desktop_first_command "$original_exec")"
+    case "$candidate" in
+      /*) if [ -x "$candidate" ]; then tryexec="$candidate"; fi ;;
+    esac
+  fi
   [ -n "$tryexec" ] || tryexec="opencode-desktop"
 
   {
