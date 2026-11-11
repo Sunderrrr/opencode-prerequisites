@@ -36,6 +36,10 @@
 #   OC_SEMGREP_CHECK_TIMEOUT      max --check duration, in seconds      (default: 180)
 set -Eeuo pipefail
 
+# GUI-launched OpenCode Desktop does not inherit the shell PATH (Electron): load the kit PATH.
+# shellcheck disable=SC1091
+for d in "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/libexec" "$HOME/.config/opencode/libexec" "$(cd "$(dirname "$0")/../libexec" 2>/dev/null && pwd)"; do [ -r "$d/desktop-env.sh" ] && . "$d/desktop-env.sh" && break; done
+
 MCP_VERSION="${OC_SEMGREP_MCP_VERSION:-0.9.0}"
 PYDANTIC_VERSION="${OC_SEMGREP_PYDANTIC_VERSION:-2.11.10}"
 SETUPTOOLS_VERSION="${OC_SEMGREP_SETUPTOOLS_VERSION:-80.10.2}"

@@ -3,6 +3,10 @@
 # Picks the engine that actually answers (an installed but stopped Docker is skipped in favor of Podman).
 set -Eeuo pipefail
 
+# GUI-launched OpenCode Desktop does not inherit the shell PATH (Electron): load the kit PATH.
+# shellcheck disable=SC1091
+for d in "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/libexec" "$HOME/.config/opencode/libexec" "$(cd "$(dirname "$0")/../libexec" 2>/dev/null && pwd)"; do [ -r "$d/desktop-env.sh" ] && . "$d/desktop-env.sh" && break; done
+
 # macOS has no "timeout": use coreutils (gtimeout) when present, otherwise do not bound the test.
 # Without a bound, a stopped Docker daemon can make the client wait: try Podman first.
 TO=""

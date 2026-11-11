@@ -7,6 +7,10 @@
 # REA requires Node ^22.23.4 || ^24.22.1 || >=26.12.1.
 # Variables: OC_REA_VERSION (package version), OC_REA_NODE_VERSION (tests).
 set -Eeuo pipefail
+
+# GUI-launched OpenCode Desktop does not inherit the shell PATH (Electron): load the kit PATH.
+# shellcheck disable=SC1091
+for d in "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/libexec" "$HOME/.config/opencode/libexec" "$(cd "$(dirname "$0")/../libexec" 2>/dev/null && pwd)"; do [ -r "$d/desktop-env.sh" ] && . "$d/desktop-env.sh" && break; done
 REA_VERSION="${OC_REA_VERSION:-6.8.0}"
 
 node_ok() {

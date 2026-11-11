@@ -170,6 +170,10 @@ check("install: 2 installs with uvx do not recreate a \"disabled\" for semgrep",
 // oc-semgrep-mcp launcher: --check performs the real handshake; --check-quick starts NO process.
 // Logging fake uvx: it records its arguments, then answers the MCP initialize like the real server.
 const launcher = path.join(ROOT, "config/bin/oc-semgrep-mcp")
+// The launcher sources desktop-env.sh, which always prepends the *current* HOME's tool dirs:
+// isolate HOME so the real ~/.local/share/mise/shims (which may provide uvx) cannot leak in.
+const semgrepHome = path.join(tmp, "semgrep-home")
+fs.mkdirSync(semgrepHome, { recursive: true })
 const fakeUvxLogDir = path.join(tmp, "fakeuvx-log"), uvxArgsLog = path.join(tmp, "uvx-args.log")
 write(path.join(fakeUvxLogDir, "uvx"), `#!/bin/sh
 printf '%s\\n' "$*" >> "${uvxArgsLog}"
@@ -181,18 +185,18 @@ const fakePipxDir = path.join(tmp, "fakepipx")
 write(path.join(fakePipxDir, "pipx"), "#!/bin/sh\nexit 99\n", 0o755) // present, but --check-quick must not run it
 const readLog = (f) => (fs.existsSync(f) ? fs.readFileSync(f, "utf8").trim() : "")
 
-const quickUvx = sh("bash", [launcher, "--check-quick"], { PATH: `${fakeUvxLogDir}:${noUv}` })
+const quickUvx = sh("bash", [launcher, "--check-quick"], { HOME: semgrepHome, PATH: `${fakeUvxLogDir}:${noUv}` })
 check("--check-quick: code 0 with uvx present, without running uvx",
   quickUvx.status === 0 && /uvx detected/.test(quickUvx.stdout) && readLog(uvxArgsLog) === "",
   `code ${quickUvx.status} | ${quickUvx.stdout}${quickUvx.stderr} | log "${readLog(uvxArgsLog)}"`)
-const quickPipx = sh("bash", [launcher, "--check-quick"], { PATH: `${fakePipxDir}:${noUv}` })
+const quickPipx = sh("bash", [launcher, "--check-quick"], { HOME: semgrepHome, PATH: `${fakePipxDir}:${noUv}` })
 check("--check-quick: code 0 with pipx alone (no uvx), without running pipx",
   quickPipx.status === 0 && /pipx detected/.test(quickPipx.stdout), `code ${quickPipx.status} | ${quickPipx.stdout}${quickPipx.stderr}`)
-const quickNone = sh("bash", [launcher, "--check-quick"], { PATH: noUv })
+const quickNone = sh("bash", [launcher, "--check-quick"], { HOME: semgrepHome, PATH: noUv })
 check("--check-quick: code 1 without uvx or pipx, clear message",
   quickNone.status === 1 && /neither uvx nor pipx/.test(quickNone.stderr), `code ${quickNone.status} | ${quickNone.stderr}`)
 
-const realCheck = sh("bash", [launcher, "--check"], { PATH: `${fakeUvxLogDir}:${noUv}` })
+const realCheck = sh("bash", [launcher, "--check"], { HOME: semgrepHome, PATH: `${fakeUvxLogDir}:${noUv}` })
 const uvxArgs = readLog(uvxArgsLog)
 check("--check: real MCP handshake through uvx (code 0, serverInfo)",
   realCheck.status === 0 && /MCP initialize handshake OK/.test(realCheck.stdout) && /serverInfo semgrep-mcp fake/.test(realCheck.stdout),

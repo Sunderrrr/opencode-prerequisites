@@ -2,6 +2,15 @@
 
 Format [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning [SemVer](https://semver.org/). Version 1.0.1 (`VERSION`); v1.0.0 is tagged and signed, v1.0.1 is tagged after this commit. Entries describe `main`.
 
+## [Unreleased] - 2026-11-11
+
+### Added
+
+- OpenCode Desktop on Linux (`.deb`, `.rpm`, AppImage): `./install.sh --desktop` writes the systemd user-session `PATH` (`~/.config/environment.d/90-opencode-prerequisites.conf`, mode 600, tagged block, plus `MEMPALACE_ADAPTER_PYTHON` when the venv exists) and a user `.desktop` override whose `Exec` starts with `env PATH="…"` (a pre-existing file is backed up). The kit launchers source `config/libexec/desktop-env.sh`, so they also work with a GUI-launched minimal `PATH`.
+- `./doctor.sh --desktop`: checks the desktop app, the installed `desktop-env.sh`, the `environment.d` file (mode 600), the `.desktop` override (`Exec`, `TryExec`, `StartupWMClass`), `node`/`npx`/`bash` resolution and the Wayland hint; no network.
+- `./uninstall.sh` removes the desktop wiring only when the kit marker is present (environment.d block stripped, file removed if nothing else remains; `.desktop` restored from the install-time backup), with timestamped backups; unrelated files are untouched.
+- `scripts/test-desktop.mjs` (52 checks: `desktop-env.sh` PATH order/idempotence, every launcher, `install.sh --desktop` including AppImage and backups, uninstall, `doctor.sh --desktop`), wired into the `validate` and `distros` CI jobs; `docs/desktop.md`.
+
 ## [1.0.1] - 2026-11-09
 
 ### Added

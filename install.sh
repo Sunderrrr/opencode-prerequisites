@@ -21,6 +21,8 @@
 #                               and the kit version is written to <file>.new; an old manifest
 #                               without fingerprints is reported before copying)
 #   ./install.sh --shell-env    add PATH and MEMPALACE_ADAPTER_PYTHON to ~/.bashrc / ~/.zshrc (once)
+#   ./install.sh --desktop      OpenCode Desktop on Linux: environment.d PATH + user .desktop override
+#                               (GUI apps do not inherit the shell PATH; tools stay as selected)
 #   ./install.sh --with-matt    + full Matt Pocock skills
 #   ./install.sh --android      Android module (optional): android and mobile-tester agents, mobile MCP, Podman toolchain
 #                               (image still to be built: oc-android build-image --accept-licenses). Remembered;
@@ -51,7 +53,7 @@ OC_PLAYWRIGHT_VERSION="${OC_PLAYWRIGHT_VERSION:-1.65.0}"
 OC_SKILLS_VERSION="${OC_SKILLS_VERSION:-1.7.6}"
 
 LITE=0; PROFILE=""; PROFILE_EXPLICIT=0; NOPACK=0; NOTOOLS=0
-TOOLS=1; MATT=0; MEMONLY=0; ALLOWROOT=0; SHELLENV=0; ANDROID=0; NOANDROID=0; PENTEST=0; NOPENTEST=0; PENTEST_EXPLICIT=0; FORCE_CONFIG=0
+TOOLS=1; MATT=0; MEMONLY=0; ALLOWROOT=0; SHELLENV=0; DESKTOP=0; ANDROID=0; NOANDROID=0; PENTEST=0; NOPENTEST=0; PENTEST_EXPLICIT=0; FORCE_CONFIG=0
 WITH_RAW=(); WITHOUT_RAW=()
 while [ "$#" -gt 0 ]; do
   a="$1"
@@ -79,6 +81,7 @@ while [ "$#" -gt 0 ]; do
     --pentest) PENTEST=1; PENTEST_EXPLICIT=1; NOPENTEST=0 ;;
     --no-pentest) NOPENTEST=1; PENTEST=0; PENTEST_EXPLICIT=0 ;;
     --shell-env) SHELLENV=1 ;;
+    --desktop) DESKTOP=1 ;;
     --with-matt) MATT=1 ;;
     -h|--help) awk 'NR > 1 && /^set -/ { exit } NR > 1 { print }' "$0"; exit 0 ;;
     -V|--version) cat "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/VERSION"; exit 0 ;;
@@ -290,6 +293,198 @@ pkg_hint() {
     brew:git)      echo "brew install git" ;;
     *) echo "see the ${t} documentation for ${DISTRO}" ;;
   esac
+}
+
+# --- OpenCode Desktop (Linux, Electron): GUI apps do not inherit the shell PATH -----------------
+# The desktop app is started by the session manager, not by a terminal: it never reads ~/.bashrc,
+# ~/.zshenv or the interactive PATH. Two independent fixes are written by --desktop:
+#   1. ~/.config/environment.d/90-opencode-prerequisites.conf (systemd user session, after re-login);
+#   2. ~/.local/share/applications/<app-id>.desktop (immediate, no re-login: Exec=env PATH=...).
+DESKTOP_PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin"
+DESKTOP_APP_BIN=""; DESKTOP_APP_KIND=""; DESKTOP_FILE=""
+
+desktop_detect() {
+  local c d f
+  DESKTOP_APP_BIN=""; DESKTOP_APP_KIND=""; DESKTOP_FILE=""
+  c="$(command -v opencode-desktop 2>/dev/null || true)"
+  if [ -n "$c" ] && [ -x "$c" ]; then
+    DESKTOP_APP_BIN="$c"; DESKTOP_APP_KIND="binary"
+  fi
+  if [ -z "$DESKTOP_APP_BIN" ]; then
+    for c in /usr/bin/opencode-desktop /usr/local/bin/opencode-desktop "$HOME/.local/bin/opencode-desktop"; do
+      if [ -x "$c" ] && [ ! -d "$c" ]; then DESKTOP_APP_BIN="$c"; DESKTOP_APP_KIND="binary"; break; fi
+    done
+  fi
+  if [ -z "$DESKTOP_APP_BIN" ]; then
+    for d in "$HOME/Applications" "$HOME/Downloads"; do
+      [ -d "$d" ] || continue
+      for f in "$d"/opencode-desktop*.AppImage; do
+        [ -f "$f" ] || continue
+        DESKTOP_APP_BIN="$f"; DESKTOP_APP_KIND="appimage"; break 2
+      done
+    done
+  fi
+  DESKTOP_FILE="$(desktop_system_file 2>/dev/null || true)"
+
+  if [ -n "$DESKTOP_APP_BIN" ]; then
+    case "$DESKTOP_APP_KIND" in
+      appimage) echo "✅ OpenCode Desktop detected: AppImage $DESKTOP_APP_BIN" ;;
+      *) echo "✅ OpenCode Desktop detected: $DESKTOP_APP_BIN" ;;
+    esac
+  elif [ -d "$HOME/.config/ai.opencode.desktop" ]; then
+    DESKTOP_APP_KIND="config"
+    echo "✅ OpenCode Desktop data directory detected: $HOME/.config/ai.opencode.desktop"
+  else
+    warn "OpenCode Desktop not detected (binary, ~/.config/ai.opencode.desktop or ~/Applications|~/Downloads/opencode-desktop*.AppImage)."
+  fi
+  [ -n "$DESKTOP_FILE" ] && echo "✅ Desktop entry found: $DESKTOP_FILE"
+  return 0
+}
+
+# First system/user-wide desktop entry (ai.opencode.desktop preferred), honouring XDG_DATA_DIRS.
+desktop_system_file() {
+  local base dir
+  local IFS=':'
+  local -a dirs=()
+  IFS=':' read -r -a dirs <<< "${XDG_DATA_DIRS:-/usr/local/share:/usr/share}" || true
+  for base in ai.opencode.desktop.desktop opencode-desktop.desktop; do
+    for dir in "${dirs[@]}"; do
+      [ -n "$dir" ] || continue
+      if [ -f "$dir/applications/$base" ]; then
+        printf '%s\n' "$dir/applications/$base"
+        return 0
+      fi
+    done
+  done
+  return 1
+}
+
+desktop_key() {  # desktop_key <file> <Key>
+  awk -v key="$2" 'index($0, key "=") == 1 { print substr($0, length(key) + 2); exit }' "$1"
+}
+
+desktop_exec_of() {  # first Exec= of a desktop entry
+  awk 'index($0, "Exec=") == 1 { print substr($0, 6); exit }' "$1"
+}
+
+desktop_strip_field_codes() {  # drop %U %F… so the generated Exec can append exactly one %U
+  printf '%s\n' "$1" | awk '{ gsub(/[[:space:]]+%[UuFfDdNnickvm]/, ""); sub(/[[:space:]]+$/, ""); print }'
+}
+
+desktop_quote() {  # desktop Exec argument quoting (only used for an absolute binary path)
+  local s
+  # shellcheck disable=SC2016  # the sed scripts are literal by design
+  s="$(printf '%s' "$1" | sed -e 's/[\\"]/\\&/g' -e 's/\$/\\$/g' -e 's/`/\\`/g')"
+  printf '"%s"\n' "$s"
+}
+
+# Tagged block in ~/.config/environment.d: read by the systemd user session at the next login.
+write_desktop_environment() {
+  local dir="$HOME/.config/environment.d"
+  local file="$dir/90-opencode-prerequisites.conf"
+  local rest="$TMP/environment.d.rest"
+  local envout="$TMP/environment.d.out"
+  mkdir -p "$dir"
+  if [ -f "$file" ]; then
+    awk '
+      /^# >>> opencode-prerequisites >>>$/ { skip = 1; next }
+      /^# <<< opencode-prerequisites <<<$/ { skip = 0; after = 1; next }
+      skip == 1 { next }
+      after == 1 && /^$/ { after = 0; next }
+      { after = 0; print }
+    ' "$file" > "$rest"
+  else
+    : > "$rest"
+  fi
+  {
+    echo "# >>> opencode-prerequisites >>>"
+    echo "PATH=$DESKTOP_PATH"
+    if [ -x "$MEMVENV/bin/python" ]; then echo "MEMPALACE_ADAPTER_PYTHON=$MEMVENV/bin/python"; fi
+    echo "# <<< opencode-prerequisites <<<"
+    echo ""
+    cat "$rest"
+  } > "$envout"
+  cat "$envout" > "$file"
+  chmod 600 "$file"
+  echo "✅ Desktop environment written: $file (mode 600; applies at the next login)"
+}
+
+# User desktop override: a complete entry, so it works even without desktop-file-utils.
+write_desktop_override() {
+  local base path name comment icon categories tryexec original_exec stored_exec
+  base="ai.opencode.desktop.desktop"
+  if desktop_system_file >/dev/null 2>&1; then
+    base="$(basename "$(desktop_system_file)")"
+  elif [ -f "$HOME/.local/share/applications/opencode-desktop.desktop" ]; then
+    base="opencode-desktop.desktop"
+  fi
+  path="$HOME/.local/share/applications/$base"
+  mkdir -p "$HOME/.local/share/applications"
+
+  # Keep a user file we are about to replace; never overwrite the first backup with our own output.
+  if [ -f "$path" ] && ! grep -q '^X-OpenCode-Prerequisites=true$' "$path"; then
+    if [ ! -e "$path.bak-opencode-prerequisites" ]; then
+      cp -p "$path" "$path.bak-opencode-prerequisites"
+      echo "💾 Existing desktop entry backed up: $path.bak-opencode-prerequisites"
+    fi
+  fi
+
+  # The original Exec, not the env-wrapped one, so running --desktop twice never nests env calls.
+  stored_exec=""
+  if [ -f "$path" ] && grep -q '^X-OpenCode-Prerequisites=true$' "$path"; then
+    stored_exec="$(desktop_key "$path" "X-OpenCode-Prerequisites-Exec")"
+  fi
+  original_exec=""
+  if [ -n "$DESKTOP_FILE" ]; then original_exec="$(desktop_exec_of "$DESKTOP_FILE")"; fi
+  if [ -z "$original_exec" ]; then original_exec="$stored_exec"; fi
+  if [ -z "$original_exec" ]; then
+    case "$DESKTOP_APP_KIND" in
+      binary|appimage) original_exec="$(desktop_quote "$DESKTOP_APP_BIN")" ;;
+      *) original_exec="opencode-desktop" ;;
+    esac
+  fi
+  original_exec="$(desktop_strip_field_codes "$original_exec")"
+  [ -n "$original_exec" ] || original_exec="opencode-desktop"
+
+  name="OpenCode"; comment=""; icon=""; categories="Development;"; tryexec=""
+  if [ -n "$DESKTOP_FILE" ]; then
+    name="$(desktop_key "$DESKTOP_FILE" Name)"; [ -n "$name" ] || name="OpenCode"
+    comment="$(desktop_key "$DESKTOP_FILE" Comment)"
+    icon="$(desktop_key "$DESKTOP_FILE" Icon)"
+    categories="$(desktop_key "$DESKTOP_FILE" Categories)"
+    tryexec="$(desktop_key "$DESKTOP_FILE" TryExec)"
+  fi
+  [ -n "$tryexec" ] || tryexec="$DESKTOP_APP_BIN"
+  [ -n "$tryexec" ] || tryexec="opencode-desktop"
+
+  {
+    echo "[Desktop Entry]"
+    echo "Type=Application"
+    echo "Name=$name"
+    if [ -n "$comment" ]; then echo "Comment=$comment"; fi
+    printf 'Exec=env PATH="%s" %s %%U\n' "$DESKTOP_PATH" "$original_exec"
+    echo "TryExec=$tryexec"
+    if [ -n "$icon" ]; then echo "Icon=$icon"; fi
+    echo "Terminal=false"
+    if [ -n "$categories" ]; then echo "Categories=$categories"; fi
+    echo "StartupWMClass=ai.opencode.desktop"
+    echo "X-GNOME-UsesNotifications=true"
+    echo "X-OpenCode-Prerequisites=true"
+    echo "X-OpenCode-Prerequisites-Exec=$original_exec"
+  } > "$path"
+  chmod 644 "$path"
+  echo "✅ Desktop launcher override written: $path"
+}
+
+install_desktop() {
+  [ "$(uname -s)" = Linux ] || die "--desktop is for OpenCode Desktop on Linux only."
+  echo "🖥️  OpenCode Desktop (Linux: GUI PATH, environment.d and .desktop override)..."
+  desktop_detect
+  write_desktop_environment
+  write_desktop_override
+  echo "ℹ️  Fully quit OpenCode Desktop (tray icon included), then relaunch it."
+  echo "ℹ️  Check Settings → Extensions: the kit's plugins should be listed."
+  echo "ℹ️  Wayland: if the window stays blank, launch with OC_ALLOW_WAYLAND=1."
 }
 
 # get_uv: find uv or download the official static binary (no python3-venv package required).
@@ -1163,6 +1358,11 @@ chmod 600 "$DEST/.opencode-prerequisites.installed"
 secure_tree "$DEST"
 echo "✅ Config installed in $DEST; launchers (agent-wt, oc-new-rust, oc-new-android, oc-new-web, oc-models, oc-deps, oc-backup, oc-restore, oc-usage, oc-secrets, oc-playwright-mcp, oc-uiux-search, oc-impeccable, oc-chrome-devtools-mcp, oc-terraform-mcp, oc-rea, oc-rea-mcp, oc-semgrep-mcp, oc-versions, oc-export-claude) in $BIN"
 echo "ℹ️  Profile: $PROFILE (packs: $PACKS_CSV)"
+
+# OpenCode Desktop wiring (Linux): independent of the tools choice (--desktop never implies --no-tools).
+if [ "$DESKTOP" = 1 ]; then
+  install_desktop
+fi
 
 # 4. Pentest/appsec tools (--pentest option) — best-effort, like the other tools.
 if [ "$PENTEST" = 1 ]; then
