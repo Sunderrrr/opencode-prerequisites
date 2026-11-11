@@ -196,10 +196,16 @@ check("--json: intentional pin carries its reason",
   pydantic?.status === "intentional" && pydantic.intentional === true
   && /eval_type_backport/.test(pydantic.reason ?? ""), JSON.stringify(pydantic))
 const mcp = payload?.results?.find((x) => x.package === "@playwright/mcp")
+// Derive the expected line from the launcher itself: the pin is the `pkg=` assignment.
+const playwrightPinLine = fs.readFileSync(path.join(ROOT, "config", "bin", "oc-playwright-mcp"), "utf8")
+  .split("\n").map((l) => l.replace(/\r$/, ""))
+  .findIndex((l) => /^pkg="@playwright\/mcp@[0-9]+\.[0-9]+\.[0-9]+"$/.test(l)) + 1
 check("--json: package/pinned/latest/status/file/line fields",
-  mcp?.pinned === "0.0.84" && mcp.latest === "0.0.84" && mcp.status === "up to date"
-  && mcp.ecosystem === "npm" && mcp.file === "config/bin/oc-playwright-mcp" && mcp.line === 16,
-  JSON.stringify(mcp))
+  playwrightPinLine > 0
+  && mcp?.pinned === "0.0.84" && mcp.latest === "0.0.84" && mcp.status === "up to date"
+  && mcp.ecosystem === "npm" && mcp.file === "config/bin/oc-playwright-mcp"
+  && mcp.line === playwrightPinLine,
+  JSON.stringify({ ...mcp, playwrightPinLine }))
 const chromeMcp = payload?.results?.find((x) => x.package === "chrome-devtools-mcp")
 const chromeExecLine = fs.readFileSync(path.join(ROOT, "config", "bin", "oc-chrome-devtools-mcp"), "utf8")
   .split("\n").findIndex((l) => l.startsWith("exec npx -y chrome-devtools-mcp@")) + 1
