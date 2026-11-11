@@ -14,7 +14,7 @@ dko() { DESKTOP_BAD=$((DESKTOP_BAD + 1)); printf '❌ %s\n' "$*"; }
 dwa() { printf '⚠️  %s\n' "$*"; }
 
 desktop_doctor() {
-  local DEST ENV_FILE APP_FILE c d f perms version bin=""
+  local DEST ENV_FILE APP_FILE c d f perms version bin="" tryexec_val resolved
 
   # 1. Desktop app: executable (PATH, system or ~/.local/bin), AppImage, or Electron data dir.
   c="$(command -v opencode-desktop 2>/dev/null || true)"
@@ -80,7 +80,27 @@ desktop_doctor() {
       dko "Exec does not inject PATH in $APP_FILE"
     fi
     if grep -q '^StartupWMClass=ai.opencode.desktop$' "$APP_FILE"; then dok "StartupWMClass=ai.opencode.desktop"; else dko "StartupWMClass=ai.opencode.desktop missing"; fi
-    if grep -q '^TryExec=' "$APP_FILE"; then dok "TryExec present"; else dko "TryExec missing"; fi
+    tryexec_val="$(sed -n 's/^TryExec=//p' "$APP_FILE" | head -n 1)"
+    if [ -z "$tryexec_val" ]; then
+      dko "TryExec missing"
+    else
+      case "$tryexec_val" in
+        /*)
+          if [ -x "$tryexec_val" ]; then
+            dok "TryExec resolves: $tryexec_val"
+          else
+            dko "TryExec does not exist: $tryexec_val (the desktop environment hides the launcher)"
+          fi
+          ;;
+        *)
+          if resolved="$(command -v "$tryexec_val" 2>/dev/null)"; then
+            dok "TryExec resolves: $resolved"
+          else
+            dko "TryExec not found in PATH: $tryexec_val (the desktop environment hides the launcher)"
+          fi
+          ;;
+      esac
+    fi
     if grep -q '^X-GNOME-UsesNotifications=true$' "$APP_FILE"; then dok "X-GNOME-UsesNotifications=true"; else dwa "X-GNOME-UsesNotifications=true missing"; fi
   else
     dko "No user desktop override in $HOME/.local/share/applications (run ./install.sh --desktop)"
