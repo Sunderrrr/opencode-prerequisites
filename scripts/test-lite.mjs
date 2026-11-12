@@ -207,6 +207,7 @@ check("skills: reverse-engineer-anything and android-dev removed",
   !fs.existsSync(path.join(lite, "skills/reverse-engineer-anything")) && !fs.existsSync(path.join(lite, "skills/android-dev")))
 check("skills: the UI/UX skills (ui-ux-pro-max, impeccable) removed",
   !fs.existsSync(path.join(lite, "skills/ui-ux-pro-max")) && !fs.existsSync(path.join(lite, "skills/impeccable")))
+check("skills: the opt-in floci skill is dropped from lite", !fs.existsSync(path.join(lite, "skills/floci")))
 check("skills: exactly the 8 core skills stay",
   skillDirs(lite).length === 8 && skillDirs(lite).includes("tdd") && skillDirs(lite).includes("git-commit")
   && skillDirs(lite).includes("anti-ia-detection"), skillDirs(lite).join(", "))
@@ -282,6 +283,15 @@ check("core+design: 13 agents (designer added), 10 skills, 9 commands",
 check("core+design: CEO note lists the designer too",
   read(path.join(design, "agents/ceo.md")).includes("@integrator, @designer."))
 check("core+design: MCPs still untouched", "kubernetes" in mcpServers(parseJsonc(read(path.join(design, "opencode.jsonc")))))
+
+// ---------- 5b. core --packs floci (opt-in skill pack; install.sh exposes it as --with) ----------
+const flociPack = path.join(tmp, "floci-pack")
+buildConfig(flociPack)
+const r4c = runLite(flociPack, "--profile", "core", "--packs", "floci")
+check("core --packs floci: exit 0, 12 agents, 9 skills, floci kept",
+  r4c.status === 0 && agentNames(flociPack).length === 12 && skillDirs(flociPack).length === 9
+  && fs.existsSync(path.join(flociPack, "skills/floci/SKILL.md")),
+  `${r4c.stdout}${r4c.stderr} | ${agentNames(flociPack).length} agents, ${skillDirs(flociPack).length} skills`)
 
 // Commands are derived from the table: no control pack = no @code-simplifier = ship/simplify dropped.
 const control = path.join(tmp, "control")

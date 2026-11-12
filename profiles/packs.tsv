@@ -36,6 +36,7 @@ devops	agent	terraform
 devops	agent	kubernetes
 devops	mcp	terraform
 devops	mcp	kubernetes
+floci	skill	floci
 languages	agent	python
 languages	agent	typescript
 languages	agent	go

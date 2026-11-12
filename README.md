@@ -9,11 +9,11 @@ My starter kit for [OpenCode](https://opencode.ai) with the **OpenCode Go** subs
 ```bash
 git clone https://github.com/Sunderrrr/opencode-prerequisites.git
 cd opencode-prerequisites
-./install.sh                        # full (default): 28 agents, 11 skills, 10 commands, 10 MCP servers
+./install.sh                        # full (default): 28 agents, 12 skills, 10 commands, 10 MCP servers
 ./install.sh --profile core         # 12 agents, 8 skills, 7 commands, 7 MCP servers
 ./install.sh --lite                 # alias of --profile lite: 12 agents, context7 + grep_app, no heavy tools
 ./install.sh --no-tools             # config only: nothing is installed (no tools, no MemPalace)
-./install.sh --with design,devops   # add packs (design, devops, languages, data, docs, control, reverse, research)
+./install.sh --with design,devops   # add packs (design, devops, languages, data, docs, control, reverse, research, floci)
 ./install.sh --without design       # remove packs from the selected profile (core cannot be removed)
 ./install.sh --no-pack              # forget the remembered packs and reset to the full profile
 ./install.sh --version              # print the kit version (VERSION)
@@ -101,6 +101,14 @@ Model routing is explicit on every call: **haiku** for reading and mechanical wo
 - **Node required: ≥ 26.12.1** (or 24.22.1 / 22.23.4). If your version is older, the installer disables the MCP (`"disabled": true`) and the agent uses the `oc-rea` CLI (same `npx -y rea-agents@6.8.0` pin); update Node (`mise use -g node@26.12.1`) then rerun `./install.sh --no-tools`. `oc-rea --check` / `oc-rea-mcp --check` test your version without downloading anything.
 - The MCP's ~229 tools are only visible to this agent (`rea_*` rule in `opencode.jsonc`), to avoid weighing down the other sessions. Ghidra, IDA and Hopper are not installed by the kit: REA uses the ones already present. Never use `rea setup`: the configuration is managed by the kit.
 - **Installable CLI**: `oc-rea` exposes the same toolset from a terminal (`oc-rea --version`, `oc-rea analyze-javascript-application /path --json`); the first run downloads the pinned package through `npx`. Full details, legal scope and troubleshooting: [docs/rea.md](docs/rea.md).
+
+## Local cloud emulators (floci skill, opt-in pack)
+
+**`floci`** skill, vendored from [floci-io/floci-cli](https://github.com/floci-io/floci-cli) 0.4.0 (MIT, © 2024 Floci Contributors, see `UPSTREAM.md`): the `floci` CLI and Compose templates drive local AWS (`localhost:4566`), GCP (`4588`), Azure (`4577`) and OCI (`4599`) emulators that speak the real cloud wire protocols. 16 upstream files (references, Compose assets, `ensure-running.sh`); a skill only, no agent and no MCP.
+
+- **Pack**: `./install.sh --with floci` adds it to core; the full profile includes it; `--lite` and `--profile core` leave it out. It is listed in `profiles/packs.tsv` like any other pack.
+- **Vendored, never installed**: the kit does not install `floci` and never pipes a remote installer into a shell. Install it yourself with `brew install floci-io/floci/floci` or a pinned release whose sha256 you verify; `scripts/ensure-running.sh` stops with an explicit message when the CLI is missing.
+- **Risks**: the Compose assets mount `/var/run/docker.sock` for services that launch child containers (Lambda, ECS, RDS, OKE) and use `:latest` images; `floci az setup` / `floci oci setup` write under `~/.floci` and `~/.oci/config`. Pin image digests, mount the socket only when needed, keep ports on loopback and use the emulators' fake credentials only. Details: `config/skills/floci/UPSTREAM.md`.
 
 ## Securing your apps (pentest agent, real tools installed on the machine)
 
@@ -193,7 +201,7 @@ The core and light profiles are derived from the full one by `scripts/make-lite.
 - `config/opencode.jsonc`: single model `opencode-go/deepseek-v4.1-flash` for ALL agents (large quota; no agent has its own model, to change one: add `model: opencode-go/<id>` in its `agents/<name>.md` file), unrestricted permissions, auto-formatting, compaction.
 - `config/AGENTS.md`: global rules (≈ 800 words, read on every session): CEO, Rust by default, "done = proven", multi-agent git, internet safety, quota.
 - `config/agents/`: `ceo` (default), domain (`architect`, `backend`, `frontend`, `designer`, `database`, `devops`, `security`, `pentest`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`, `reverse-engineer`), languages/tools (`rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`), control (`review`, `code-simplifier`, `verify-app`), git (`integrator`).
-- `config/skills/` (11 core, 12 with `--android`): `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`, `reverse-engineer-anything`, `anti-ia-detection` (detects and fixes AI-writing tics in French; the skill is French by design), `ui-ux-pro-max`, `impeccable`.
+- `config/skills/` (12 core, 13 with `--android`): `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`, `reverse-engineer-anything`, `anti-ia-detection` (detects and fixes AI-writing tics in French; the skill is French by design), `ui-ux-pro-max`, `impeccable`, `floci` (opt-in pack: local AWS/GCP/Azure/OCI emulators).
 - `config/commands/` (10): `/check`, `/plan-first`, `/impeccable`, `/simplify`, `/verify`, `/learn`, `/remember`, `/ship`, `/pr`, `/usage`.
 - `config/plugins/`: `guard/` (textual safeguard: blocks reading secret files and common destructive commands; **it is not a barrier** and does not replace a security review) and `notify/` (notification when a session is waiting), in the **OpenCode plugin v2 format** (a folder, `export default Plugin.define({ id, setup })`); tested by `scripts/test-plugins.mjs`. Compaction at 90% is native: `compaction.buffer: "10%"`.
 - `config/bin/oc-models`: per-agent model choice; `config/bin/agent-wt`: one git worktree per agent (`new`, `merge`, `remove`, `list`, `registry`, `integration`, `sync`). `agent-wt list --porcelain` gives the machine state (one line per worktree, 7 tab-separated fields); `agent-wt registry --out .worktrees/REGISTRY.md` maintains the CEO's persistent registry (table rewritten, existing `## History` section kept, legacy `## Historique` also preserved).

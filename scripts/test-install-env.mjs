@@ -476,6 +476,15 @@ check("--with alone: core base + design = 13 agents, marker profile=core packs=c
   && profileP(pWith.cfg) === "profile=core\npacks=core,design\n",
   `code ${rWith.status} | ${agentsP(pWith.cfg).length} agents | ${profileP(pWith.cfg)} | ${rWith.stderr}`)
 
+// core --with floci: the opt-in skill pack, no agent and no MCP.
+const pFloci = packEnv("pack-floci")
+const rFloci = runP(pFloci, ["--with", "floci"])
+check("--with floci: 12 agents, 9 skills, marker packs=core,floci",
+  rFloci.status === 0 && agentsP(pFloci.cfg).length === 12
+  && skillsP(pFloci.cfg).length === 9 && skillsP(pFloci.cfg).includes("floci")
+  && profileP(pFloci.cfg) === "profile=core\npacks=core,floci\n",
+  `code ${rFloci.status} | ${agentsP(pFloci.cfg).length} agents, ${skillsP(pFloci.cfg).length} skills | ${profileP(pFloci.cfg)} | ${rFloci.stderr}`)
+
 // core + design + devops: packs add agents/skills/commands; MCPs follow the packs.
 const pCDD = packEnv("pack-cdd")
 const rCDD = runP(pCDD, ["--profile", "core", "--with", "design,devops"])
@@ -516,9 +525,9 @@ const fullMinusAgents = agentsP(pFull.cfg)
 check("full --without design: 27 agents, no designer, pentest kept",
   rFullMinus.status === 0 && fullMinusAgents.length === 27 && !fullMinusAgents.includes("designer") && fullMinusAgents.includes("pentest"),
   `code ${rFullMinus.status} | ${fullMinusAgents.length} agents | ${rFullMinus.stderr}`)
-check("full --without design: 9 skills, 9 commands, marker excludes design",
-  skillsP(pFull.cfg).length === 9 && commandsP(pFull.cfg).length === 9
-  && profileP(pFull.cfg) === "profile=full\npacks=core,devops,languages,data,docs,control,reverse,research,pentest\n",
+check("full --without design: 10 skills, 9 commands, marker excludes design",
+  skillsP(pFull.cfg).length === 10 && commandsP(pFull.cfg).length === 9
+  && profileP(pFull.cfg) === "profile=full\npacks=core,devops,floci,languages,data,docs,control,reverse,research,pentest\n",
   `${skillsP(pFull.cfg).length} skills, ${commandsP(pFull.cfg).length} commands | ${profileP(pFull.cfg)}`)
 
 // Remembered full-minus-design, then --no-pack resets to full.
