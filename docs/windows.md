@@ -83,7 +83,7 @@ All options are forwarded to `install.sh`, except `-DryRun`, `-RepairOnly` and `
 | *(none)* | Full configuration (`install.sh` default profile), tools skipped with a WSL2 warning |
 | `-NoTools` | Explicit config-only; this is the tested native path (implied on Windows anyway) |
 | `-Lite` | Alias of `-Profile lite`: 12 agents, context7 + grep_app, no heavy tools |
-| `-Profile core` | Core profile: 12 agents, 8 skills, 7 commands, 7 MCP servers |
+| `-Profile core` | Core profile: 12 agents, 9 skills, 7 commands, 7 MCP servers |
 | `-Profile core -With design` | Core plus the `design` pack (designer agent, `ui-ux-pro-max` and `impeccable` skills) |
 | `-With devops,languages` | Add packs to the selected profile |
 | `-Without design` | Remove packs (the `core` pack cannot be removed) |

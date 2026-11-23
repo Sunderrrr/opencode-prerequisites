@@ -72,6 +72,22 @@ for (const base of [path.join(C, "skills"), ...addonDirs.map((d) => path.join(d,
   if (fm.name !== d) err(`${rel}: name ("${fm.name}") must match the directory`)
   if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(fm.name ?? "")) err(`${rel}: invalid name`)
   if (!fm.description || fm.description.length > 1024) err(`${rel}: description missing or > 1024`)
+  // Provenance: a skill that documents an upstream source must carry its license text.
+  if (fs.existsSync(path.join(base, d, "UPSTREAM.md")) && !fs.existsSync(path.join(base, d, "LICENSE")))
+    err(`${rel}: UPSTREAM.md present but LICENSE is missing`)
+}
+// Vendored validators and helpers: every CommonJS file must stay syntactically valid.
+const walkSkillFiles = (d) => ls(d).flatMap((x) => {
+  const p = path.join(d, x)
+  const st = fs.lstatSync(p)
+  return st.isDirectory() ? walkSkillFiles(p) : [p]
+})
+for (const base of [path.join(C, "skills"), ...addonDirs.map((d) => path.join(d, "skills"))]) {
+  if (!fs.existsSync(base)) continue
+  for (const f of walkSkillFiles(base).filter((x) => x.endsWith(".cjs"))) {
+    try { execFileSync(process.execPath, ["--check", f], { stdio: "pipe" }) }
+    catch (e) { err(`${path.relative(ROOT, f)}: syntax error\n${e.stderr}`) }
+  }
 }
 
 // 4. Commands
@@ -167,7 +183,10 @@ for (const f of [...ls(ROOT).filter((x) => x.endsWith(".sh")).map((x) => path.jo
   try { execFileSync("bash", ["-n", f], { stdio: "pipe" }) } catch (e) { err(`${path.relative(ROOT, f)}: bash syntax error\n${e.stderr}`) }
 }
 
-console.log(`Agents: ${Object.keys(agents).length} · MCP: ${Object.keys(mcpServers(cfg)).length} · Skills: ${ls(path.join(C, "skills")).length + addonDirs.reduce((n, d) => n + ls(path.join(d, "skills")).length, 0)} · Modules: ${addonDirs.length}`)
+const coreSkillCount = ls(path.join(C, "skills")).length
+const addonSkillCount = addonDirs.reduce((n, d) => n + ls(path.join(d, "skills")).length, 0)
+const skillsLabel = addonSkillCount ? `${coreSkillCount} (${coreSkillCount + addonSkillCount} with Android)` : String(coreSkillCount)
+console.log(`Agents: ${Object.keys(agents).length} · MCP: ${Object.keys(mcpServers(cfg)).length} · Skills: ${skillsLabel} · Modules: ${addonDirs.length}`)
 warns.forEach((w) => console.log(`⚠️  ${w}`))
 if (errors.length) { errors.forEach((e) => console.error(`❌ ${e}`)); process.exit(1) }
 console.log("✅ Kit valid")

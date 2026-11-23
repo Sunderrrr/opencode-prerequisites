@@ -18,6 +18,7 @@ core	agent	review
 core	agent	verify-app
 core	agent	integrator
 core	skill	anti-ia-detection
+core	skill	code-mode
 core	skill	git-commit
 core	skill	grill-me
 core	skill	handoff
@@ -48,6 +49,8 @@ reverse	agent	reverse-engineer
 reverse	skill	reverse-engineer-anything
 reverse	mcp	rea
 research	agent	web-researcher
+audit	skill	security-audit
+audit	command	audit
 pentest	agent	pentest
 android	agent	android
 android	agent	mobile-tester

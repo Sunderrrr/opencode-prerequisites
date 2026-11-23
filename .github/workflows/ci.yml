@@ -30,6 +30,8 @@ jobs:
         run: node scripts/test-mcp-state.mjs
       - name: "Lite profile (12 agents, MCP, plugins, skills, commands, CEO prose)"
         run: node scripts/test-lite.mjs
+      - name: "security-audit skill (pack rows, provenance, upstream validator suites)"
+        run: node scripts/test-security-audit.mjs
       - name: "Offline diagnostic (exit codes 0/1, no network requests)"
         run: node scripts/test-doctor.mjs
       - name: "oc-deps (pinned version drift: local fixtures, isolated cache, no network)"
@@ -180,6 +182,8 @@ jobs:
         run: node scripts/test-mcp-state.mjs
       - name: "Lite profile (12 agents, MCP, plugins, skills, commands, CEO prose)"
         run: node scripts/test-lite.mjs
+      - name: "security-audit skill (pack rows, provenance, upstream validator suites)"
+        run: node scripts/test-security-audit.mjs
       - name: "Offline diagnostic (exit codes 0/1, no network requests)"
         run: node scripts/test-doctor.mjs
       - name: "oc-deps (pinned version drift: local fixtures, no network)"

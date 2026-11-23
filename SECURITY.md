@@ -23,6 +23,9 @@ In scope:
 
 - `install.sh`, `uninstall.sh`, `doctor.sh` and `scripts/`;
 - `config/`: agents, commands, skills, plugins (`guard`, `notify`) and `opencode.jsonc`;
+- `config/skills/security-audit/`: the vendored Cloudflare skill (MIT, commit
+  `c1c8a8c`), its `LICENSE`, `UPSTREAM.md`, the `KIT-*.md` adaptations and the two
+  validators;
 - `config/bin/`: `oc-models`, `agent-wt`, MCP launchers;
 - `addons/android/`: the `oc-android` command, `Containerfile`, fake `adb`.
 
@@ -35,6 +38,13 @@ Third-party tools installed by the kit (Trivy, Obscura, MemPalace, semgrep, nucl
 - **Installation.** `umask 077` (private files), existing config backed up to `~/.config/opencode.bak-<date>`, no API key written. The script never runs `sudo`: do not run it with `sudo` yourself.
 - **Supply chain.** Pinned versions (`OC_*_VERSION`, MCP without `@latest`), binaries verified by sha256 when the release publishes a checksum, testssl.sh/nikto git clones verified by tag commit, Android image by SHA-1/SHA-256. See "Securing your apps" and "Android applications" in `README.md`.
 - **Memory.** MemPalace stays local (`~/.config/mempalace`); the installer does not create a remote account.
+- **Security audit skill (vendored, static only).** `security-audit` comes from
+  Cloudflare's security-audit-skill (MIT, commit `c1c8a8c`, recorded with the file count in
+  `config/skills/security-audit/UPSTREAM.md`). The vendored text contains no HTTP client, no
+  downloader and no `fetch` call: it never reaches the network by itself. Without an OS
+  sandbox the workflow stays **static** (source reading, `grep`, `git log`, the validators
+  and read-only scanners); anything that needs target execution becomes `needs_validation`.
+  Artefacts are written outside the audited repository by default.
 
 ## Best practices
 

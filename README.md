@@ -9,11 +9,11 @@ My starter kit for [OpenCode](https://opencode.ai) with the **OpenCode Go** subs
 ```bash
 git clone https://github.com/Sunderrrr/opencode-prerequisites.git
 cd opencode-prerequisites
-./install.sh                        # full (default): 28 agents, 12 skills, 10 commands, 10 MCP servers
-./install.sh --profile core         # 12 agents, 8 skills, 7 commands, 7 MCP servers
+./install.sh                        # full (default): 28 agents, 14 skills, 11 commands, 10 MCP servers
+./install.sh --profile core         # 12 agents, 9 skills, 7 commands, 7 MCP servers
 ./install.sh --lite                 # alias of --profile lite: 12 agents, context7 + grep_app, no heavy tools
 ./install.sh --no-tools             # config only: nothing is installed (no tools, no MemPalace)
-./install.sh --with design,devops   # add packs (design, devops, languages, data, docs, control, reverse, research, floci)
+./install.sh --with design,devops   # add packs (design, devops, languages, data, docs, control, reverse, research, floci, audit)
 ./install.sh --without design       # remove packs from the selected profile (core cannot be removed)
 ./install.sh --no-pack              # forget the remembered packs and reset to the full profile
 ./install.sh --version              # print the kit version (VERSION)
@@ -21,7 +21,7 @@ cd opencode-prerequisites
 ./install.sh --android              # + Android module (optional, remembered): agents, mobile MCP, Podman toolchain
 ```
 
-`profiles/packs.tsv` is the single source of truth for packs: one line per agent, skill or MCP (commands follow their agents). The resolved profile and pack list are remembered in `<config>/.opencode-prerequisites.profile`; an explicit `--profile` wins over the remembered choice, `--with` alone starts from `core`, and `--no-pack` resets to `full`. `--profile lite` implies `--no-tools`. `android` is a module (`--android`), not a pack; `--with android` is rejected and `pentest` is selected with `--pentest`.
+`profiles/packs.tsv` is the single source of truth for packs: one line per agent, skill or MCP (commands follow their packs). The resolved profile and pack list are remembered in `<config>/.opencode-prerequisites.profile`; an explicit `--profile` wins over the remembered choice, `--with` alone starts from `core`, and `--no-pack` resets to `full`. `--profile lite` implies `--no-tools`. `android` is a module (`--android`), not a pack; `--with android` is rejected and `pentest` is selected with `--pentest`. The `audit` pack is opt-in for reduced profiles (`--with audit`) and included in full.
 
 **Do not run `install.sh` with `sudo`**: everything would be installed in `/root`. The installer also refuses to run via sudo. It validates the kit before copying, backs up the existing setup to `~/.config/opencode.bak-<date>`, and writes no key.
 
@@ -110,6 +110,28 @@ Model routing is explicit on every call: **haiku** for reading and mechanical wo
 - **Vendored, never installed**: the kit does not install `floci` and never pipes a remote installer into a shell. Install it yourself with `brew install floci-io/floci/floci` or a pinned release whose sha256 you verify; `scripts/ensure-running.sh` stops with an explicit message when the CLI is missing.
 - **Risks**: the Compose assets mount `/var/run/docker.sock` for services that launch child containers (Lambda, ECS, RDS, OKE) and use `:latest` images; `floci az setup` / `floci oci setup` write under `~/.floci` and `~/.oci/config`. Pin image digests, mount the socket only when needed, keep ports on loopback and use the emulators' fake credentials only. Details: `config/skills/floci/UPSTREAM.md`.
 
+## Security audit (audit pack, `/audit`)
+
+**`security-audit`** skill, vendored from [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) at commit `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8` (MIT, © 2025-2026 Cloudflare, Inc., license kept verbatim, see `UPSTREAM.md`): 20 upstream files (15 guides, `report-schema.json`, 4 `.cjs`) plus a `LICENSE`, the provenance file and three `KIT-*.md` adaptations, about 315 KB.
+
+- **Two modes**: guidance by default (a security question or a focused review writes nothing); the full six-phase audit only on an explicit full/comprehensive audit request, or through `/audit`. The full run writes `findings.json`, `coverage-ledger.json`, `REPORT.md`, `FINDINGS-DETAIL.md` and `NEEDS-VALIDATION.md`.
+- **Pack**: `./install.sh --with audit` adds the skill and the `/audit` command to core; the full profile includes them; `--lite` and `--profile core` leave them out.
+- **No OS sandbox**: the kit has none, so the upstream rule means **static analysis only** (source, `gitleaks`, `semgrep`, `osv-scanner`, `trivy fs`) unless the user supplies and names a real sandbox. Target code is never executed on the host; the gap becomes `needs_validation`.
+- **Agents**: the CEO orchestrates and never writes; a dedicated writer session owns the shared files; hunters and verifiers are fresh `security` subagents, never the same session for finding and verifying (`subagent_depth: 1`).
+- **Output**: `~/security-audit-skill/<repo>/run-<N>`, outside the audited repository. Node 18+ is required for the validators; the upstream FIFO/symlink tests skip on Windows.
+- Details, phases and artefacts: [docs/security-audit.md](docs/security-audit.md). The skill text: [config/skills/security-audit/SKILL.md](config/skills/security-audit/SKILL.md).
+
+## Code Mode (core skill)
+
+**`code-mode`** is the Cloudflare pattern — write one short program against the API or CLI behind
+the MCP server and read back only the useful result — adapted to OpenCode and Claude Code,
+which expose each MCP tool separately. It pays off for 3+ sequential calls, pagination, loops,
+data transformation, large results to filter and tasks worth repeating; a single trivial call
+does not need a script. The skill is in core, warns that the kit ships no sandbox for scripts,
+keeps secrets out of the code (`oc-secrets`) and validates every input before it reaches a
+URL, a path or a shell. Details: [docs/code-mode.md](docs/code-mode.md).
+
+
 ## Securing your apps (pentest agent, real tools installed on the machine)
 
 **`pentest`** agent (in addition to `security`/`review`, which stay passive and make no changes). **Main goal: secure the apps you develop (vibecoding) before exposing them**, with the same command-line tools as AppSec professionals — not just MCPs: `./install.sh --pentest` really installs them on the machine (remembered option, like `--android`; `./install.sh --no-pentest` forgets the choice without removing binaries already installed):
@@ -170,7 +192,7 @@ How it is built: the image starts from Ubuntu 24.04, downloads the Android tools
 
 | Pack | Agents | Skills | MCP | Selected by |
 |---|---|---|---|---|
-| `core` | `ceo`, `architect`, `rust`, `backend`, `frontend`, `qa`, `security`, `debugger`, `researcher`, `review`, `verify-app`, `integrator` | `anti-ia-detection`, `git-commit`, `grill-me`, `handoff`, `project-onboarding`, `safe-refactor`, `tdd`, `web-research` | context7, grep_app (lite); the 7 mandatory servers otherwise | always |
+| `core` | `ceo`, `architect`, `rust`, `backend`, `frontend`, `qa`, `security`, `debugger`, `researcher`, `review`, `verify-app`, `integrator` | `anti-ia-detection`, `code-mode`, `git-commit`, `grill-me`, `handoff`, `project-onboarding`, `safe-refactor`, `tdd`, `web-research` | context7, grep_app (lite); the 7 mandatory servers otherwise | always |
 | `design` | `designer` | `ui-ux-pro-max`, `impeccable` | — | `--with design` (in full) |
 | `devops` | `devops`, `docker`, `ansible`, `terraform`, `kubernetes` | — | terraform, kubernetes | `--with devops` (in full) |
 | `languages` | `python`, `typescript`, `go`, `shell` | — | — | `--with languages` (in full) |
@@ -179,6 +201,7 @@ How it is built: the image starts from Ubuntu 24.04, downloads the Android tools
 | `control` | `code-simplifier` | — | — | `--with control` (in full) |
 | `reverse` | `reverse-engineer` | `reverse-engineer-anything` | rea | `--with reverse` (in full) |
 | `research` | `web-researcher` | — | — | `--with research` (in full) |
+| `audit` | — | `security-audit` | — | `--with audit` (in full); adds `/audit` |
 | `pentest` | `pentest` | — | — | `--pentest` (agent in full; tools only with the flag) |
 | `android` | `android`, `mobile-tester` | `android-dev` | mobile | `--android` (module, never `--with`) |
 
@@ -188,21 +211,21 @@ The seven **mandatory** MCP servers are context7, grep_app, playwright, obscura,
 |---|---|---|---|
 | Packs | all except `android` | `core` | `core` |
 | Agents | 28 (+2 with `--android`) | 12 | 12 |
-| Skills | 11 (12 with `--android`) | 8 | 8 |
-| Commands | 10 | 7 | 7 |
+| Skills | 14 (15 with `--android`) | 9 | 9 |
+| Commands | 11 | 7 | 7 |
 | MCP | 10 active (11 entries with `--android`) | 7 | context7, grep_app |
 | Memory | MemPalace (venv `~/.mempalace/venv`, ≈ 500 MB) | MemPalace | — |
 | Tools | installed | installed | none (`--lite` implies `--no-tools`) |
 
-The core and light profiles are derived from the full one by `scripts/make-lite.mjs`: there are no separate configs to maintain. The light profile additionally removes `plugins/mempalace/` (otherwise OpenCode would load memory even though its config file is gone) and keeps only context7 and grep_app. Commands follow their agents: full has 10, core/lite keep the 7 that do not target a removed agent (`/impeccable`, `/simplify` and `/ship` need the `design` or `control` packs).
+The core and light profiles are derived from the full one by `scripts/make-lite.mjs`: there are no separate configs to maintain. The light profile additionally removes `plugins/mempalace/` (otherwise OpenCode would load memory even though its config file is gone) and keeps only context7 and grep_app. Commands follow their packs: full has 11, core/lite keep the 7 that belong to core and do not target a removed agent (`/impeccable`, `/simplify` and `/ship` need the `design` or `control` packs; `/audit` needs `audit`).
 
 ## Contents
 
 - `config/opencode.jsonc`: single model `opencode-go/deepseek-v4.1-flash` for ALL agents (large quota; no agent has its own model, to change one: add `model: opencode-go/<id>` in its `agents/<name>.md` file), unrestricted permissions, auto-formatting, compaction.
 - `config/AGENTS.md`: global rules (≈ 800 words, read on every session): CEO, Rust by default, "done = proven", multi-agent git, internet safety, quota.
 - `config/agents/`: `ceo` (default), domain (`architect`, `backend`, `frontend`, `designer`, `database`, `devops`, `security`, `pentest`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`, `reverse-engineer`), languages/tools (`rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`), control (`review`, `code-simplifier`, `verify-app`), git (`integrator`).
-- `config/skills/` (12 core, 13 with `--android`): `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`, `reverse-engineer-anything`, `anti-ia-detection` (detects and fixes AI-writing tics in French; the skill is French by design), `ui-ux-pro-max`, `impeccable`, `floci` (opt-in pack: local AWS/GCP/Azure/OCI emulators).
-- `config/commands/` (10): `/check`, `/plan-first`, `/impeccable`, `/simplify`, `/verify`, `/learn`, `/remember`, `/ship`, `/pr`, `/usage`.
+- `config/skills/` (14, 15 with `--android`): `anti-ia-detection` (detects and fixes AI-writing tics in French; the skill is French by design), `code-mode` (short scripts instead of tool-call chains), `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`, `reverse-engineer-anything`, `ui-ux-pro-max`, `impeccable`, `floci` (opt-in pack: local AWS/GCP/Azure/OCI emulators), `security-audit` (audit pack: source-first vulnerability audit).
+- `config/commands/` (11): `/audit`, `/check`, `/plan-first`, `/impeccable`, `/simplify`, `/verify`, `/learn`, `/remember`, `/ship`, `/pr`, `/usage`.
 - `config/plugins/`: `guard/` (textual safeguard: blocks reading secret files and common destructive commands; **it is not a barrier** and does not replace a security review) and `notify/` (notification when a session is waiting), in the **OpenCode plugin v2 format** (a folder, `export default Plugin.define({ id, setup })`); tested by `scripts/test-plugins.mjs`. Compaction at 90% is native: `compaction.buffer: "10%"`.
 - `config/bin/oc-models`: per-agent model choice; `config/bin/agent-wt`: one git worktree per agent (`new`, `merge`, `remove`, `list`, `registry`, `integration`, `sync`). `agent-wt list --porcelain` gives the machine state (one line per worktree, 7 tab-separated fields); `agent-wt registry --out .worktrees/REGISTRY.md` maintains the CEO's persistent registry (table rewritten, existing `## History` section kept, legacy `## Historique` also preserved).
 - `config/bin/oc-backup`, `oc-restore` and `oc-usage`: see "Backup, restore and usage" below. `config/bin/oc-new-web <name>`: web project generator.
@@ -246,6 +269,8 @@ The kit is validated by script (`validate-kit.mjs`), by the **official OpenCode 
 - [docs/desktop.md](docs/desktop.md): OpenCode Desktop on Linux (`.deb`/`.rpm`/AppImage), why the GUI `PATH` differs, `--desktop`, Wayland, AppImage/FUSE, troubleshooting.
 - [docs/claude-code.md](docs/claude-code.md): `oc-export-claude`, model routing, fixed variants and the project `.mcp.json`.
 - [docs/rea.md](docs/rea.md): the reverse pack, REA legal scope, `oc-rea` CLI, MCP, skill, optional native engines and troubleshooting.
+- [docs/security-audit.md](docs/security-audit.md): the `security-audit` skill, guidance vs full audit, six phases, artefacts, sandbox limits, agent mapping and the `/audit` command.
+- [docs/code-mode.md](docs/code-mode.md): the Code Mode pattern in OpenCode and Claude Code, when a script beats tool calls, sandbox and secret rules.
 - [ROADMAP.md](ROADMAP.md): shipped and verified, open work, out of scope.
 - [CHANGELOG.md](CHANGELOG.md): what changes on `main` (Keep a Changelog, SemVer, v1.0.0 and v1.0.1 tagged and signed).
 - [SECURITY.md](SECURITY.md): reporting a vulnerability through a private advisory, security scope.

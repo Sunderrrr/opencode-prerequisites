@@ -139,6 +139,8 @@ function buildConfig(dir, { mempalace = true } = {}) {
   write(path.join(dir, "commands/verify.md"), "Use @verify-app to check the work.\n")
   write(path.join(dir, "commands/ship.md"), "1. Use @code-simplifier.\n2. Use @verify-app.\n")
   write(path.join(dir, "commands/simplify.md"), "Use @code-simplifier on the current diff.\n")
+  write(path.join(dir, "commands/audit.md"),
+    "---\ndescription: Full security audit of a codebase with evidence\n---\nRun a full audit of $ARGUMENTS with fresh `security` subagents.\n")
   write(path.join(dir, "commands/impeccable.md"),
     "---\ndescription: Improve a frontend interface.\nagent: designer\n---\nUse the `impeccable` skill.\n")
   write(path.join(dir, "commands/design-review.md"),
@@ -208,8 +210,11 @@ check("skills: reverse-engineer-anything and android-dev removed",
 check("skills: the UI/UX skills (ui-ux-pro-max, impeccable) removed",
   !fs.existsSync(path.join(lite, "skills/ui-ux-pro-max")) && !fs.existsSync(path.join(lite, "skills/impeccable")))
 check("skills: the opt-in floci skill is dropped from lite", !fs.existsSync(path.join(lite, "skills/floci")))
-check("skills: exactly the 8 core skills stay",
-  skillDirs(lite).length === 8 && skillDirs(lite).includes("tdd") && skillDirs(lite).includes("git-commit")
+check("skills: the opt-in audit skill is dropped from lite",
+  !fs.existsSync(path.join(lite, "skills/security-audit")) && !fs.existsSync(path.join(lite, "commands/audit.md")))
+check("skills: exactly the 9 core skills stay",
+  skillDirs(lite).length === 9 && skillDirs(lite).includes("tdd") && skillDirs(lite).includes("git-commit")
+  && skillDirs(lite).includes("code-mode")
   && skillDirs(lite).includes("anti-ia-detection"), skillDirs(lite).join(", "))
 
 check("commands: those citing a removed agent are dropped (ship, simplify)",
@@ -256,8 +261,8 @@ buildConfig(core)
 const r3 = runLite(core, "--profile", "core")
 check("core: exit code 0", r3.status === 0, r3.stdout + r3.stderr)
 check("core: announces 12 agents and unchanged MCPs", /Core profile: 12 agents, MCP unchanged/.test(r3.stdout), r3.stdout)
-check("core: 12 agents, 8 skills, 8 commands",
-  agentNames(core).length === 12 && skillDirs(core).length === 8 && commandNames(core).length === 8,
+check("core: 12 agents, 9 skills, 8 commands",
+  agentNames(core).length === 12 && skillDirs(core).length === 9 && commandNames(core).length === 8,
   `${agentNames(core).length} agents, ${skillDirs(core).length} skills, ${commandNames(core).length} commands`)
 const coreCfg = parseJsonc(read(path.join(core, "opencode.jsonc")))
 check("core: MCPs and npm plugin untouched",
@@ -275,9 +280,9 @@ const design = path.join(tmp, "design")
 buildConfig(design)
 const r4 = runLite(design, "--profile", "core", "--packs", "design")
 check("core+design: exit code 0", r4.status === 0, r4.stdout + r4.stderr)
-check("core+design: 13 agents (designer added), 10 skills, 9 commands",
+check("core+design: 13 agents (designer added), 11 skills, 9 commands",
   agentNames(design).length === 13 && agentNames(design).includes("designer")
-  && skillDirs(design).length === 10 && skillDirs(design).includes("ui-ux-pro-max") && skillDirs(design).includes("impeccable")
+  && skillDirs(design).length === 11 && skillDirs(design).includes("ui-ux-pro-max") && skillDirs(design).includes("impeccable")
   && commandNames(design).length === 9 && fs.existsSync(path.join(design, "commands/impeccable.md")),
   `${agentNames(design).length} agents, ${skillDirs(design).length} skills, ${commandNames(design).length} commands`)
 check("core+design: CEO note lists the designer too",
@@ -288,10 +293,24 @@ check("core+design: MCPs still untouched", "kubernetes" in mcpServers(parseJsonc
 const flociPack = path.join(tmp, "floci-pack")
 buildConfig(flociPack)
 const r4c = runLite(flociPack, "--profile", "core", "--packs", "floci")
-check("core --packs floci: exit 0, 12 agents, 9 skills, floci kept",
-  r4c.status === 0 && agentNames(flociPack).length === 12 && skillDirs(flociPack).length === 9
+check("core --packs floci: exit 0, 12 agents, 10 skills, floci kept",
+  r4c.status === 0 && agentNames(flociPack).length === 12 && skillDirs(flociPack).length === 10
   && fs.existsSync(path.join(flociPack, "skills/floci/SKILL.md")),
   `${r4c.stdout}${r4c.stderr} | ${agentNames(flociPack).length} agents, ${skillDirs(flociPack).length} skills`)
+
+// ---------- 5c. core --packs audit (opt-in pack: one skill, one command, no agent) ----------
+const auditPack = path.join(tmp, "audit-pack")
+buildConfig(auditPack)
+const r4d = runLite(auditPack, "--profile", "core", "--packs", "audit")
+check("core --packs audit: exit 0, 12 agents, 10 skills, 9 commands (7 core + design-review fixture + /audit)",
+  r4d.status === 0 && agentNames(auditPack).length === 12 && skillDirs(auditPack).length === 10
+  && commandNames(auditPack).length === 9,
+  `${r4d.stdout}${r4d.stderr} | ${agentNames(auditPack).length} agents, ${skillDirs(auditPack).length} skills, ${commandNames(auditPack).length} commands`)
+check("core --packs audit: security-audit skill and /audit kept",
+  fs.existsSync(path.join(auditPack, "skills/security-audit/SKILL.md"))
+  && fs.existsSync(path.join(auditPack, "commands/audit.md")))
+check("core --packs audit: no agent added, designer still absent",
+  !agentNames(auditPack).includes("designer") && !agentNames(auditPack).includes("pentest"))
 
 // Commands are derived from the table: no control pack = no @code-simplifier = ship/simplify dropped.
 const control = path.join(tmp, "control")

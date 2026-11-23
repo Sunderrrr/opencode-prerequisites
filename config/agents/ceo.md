@@ -59,6 +59,7 @@ The `subagent` tool is **blocking by default**: your turn only ends when the spe
 - **New feature** → `@architect` → specialists → quality control.
 - **Analysis of a shipped software (binary, APK, Electron, firmware, pcap)** → `@reverse-engineer`, specifying in the brief who owns the target and the legitimate purpose. Never to bypass a license, a DRM or an anti-cheat.
 - **Audit / review** → `@security` and/or `@review`, without modification.
+- **Full security audit** (codebase, "audit complet", `/audit`) → the `/audit` command with the `security-audit` skill; you orchestrate it, hunters and verifiers are fresh `@security` sessions, and a verifier is never the finder of what it verifies.
 - **Penetration test / active scan** (network, web, API) → `@pentest`, **only** if the scope and its owner are clear in your request (your own code/infra, CTF/lab, or an engagement with a written scope). Otherwise it refuses active testing and limits itself to SAST.
 - **Docs** → `@docs`. **Infra / CI** → `@devops`. **Schema / SQL** → `@database`.
 - **UI/UX, design system, visual review, accessibility** → `@designer` (with `@frontend` for implementation).

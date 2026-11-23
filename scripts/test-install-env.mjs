@@ -432,12 +432,12 @@ const rAndroidWith = runP(pAndroidWith, ["--with", "android"])
 check("--with android: exit 1 and tells to use --android",
   rAndroidWith.status === 1 && /use --android/.test(rAndroidWith.stderr), `code ${rAndroidWith.status} | ${rAndroidWith.stderr}`)
 
-// core: 12 agents, 8 skills, 7 commands, optional MCPs disabled for their pack.
+// core: 12 agents, 9 skills, 7 commands, optional MCPs disabled for their pack.
 const pCore = packEnv("pack-core")
 const rCore = runP(pCore, ["--profile", "core"])
 const coreAgents = agentsP(pCore.cfg)
-check("profile core: 12 agents, 8 skills, 7 commands",
-  rCore.status === 0 && coreAgents.length === 12 && skillsP(pCore.cfg).length === 8 && commandsP(pCore.cfg).length === 7,
+check("profile core: 12 agents, 9 skills, 7 commands",
+  rCore.status === 0 && coreAgents.length === 12 && skillsP(pCore.cfg).length === 9 && commandsP(pCore.cfg).length === 7,
   `code ${rCore.status} | ${coreAgents.length} agents, ${skillsP(pCore.cfg).length} skills, ${commandsP(pCore.cfg).length} commands | ${rCore.stderr}`)
 check("profile core: designer and pentest absent",
   !coreAgents.includes("designer") && !coreAgents.includes("pentest"))
@@ -479,19 +479,29 @@ check("--with alone: core base + design = 13 agents, marker profile=core packs=c
 // core --with floci: the opt-in skill pack, no agent and no MCP.
 const pFloci = packEnv("pack-floci")
 const rFloci = runP(pFloci, ["--with", "floci"])
-check("--with floci: 12 agents, 9 skills, marker packs=core,floci",
+check("--with floci: 12 agents, 10 skills, marker packs=core,floci",
   rFloci.status === 0 && agentsP(pFloci.cfg).length === 12
-  && skillsP(pFloci.cfg).length === 9 && skillsP(pFloci.cfg).includes("floci")
+  && skillsP(pFloci.cfg).length === 10 && skillsP(pFloci.cfg).includes("floci")
   && profileP(pFloci.cfg) === "profile=core\npacks=core,floci\n",
   `code ${rFloci.status} | ${agentsP(pFloci.cfg).length} agents, ${skillsP(pFloci.cfg).length} skills | ${profileP(pFloci.cfg)} | ${rFloci.stderr}`)
+
+// core --with audit: opt-in skill + command, no agent.
+const pAudit = packEnv("pack-audit")
+const rAudit = runP(pAudit, ["--with", "audit"])
+check("--with audit: 12 agents, 10 skills, 8 commands (security-audit + /audit)",
+  rAudit.status === 0 && agentsP(pAudit.cfg).length === 12
+  && skillsP(pAudit.cfg).length === 10 && skillsP(pAudit.cfg).includes("security-audit")
+  && commandsP(pAudit.cfg).length === 8 && commandsP(pAudit.cfg).includes("audit")
+  && profileP(pAudit.cfg) === "profile=core\npacks=core,audit\n",
+  `code ${rAudit.status} | ${agentsP(pAudit.cfg).length} agents, ${skillsP(pAudit.cfg).length} skills, ${commandsP(pAudit.cfg).length} commands | ${profileP(pAudit.cfg)} | ${rAudit.stderr}`)
 
 // core + design + devops: packs add agents/skills/commands; MCPs follow the packs.
 const pCDD = packEnv("pack-cdd")
 const rCDD = runP(pCDD, ["--profile", "core", "--with", "design,devops"])
 const cddAgents = agentsP(pCDD.cfg)
-check("core --with design,devops: 18 agents (designer, devops team), 10 skills, 8 commands",
+check("core --with design,devops: 18 agents (designer, devops team), 11 skills, 8 commands",
   rCDD.status === 0 && cddAgents.length === 18 && ["designer", "devops", "docker", "ansible", "terraform", "kubernetes"].every((a) => cddAgents.includes(a))
-  && skillsP(pCDD.cfg).length === 10 && skillsP(pCDD.cfg).includes("ui-ux-pro-max") && skillsP(pCDD.cfg).includes("impeccable")
+  && skillsP(pCDD.cfg).length === 11 && skillsP(pCDD.cfg).includes("ui-ux-pro-max") && skillsP(pCDD.cfg).includes("impeccable")
   && commandsP(pCDD.cfg).length === 8 && commandsP(pCDD.cfg).includes("impeccable"),
   `code ${rCDD.status} | ${cddAgents.length} agents, ${skillsP(pCDD.cfg).length} skills, ${commandsP(pCDD.cfg).length} commands | ${rCDD.stderr}`)
 check("core --with design,devops: marker packs=core,design,devops",
@@ -525,9 +535,9 @@ const fullMinusAgents = agentsP(pFull.cfg)
 check("full --without design: 27 agents, no designer, pentest kept",
   rFullMinus.status === 0 && fullMinusAgents.length === 27 && !fullMinusAgents.includes("designer") && fullMinusAgents.includes("pentest"),
   `code ${rFullMinus.status} | ${fullMinusAgents.length} agents | ${rFullMinus.stderr}`)
-check("full --without design: 10 skills, 9 commands, marker excludes design",
-  skillsP(pFull.cfg).length === 10 && commandsP(pFull.cfg).length === 9
-  && profileP(pFull.cfg) === "profile=full\npacks=core,devops,floci,languages,data,docs,control,reverse,research,pentest\n",
+check("full --without design: 12 skills, 10 commands, marker excludes design and keeps audit",
+  skillsP(pFull.cfg).length === 12 && commandsP(pFull.cfg).length === 10
+  && profileP(pFull.cfg) === "profile=full\npacks=core,devops,floci,languages,data,docs,control,reverse,research,audit,pentest\n",
   `${skillsP(pFull.cfg).length} skills, ${commandsP(pFull.cfg).length} commands | ${profileP(pFull.cfg)}`)
 
 // Remembered full-minus-design, then --no-pack resets to full.
