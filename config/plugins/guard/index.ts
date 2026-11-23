@@ -13,7 +13,7 @@ const SECRET_FILES = /(^|\/)(\.env(\..+)?|\.npmrc|\.git-credentials|\.aws\/crede
 // Legacy patterns, kept for defense in depth (tested against the raw command).
 const DANGEROUS = [
   /\brm\s+-rf?\s+(\/|~|\$HOME)(\s|$)/,
-  /\bgit\s+push\b.*--force(?!-with-lease)/,
+  /\bgit\b[^;&|\n]*\bpush\b[^;&|\n]*(?:\s--force(?!-with-lease)(?=\s|$)|\s-[a-z]*f(?=\s|$)|\s\+[^\s;&|]+)/,
   /\bgit\s+reset\s+--hard\b.*origin/,
   /\b(DROP|TRUNCATE)\s+(TABLE|DATABASE)\b/i,
   /\bcurl\b[^|]*\|\s*(ba)?sh\b/,
@@ -64,12 +64,13 @@ const isDestructiveRm = (command) => segments(command).some((seg) => {
 })
 
 // Destructive git: forced push, reset --hard, filter-branch, clean -f with -d/-x.
+// Global options (notably `-C <dir>`) may come before `push`; `+<ref>` is a forced refspec.
+const GIT_PUSH = /\bgit\b(?:\s+(?:-[Cc]\s*\S+|--git-dir(?:=\S+|\s+\S+)|--work-tree(?:=\S+|\s+\S+)|--namespace(?:=\S+|\s+\S+)|--exec-path(?:=\S+|\s+\S+)|--no-pager|-p))*\s+push\b/
+const FORCE_PUSH_ARG = /(?:^|\s)(?:--force(?!-with-lease)(?=\s|$)|-[a-z]*f(?=\s|$)|\+[^\s;&|]+)/
 const isDangerousGit = (command) => segments(command).some((seg) => {
   const s = seg.trim()
-  if (/\bgit\s+push\b/.test(s)) {
-    if (/(?:^|\s)--force(?!-with-lease)(?:\s|$)/.test(s)) return true
-    if (/(?:^|\s)-[a-z]*f(?:\s|$)/i.test(s)) return true
-  }
+  const push = s.match(GIT_PUSH)
+  if (push && FORCE_PUSH_ARG.test(s.slice(push.index + push[0].length))) return true
   if (/\bgit\s+reset\b.*?\s--hard(?:\s|$)/.test(s)) return true
   if (/\bgit\s+filter-branch\b/.test(s)) return true
   if (/\bgit\s+clean\b/.test(s)) {
@@ -90,6 +91,9 @@ const DOWNLOAD_EXEC = [
   /\b(?:ba)?sh\b[^;&|]*(?:\$\(|`)[^)]*(?:curl|wget)\b/,
   /\b(?:ba)?sh\s+<\(\s*(?:curl|wget)\b/,
   /\b(?:source|\.)\s+<\(\s*(?:curl|wget)\b/,
+  /\b(?:curl|wget)\b[^|]*\|\s*tee\b[^;&|]*(?:(?:&&|[;&\n])\s*(?:(?:sudo|env)\s+(?:-\S+\s+)*)*(?:ba)?sh\b)/,
+  /\b(?:curl|wget)\b[^|]*\|[^|]*\|\s*(?:(?:sudo|env)\s+(?:-\S+\s+)*)*(?:ba)?sh\b/,
+  /\bbase64\b[^|]*(?:\s-[a-zA-Z]*[dD][a-zA-Z]*(?=[\s|]|$)|\s--decode(?=[\s|]|$))[^|]*\|\s*(?:(?:sudo|env)\s+(?:-\S+\s+)*)*(?:ba)?sh\b/,
 ]
 const isDownloadExec = (command) => DOWNLOAD_EXEC.some((re) => re.test(unquote(command)))
 

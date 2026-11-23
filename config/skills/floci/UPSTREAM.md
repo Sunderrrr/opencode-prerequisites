@@ -41,11 +41,15 @@ No other content was changed. Upstream paths and examples were kept as-is.
 
 ## Risks
 
-- **Docker socket mounts**: the Compose assets mount `/var/run/docker.sock` into the
-  emulator containers. A process with that socket can control the host Docker daemon
-  (create privileged containers, read host volumes).
-- **Floating images**: the Compose assets and some references use `:latest` tags, so a pull
-  can silently change the emulator version.
+- **Docker socket mounts (root-equivalent)**: every Compose asset mounts
+  `/var/run/docker.sock` into the emulator container by default. Access to that socket
+  is equivalent to root on the host: a process can start privileged containers, mount
+  any host path and read or modify host data. Treat any container with that mount as
+  trusted as the host itself. Comment the volume out unless the service under test
+  needs the Functions or OKE emulation, which launches child containers.
+- **Floating images (`:latest`)**: all five Compose assets and several references use
+  `:latest`, so a pull can silently change the code that runs next to that socket and
+  inside your project. A mutable tag is not a supply-chain control.
 - **User config writes**: `floci az setup`, `floci oci setup` and the CLI itself write under
   `~/.floci` (profiles, per-instance state, persisted data) and `~/.oci/config` (a `[FLOCI]`
   profile and a throwaway key). Azure setup also changes the user's `az` cloud registration.
@@ -57,10 +61,13 @@ No other content was changed. Upstream paths and examples were kept as-is.
 
 ## Mitigations
 
-- Pin container images by digest (or at least a release tag) in real projects and in CI;
-  do not copy `:latest` unchanged.
-- Mount `/var/run/docker.sock` only for services that really launch child containers
-  (Lambda, ECS, RDS, Functions, OKE); drop the mount and the socket volume otherwise.
+- Pin every container image **by digest** (`floci/floci@sha256:…`) in real projects and
+  in CI; a release tag is the strict minimum, and `:latest` must not be deployed. Review
+  the digest when bumping the emulator.
+- Keep `/var/run/docker.sock` **commented out** in the copied Compose file unless the
+  service under test needs Functions or OKE; those are the features that launch child
+  containers. Without the mount, the other emulators still run, and the container no
+  longer has root-equivalent control of the host daemon.
 - Keep every published port on loopback and use the fake credentials only.
 - Prefer `--persist` directories inside the project or a dedicated `~/.floci` path, and
   review `~/.oci/config` after `floci oci setup` if the user already has OCI profiles.

@@ -1320,8 +1320,8 @@ config_phase() {
   fi
 
   # Installed pin record (mode 600): outside the repository install.sh is not copied, so
-  # oc-deps reads <config>/versions.json to check the 8 OC_*_VERSION pins and the launcher
-  # pins instead of skipping them. Deterministic content (no timestamp): a reinstall is
+  # oc-deps reads <config>/versions.json to check all 17 pins instead of skipping them.
+  # Deterministic content (no timestamp): a reinstall is
   # byte-identical, and the file is rolled back with the rest of $DEST on failure.
   node "$HERE/config/libexec/oc-deps.mjs" snapshot > "$TMP/versions.json"
   install -m 0600 "$TMP/versions.json" "$DEST/versions.json"

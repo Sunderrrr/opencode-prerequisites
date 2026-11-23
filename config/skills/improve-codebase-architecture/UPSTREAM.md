@@ -29,6 +29,10 @@ Vendored from **mattpocock/skills** — https://github.com/mattpocock/skills —
   `codebase-design`", `/codebase-design`, "spawn a sub-agent". In OpenCode, load the
   sibling skills with the `skill` tool and delegate with the `subagent` tool; the
   intent is unchanged.
+- In `HTML-REPORT.md`, Mermaid is initialised with `securityLevel: "strict"` instead
+  of the upstream `"loose"`: raw HTML in labels is encoded and click handlers are
+  disabled. Plain labels and links in the diagram text still render; the report does
+  not need HTML inside a diagram.
 
 No script, binary or remote installer is vendored: the skill contains no executable
 file and no network downloader command.
@@ -58,11 +62,12 @@ file and no network downloader command.
     unstyled and the Mermaid diagrams do not appear. The text content is still there.
   - `cdn.tailwindcss.com` is the Tailwind browser/CDN build, meant for prototypes, not
     production; it is only loaded in a local report.
-  - Mermaid is initialised with `securityLevel: "loose"`, which allows HTML and click
-    interactions inside diagram labels. The report is built from local code and model
-    output, but code comments and glossary text can end up in it: do not point the
-    audit at untrusted repositories and then open the report with a privileged browser
-    profile. No data is uploaded by the report itself beyond the CDN requests.
+  - Mermaid is initialised with `securityLevel: "strict"` (locally changed from the
+    upstream `"loose"`), so HTML in diagram labels is encoded and click interactions
+    are disabled. The report is still built from local code and model output: code
+    comments and glossary text can end up in it, so do not point the audit at
+    untrusted repositories and then open the report with a privileged browser profile.
+    No data is uploaded by the report itself beyond the CDN requests.
 - No evidence is collected by script: the model explores the codebase with its own
   tools and writes the HTML itself.
 

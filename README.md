@@ -9,7 +9,7 @@ My starter kit for [OpenCode](https://opencode.ai) with the **OpenCode Go** subs
 ```bash
 git clone https://github.com/Sunderrrr/opencode-prerequisites.git
 cd opencode-prerequisites
-./install.sh                        # full (default): 28 agents, 18 skills, 12 commands, 10 MCP servers
+./install.sh                        # full (default): 28 agents, 18 skills, 12 commands, 11 MCP entries (9 active by default; 10 with a kubeconfig or --android; 11 with both)
 ./install.sh --profile core         # 12 agents, 9 skills, 7 commands, 7 MCP servers
 ./install.sh --lite                 # alias of --profile lite: 12 agents, context7 + grep_app, no heavy tools
 ./install.sh --no-tools             # config only: nothing is installed (no tools, no MemPalace)
@@ -225,7 +225,7 @@ The seven **mandatory** MCP servers are context7, grep_app, playwright, obscura,
 | Agents | 28 (+2 with `--android`) | 12 | 12 |
 | Skills | 18 (19 with `--android`) | 9 | 9 |
 | Commands | 12 | 7 | 7 |
-| MCP | 10 active (11 entries with `--android`) | 7 | context7, grep_app |
+| MCP | 11 entries, 9 active by default (10 with a kubeconfig or `--android`, 11 with both) | 7 | context7, grep_app |
 | Memory | MemPalace (venv `~/.mempalace/venv`, ≈ 500 MB) | MemPalace | — |
 | Tools | installed | installed | none (`--lite` implies `--no-tools`) |
 
@@ -270,7 +270,7 @@ The core and light profiles are derived from the full one by `scripts/make-lite.
 
 ## What is not verified
 
-The kit is validated by script (`validate-kit.mjs`), by the **official OpenCode JSON schema** (`scripts/validate-schema.py`, also in CI) and by the Node tests of `ci.yml`, `ci-macos.yml` and `ci-windows.yml`: `agent-wt`, `make-lite`, `new-rust-project.sh`, `doctor` (15 checks), `mcp-state` (25), the light profile (29), `oc-new-android` (46), `oc-deps` (50), `oc-secrets` (96), `evals` (63), `chrome-devtools` (14), `ui-ux` (36) and the installation have been tested. macOS is covered by a dedicated CI with the system bash 3.2; the nightly (`ci-nightly.yml`) tests the real installation of the tools. **Validated locally on 2026-11-09**: the live Chrome DevTools MCP test (`scripts/test-chrome-devtools-live.mjs`, 17 checks) and the Android E2E harness (`scripts/e2e-android.sh`, 11/11 steps in 112 s, APK installed and launched, 1080x2400 PNG screenshot). What remains to be confirmed in use: the arguments of the `terraform`/`kubernetes` MCPs, the `!`cmd`` syntax of `/usage`, the exact meaning of `compaction.buffer` (inferred from the schema, undocumented), the CEO's `background` delegation on a real OpenCode, `--with-matt`, and a persistent logged-in Chrome profile (the launcher forces `--headless --isolated`). The Android E2E CI job is ready (`.github/workflows/ci-android-e2e.yml`) but still needs a self-hosted KVM runner. Check with `./doctor.sh` then `opencode mcp list`; see [docs/android-e2e.md](docs/android-e2e.md).
+The kit is validated by script (`validate-kit.mjs`), by the **official OpenCode JSON schema** (`scripts/validate-schema.py`, also in CI) and by the Node tests of `ci.yml`, `ci-macos.yml` and `ci-windows.yml`: `agent-wt`, `make-lite`, `new-rust-project.sh`, `doctor` (27 checks), `mcp-state` (25), the light profile (73), `oc-new-android` (46), `oc-deps` (50), `oc-secrets` (96), `evals` (63), `chrome-devtools` (14), `ui-ux` (36) and the installation have been tested. macOS is covered by a dedicated CI with the system bash 3.2; the nightly (`ci-nightly.yml`) tests the real installation of the tools. **Validated locally on 2026-11-09**: the live Chrome DevTools MCP test (`scripts/test-chrome-devtools-live.mjs`, 17 checks) and the Android E2E harness (`scripts/e2e-android.sh`, 11/11 steps in 112 s, APK installed and launched, 1080x2400 PNG screenshot). What remains to be confirmed in use: the arguments of the `terraform`/`kubernetes` MCPs, the `!`cmd`` syntax of `/usage`, the exact meaning of `compaction.buffer` (inferred from the schema, undocumented), the CEO's `background` delegation on a real OpenCode, `--with-matt`, and a persistent logged-in Chrome profile (the launcher forces `--headless --isolated`). The Android E2E CI job is ready (`.github/workflows/ci-android-e2e.yml`) but still needs a self-hosted KVM runner. Check with `./doctor.sh` then `opencode mcp list`; see [docs/android-e2e.md](docs/android-e2e.md).
 
 ## Documents
 
