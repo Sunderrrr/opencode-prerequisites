@@ -9,19 +9,20 @@ My starter kit for [OpenCode](https://opencode.ai) with the **OpenCode Go** subs
 ```bash
 git clone https://github.com/Sunderrrr/opencode-prerequisites.git
 cd opencode-prerequisites
-./install.sh                        # full (default): 28 agents, 14 skills, 11 commands, 10 MCP servers
+./install.sh                        # full (default): 28 agents, 18 skills, 12 commands, 10 MCP servers
 ./install.sh --profile core         # 12 agents, 9 skills, 7 commands, 7 MCP servers
 ./install.sh --lite                 # alias of --profile lite: 12 agents, context7 + grep_app, no heavy tools
 ./install.sh --no-tools             # config only: nothing is installed (no tools, no MemPalace)
-./install.sh --with design,devops   # add packs (design, devops, languages, data, docs, control, reverse, research, floci, audit)
+./install.sh --with design,devops   # add packs (design, devops, languages, data, docs, control, reverse, research, floci, audit, architecture)
 ./install.sh --without design       # remove packs from the selected profile (core cannot be removed)
 ./install.sh --no-pack              # forget the remembered packs and reset to the full profile
 ./install.sh --version              # print the kit version (VERSION)
-./install.sh --with-matt            # + full Matt Pocock skills (untested)
+./install.sh --with architecture    # + Matt Pocock's architecture quartet and /architecture
+./install.sh --with-matt            # + full upstream Matt Pocock skills (untested; clashes with --with architecture)
 ./install.sh --android              # + Android module (optional, remembered): agents, mobile MCP, Podman toolchain
 ```
 
-`profiles/packs.tsv` is the single source of truth for packs: one line per agent, skill or MCP (commands follow their packs). The resolved profile and pack list are remembered in `<config>/.opencode-prerequisites.profile`; an explicit `--profile` wins over the remembered choice, `--with` alone starts from `core`, and `--no-pack` resets to `full`. `--profile lite` implies `--no-tools`. `android` is a module (`--android`), not a pack; `--with android` is rejected and `pentest` is selected with `--pentest`. The `audit` pack is opt-in for reduced profiles (`--with audit`) and included in full.
+`profiles/packs.tsv` is the single source of truth for packs: one line per agent, skill or MCP (commands follow their packs). The resolved profile and pack list are remembered in `<config>/.opencode-prerequisites.profile`; an explicit `--profile` wins over the remembered choice, `--with` alone starts from `core`, and `--no-pack` resets to `full`. `--profile lite` implies `--no-tools`. `android` is a module (`--android`), not a pack; `--with android` is rejected and `pentest` is selected with `--pentest`. The `audit` and `architecture` packs are opt-in for reduced profiles (`--with audit`, `--with architecture`) and included in full. `--with-matt` installs the full upstream collection with the same skill names, so it can overwrite the vendored `architecture` copies: use one or the other, never both.
 
 **Do not run `install.sh` with `sudo`**: everything would be installed in `/root`. The installer also refuses to run via sudo. It validates the kit before copying, backs up the existing setup to `~/.config/opencode.bak-<date>`, and writes no key.
 
@@ -121,6 +122,16 @@ Model routing is explicit on every call: **haiku** for reading and mechanical wo
 - **Output**: `~/security-audit-skill/<repo>/run-<N>`, outside the audited repository. Node 18+ is required for the validators; the upstream FIFO/symlink tests skip on Windows.
 - Details, phases and artefacts: [docs/security-audit.md](docs/security-audit.md). The skill text: [config/skills/security-audit/SKILL.md](config/skills/security-audit/SKILL.md).
 
+## Architecture audit (architecture pack, `/architecture`)
+
+**Four skills** vendored from [mattpocock/skills](https://github.com/mattpocock/skills) at commit `abeeaf95660ba9e8b7c753eb38f441ca707a8823` (MIT, © 2026 Matt Pocock, license kept verbatim, see each `UPSTREAM.md`): `improve-codebase-architecture` (scan a scope, then present deepening candidates as a visual HTML report), `codebase-design` (the deep-module vocabulary and the design-it-twice pattern), `grilling` (a design-tree interview, one frontier round at a time) and `domain-modeling` (keep `GLOSSARY.md` and `docs/adr/` current). The `disable-model-invocation: true` frontmatter line was removed from `improve-codebase-architecture` so OpenCode can select it from its description; nothing else changed.
+
+- **Pack**: `./install.sh --with architecture` adds the four skills and the `/architecture` command to core; the full profile includes them; `--lite` and `--profile core` leave them out.
+- **Report**: `/architecture <scope>` loads `improve-codebase-architecture`, gives a fresh subagent the exploration brief, and writes `${TMPDIR:-/tmp}/architecture-review-<timestamp>.html` **outside the repository**. Headless or without a browser, it prints the absolute path.
+- **Network/CSP**: the report loads Tailwind (`cdn.tailwindcss.com`) and Mermaid 11 (jsDelivr) at view time. Nothing is fetched while producing it; offline or under a strict CSP the text stays but the styling and diagrams do not. No script, no `curl`, no executable in the four directories.
+- **`--with-matt` duplication**: the upstream installer puts same-named skills in the same directory and can overwrite these copies; do not combine the two options.
+- Details, limits and the full file list: [docs/architecture.md](docs/architecture.md). Provenance: `config/skills/<name>/UPSTREAM.md`.
+
 ## Code Mode (core skill)
 
 **`code-mode`** is the Cloudflare pattern — write one short program against the API or CLI behind
@@ -202,6 +213,7 @@ How it is built: the image starts from Ubuntu 24.04, downloads the Android tools
 | `reverse` | `reverse-engineer` | `reverse-engineer-anything` | rea | `--with reverse` (in full) |
 | `research` | `web-researcher` | — | — | `--with research` (in full) |
 | `audit` | — | `security-audit` | — | `--with audit` (in full); adds `/audit` |
+| `architecture` | — | `improve-codebase-architecture`, `codebase-design`, `grilling`, `domain-modeling` | — | `--with architecture` (in full); adds `/architecture` |
 | `pentest` | `pentest` | — | — | `--pentest` (agent in full; tools only with the flag) |
 | `android` | `android`, `mobile-tester` | `android-dev` | mobile | `--android` (module, never `--with`) |
 
@@ -211,21 +223,21 @@ The seven **mandatory** MCP servers are context7, grep_app, playwright, obscura,
 |---|---|---|---|
 | Packs | all except `android` | `core` | `core` |
 | Agents | 28 (+2 with `--android`) | 12 | 12 |
-| Skills | 14 (15 with `--android`) | 9 | 9 |
-| Commands | 11 | 7 | 7 |
+| Skills | 18 (19 with `--android`) | 9 | 9 |
+| Commands | 12 | 7 | 7 |
 | MCP | 10 active (11 entries with `--android`) | 7 | context7, grep_app |
 | Memory | MemPalace (venv `~/.mempalace/venv`, ≈ 500 MB) | MemPalace | — |
 | Tools | installed | installed | none (`--lite` implies `--no-tools`) |
 
-The core and light profiles are derived from the full one by `scripts/make-lite.mjs`: there are no separate configs to maintain. The light profile additionally removes `plugins/mempalace/` (otherwise OpenCode would load memory even though its config file is gone) and keeps only context7 and grep_app. Commands follow their packs: full has 11, core/lite keep the 7 that belong to core and do not target a removed agent (`/impeccable`, `/simplify` and `/ship` need the `design` or `control` packs; `/audit` needs `audit`).
+The core and light profiles are derived from the full one by `scripts/make-lite.mjs`: there are no separate configs to maintain. The light profile additionally removes `plugins/mempalace/` (otherwise OpenCode would load memory even though its config file is gone) and keeps only context7 and grep_app. Commands follow their packs: full has 12, core/lite keep the 7 that belong to core and do not target a removed agent (`/impeccable`, `/simplify` and `/ship` need the `design` or `control` packs; `/audit` needs `audit`; `/architecture` needs `architecture`).
 
 ## Contents
 
 - `config/opencode.jsonc`: single model `opencode-go/deepseek-v4.1-flash` for ALL agents (large quota; no agent has its own model, to change one: add `model: opencode-go/<id>` in its `agents/<name>.md` file), unrestricted permissions, auto-formatting, compaction.
-- `config/AGENTS.md`: global rules (≈ 800 words, read on every session): CEO, Rust by default, "done = proven", multi-agent git, internet safety, quota.
+- `config/AGENTS.md`: global rules (≈ 1,150 words, read on every session): CEO, Rust by default, "done = proven", multi-agent git, internet safety, quota.
 - `config/agents/`: `ceo` (default), domain (`architect`, `backend`, `frontend`, `designer`, `database`, `devops`, `security`, `pentest`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`, `reverse-engineer`), languages/tools (`rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`), control (`review`, `code-simplifier`, `verify-app`), git (`integrator`).
-- `config/skills/` (14, 15 with `--android`): `anti-ia-detection` (detects and fixes AI-writing tics in French; the skill is French by design), `code-mode` (short scripts instead of tool-call chains), `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`, `reverse-engineer-anything`, `ui-ux-pro-max`, `impeccable`, `floci` (opt-in pack: local AWS/GCP/Azure/OCI emulators), `security-audit` (audit pack: source-first vulnerability audit).
-- `config/commands/` (11): `/audit`, `/check`, `/plan-first`, `/impeccable`, `/simplify`, `/verify`, `/learn`, `/remember`, `/ship`, `/pr`, `/usage`.
+- `config/skills/` (18, 19 with `--android`): `anti-ia-detection` (detects and fixes AI-writing tics in French; the skill is French by design), `code-mode` (short scripts instead of tool-call chains), `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`, `reverse-engineer-anything`, `ui-ux-pro-max`, `impeccable`, `floci` (opt-in pack: local AWS/GCP/Azure/OCI emulators), `security-audit` (audit pack: source-first vulnerability audit), `improve-codebase-architecture`, `codebase-design`, `grilling`, `domain-modeling` (architecture pack: Matt Pocock's architecture audit, see [docs/architecture.md](docs/architecture.md)).
+- `config/commands/` (12): `/audit`, `/architecture`, `/check`, `/plan-first`, `/impeccable`, `/simplify`, `/verify`, `/learn`, `/remember`, `/ship`, `/pr`, `/usage`.
 - `config/plugins/`: `guard/` (textual safeguard: blocks reading secret files and common destructive commands; **it is not a barrier** and does not replace a security review) and `notify/` (notification when a session is waiting), in the **OpenCode plugin v2 format** (a folder, `export default Plugin.define({ id, setup })`); tested by `scripts/test-plugins.mjs`. Compaction at 90% is native: `compaction.buffer: "10%"`.
 - `config/bin/oc-models`: per-agent model choice; `config/bin/agent-wt`: one git worktree per agent (`new`, `merge`, `remove`, `list`, `registry`, `integration`, `sync`). `agent-wt list --porcelain` gives the machine state (one line per worktree, 7 tab-separated fields); `agent-wt registry --out .worktrees/REGISTRY.md` maintains the CEO's persistent registry (table rewritten, existing `## History` section kept, legacy `## Historique` also preserved).
 - `config/bin/oc-backup`, `oc-restore` and `oc-usage`: see "Backup, restore and usage" below. `config/bin/oc-new-web <name>`: web project generator.
@@ -270,6 +282,7 @@ The kit is validated by script (`validate-kit.mjs`), by the **official OpenCode 
 - [docs/claude-code.md](docs/claude-code.md): `oc-export-claude`, model routing, fixed variants and the project `.mcp.json`.
 - [docs/rea.md](docs/rea.md): the reverse pack, REA legal scope, `oc-rea` CLI, MCP, skill, optional native engines and troubleshooting.
 - [docs/security-audit.md](docs/security-audit.md): the `security-audit` skill, guidance vs full audit, six phases, artefacts, sandbox limits, agent mapping and the `/audit` command.
+- [docs/architecture.md](docs/architecture.md): the `architecture` pack (Matt Pocock's four skills), the `/architecture` command, the temp HTML report, CDN/CSP and headless limits, license and SHA.
 - [docs/code-mode.md](docs/code-mode.md): the Code Mode pattern in OpenCode and Claude Code, when a script beats tool calls, sandbox and secret rules.
 - [ROADMAP.md](ROADMAP.md): shipped and verified, open work, out of scope.
 - [CHANGELOG.md](CHANGELOG.md): what changes on `main` (Keep a Changelog, SemVer, v1.0.0 and v1.0.1 tagged and signed).

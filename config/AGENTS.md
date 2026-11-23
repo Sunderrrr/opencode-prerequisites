@@ -36,6 +36,11 @@
 - PR mode (on my request): branch `integration/<name>` from `origin/main`, rebase + tests just before push, `gh pr create`, re-sync if `main` moves (3 times max). `--force-with-lease` only on `integration/*`.
 - Forbidden: `git stash`, `git reset --hard`, `git clean -fdx`, switching branches in the main repository. Specialists commit locally in their worktree (required for integration to work); the CEO never pushes without my explicit request.
 
+## Skills (auto-use)
+- **Before acting, scan the available skill list.** If a skill's description matches the task, load it with the `skill` tool without waiting for the user to name it. Do not answer from memory what a loaded skill would do better.
+- Load what the task needs, not the whole catalogue: one matching skill, plus the skills it explicitly calls for.
+- The CEO (and every delegating agent) **names the relevant skill in each specialist brief**, so the subagent loads it instead of rediscovering it.
+
 ## Tools
 - Library docs: `context7` before writing code. Real code examples: `grep_app`. Internet: `websearch`/`webfetch` or `@web-researcher`. GitHub: `gh search`, `gh repo view`, `gh api`.
 - **Versions**: before writing code that depends on a package, check the latest version with `oc-versions <npm|pypi|crates|maven|github> <package>` (24 h cache) or context7; once per task and per ecosystem, not for every file. `oc-versions --refresh` forces a cache refresh. Never write a version from memory, and do not copy a version from an old project.

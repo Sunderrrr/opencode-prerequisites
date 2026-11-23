@@ -471,10 +471,12 @@ check("remembered packs: unknown and android entries dropped with a warning, mar
 // --with alone: core base (not full).
 const pWith = packEnv("pack-with")
 const rWith = runP(pWith, ["--with", "design"])
-check("--with alone: core base + design = 13 agents, marker profile=core packs=core,design",
+check("--with alone: core base + design = 13 agents, 11 skills, 8 commands, marker profile=core packs=core,design",
   rWith.status === 0 && agentsP(pWith.cfg).length === 13 && agentsP(pWith.cfg).includes("designer")
+  && skillsP(pWith.cfg).length === 11 && skillsP(pWith.cfg).includes("ui-ux-pro-max") && skillsP(pWith.cfg).includes("impeccable")
+  && commandsP(pWith.cfg).length === 8 && commandsP(pWith.cfg).includes("impeccable")
   && profileP(pWith.cfg) === "profile=core\npacks=core,design\n",
-  `code ${rWith.status} | ${agentsP(pWith.cfg).length} agents | ${profileP(pWith.cfg)} | ${rWith.stderr}`)
+  `code ${rWith.status} | ${agentsP(pWith.cfg).length} agents, ${skillsP(pWith.cfg).length} skills, ${commandsP(pWith.cfg).length} commands | ${profileP(pWith.cfg)} | ${rWith.stderr}`)
 
 // core --with floci: the opt-in skill pack, no agent and no MCP.
 const pFloci = packEnv("pack-floci")
@@ -494,6 +496,18 @@ check("--with audit: 12 agents, 10 skills, 8 commands (security-audit + /audit)"
   && commandsP(pAudit.cfg).length === 8 && commandsP(pAudit.cfg).includes("audit")
   && profileP(pAudit.cfg) === "profile=core\npacks=core,audit\n",
   `code ${rAudit.status} | ${agentsP(pAudit.cfg).length} agents, ${skillsP(pAudit.cfg).length} skills, ${commandsP(pAudit.cfg).length} commands | ${profileP(pAudit.cfg)} | ${rAudit.stderr}`)
+
+// core --with architecture: the Matt Pocock quartet (4 skills) + /architecture, no agent.
+const pArch = packEnv("pack-architecture")
+const rArch = runP(pArch, ["--with", "architecture"])
+const archSkills = skillsP(pArch.cfg)
+check("--with architecture: 12 agents, 13 skills (quartet), 8 commands (/architecture)",
+  rArch.status === 0 && agentsP(pArch.cfg).length === 12
+  && archSkills.length === 13
+  && ["improve-codebase-architecture", "codebase-design", "grilling", "domain-modeling"].every((s) => archSkills.includes(s))
+  && commandsP(pArch.cfg).length === 8 && commandsP(pArch.cfg).includes("architecture")
+  && profileP(pArch.cfg) === "profile=core\npacks=core,architecture\n",
+  `code ${rArch.status} | ${agentsP(pArch.cfg).length} agents, ${archSkills.length} skills, ${commandsP(pArch.cfg).length} commands | ${profileP(pArch.cfg)} | ${rArch.stderr}`)
 
 // core + design + devops: packs add agents/skills/commands; MCPs follow the packs.
 const pCDD = packEnv("pack-cdd")
@@ -535,9 +549,9 @@ const fullMinusAgents = agentsP(pFull.cfg)
 check("full --without design: 27 agents, no designer, pentest kept",
   rFullMinus.status === 0 && fullMinusAgents.length === 27 && !fullMinusAgents.includes("designer") && fullMinusAgents.includes("pentest"),
   `code ${rFullMinus.status} | ${fullMinusAgents.length} agents | ${rFullMinus.stderr}`)
-check("full --without design: 12 skills, 10 commands, marker excludes design and keeps audit",
-  skillsP(pFull.cfg).length === 12 && commandsP(pFull.cfg).length === 10
-  && profileP(pFull.cfg) === "profile=full\npacks=core,devops,floci,languages,data,docs,control,reverse,research,audit,pentest\n",
+check("full --without design: 16 skills, 11 commands, marker excludes design and keeps audit+architecture",
+  skillsP(pFull.cfg).length === 16 && commandsP(pFull.cfg).length === 11
+  && profileP(pFull.cfg) === "profile=full\npacks=core,devops,floci,languages,data,docs,control,reverse,research,audit,architecture,pentest\n",
   `${skillsP(pFull.cfg).length} skills, ${commandsP(pFull.cfg).length} commands | ${profileP(pFull.cfg)}`)
 
 // Remembered full-minus-design, then --no-pack resets to full.
@@ -545,8 +559,9 @@ const rFullRemember = runP(pFull)
 check("remembered choice: full --without design is replayed (27 agents)",
   rFullRemember.status === 0 && agentsP(pFull.cfg).length === 27 && /Profile remembered: full/.test(rFullRemember.stdout))
 const rNoPack = runP(pFull, ["--no-pack"])
-check("--no-pack: resets to the full profile (28 agents, designer back)",
+check("--no-pack: resets to the full profile (28 agents, 18 skills, 12 commands, designer back)",
   rNoPack.status === 0 && agentsP(pFull.cfg).length === 28 && agentsP(pFull.cfg).includes("designer")
+  && skillsP(pFull.cfg).length === 18 && commandsP(pFull.cfg).length === 12
   && profileP(pFull.cfg).startsWith("profile=full\npacks=core,design,"), rNoPack.stdout + rNoPack.stderr)
 
 // --lite: 12 agents, context7 + grep_app only, no tools.

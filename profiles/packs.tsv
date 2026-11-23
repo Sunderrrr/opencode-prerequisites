@@ -51,6 +51,11 @@ reverse	mcp	rea
 research	agent	web-researcher
 audit	skill	security-audit
 audit	command	audit
+architecture	skill	improve-codebase-architecture
+architecture	skill	codebase-design
+architecture	skill	grilling
+architecture	skill	domain-modeling
+architecture	command	architecture
 pentest	agent	pentest
 android	agent	android
 android	agent	mobile-tester
