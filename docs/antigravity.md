@@ -298,7 +298,7 @@ HOME=/tmp/opencode/antigravity-home agy models
 ```
 
 The exporter suite covers frontmatter and tiers, skills, MCP merge and backup, idempotence,
-`.new`/`--force`, `--android`, `--project`, the launcher and the CLI reading the result (71
+`.new`/`--force`, `--android`, `--project`, the launcher and the CLI reading the result (72
 checks at the time of writing):
 
 ```bash

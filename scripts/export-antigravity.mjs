@@ -311,6 +311,9 @@ function locateConfig(args) {
   }
   const repo = path.resolve(HERE, "..")
   if (exists(path.join(repo, "config", "opencode.jsonc"))) return { config: path.join(repo, "config"), root: repo }
+  // Installed kit: <config>/libexec/export-antigravity.mjs, with <config>/opencode.jsonc.
+  const installed = path.resolve(HERE, "..")
+  if (exists(path.join(installed, "opencode.jsonc"))) return { config: installed, root: path.dirname(installed) }
   if (exists(path.join(HERE, "opencode.jsonc"))) return { config: HERE, root: path.dirname(HERE) }
   fail("kit configuration not found (looked for config/opencode.jsonc next to " + HERE + ")", 1)
   return null

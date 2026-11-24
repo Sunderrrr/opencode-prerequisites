@@ -244,6 +244,16 @@ const wrapperOut = path.join(tmp, "wrapper-out")
 const rw2 = runBash([WRAPPER, "--out", wrapperOut, "--force"], { env })
 check("launcher: repository layout resolves the exporter", rw2.status === 0 && exists(path.join(wrapperOut, "agents", "ceo.md")), rw2.stderr)
 
+// Installed layout: <config>/libexec/export-antigravity.mjs reads <config>/opencode.jsonc.
+const installedKit = path.join(tmp, "installed-kit")
+fs.cpSync(path.join(ROOT, "config"), installedKit, { recursive: true })
+fs.mkdirSync(path.join(installedKit, "libexec"), { recursive: true })
+fs.copyFileSync(EXPORT, path.join(installedKit, "libexec", "export-antigravity.mjs"))
+const installedOut = path.join(tmp, "installed-out")
+const rInstalled = spawnSync(process.execPath, [path.join(installedKit, "libexec", "export-antigravity.mjs"), "--out", installedOut, "--force"], { encoding: "utf8" })
+check("installed layout: <config>/libexec reads <config>/opencode.jsonc",
+  rInstalled.status === 0 && exists(path.join(installedOut, "agents", "ceo.md")) && exists(path.join(installedOut, "mcp_config.json")), rInstalled.stderr)
+
 // ---------- 10. Antigravity CLI reads the generated config ----------
 // `agy` first: the desktop app also installs an `antigravity` binary on Linux
 // (/opt/Antigravity/antigravity) that ignores the CLI subcommands and would hang.
