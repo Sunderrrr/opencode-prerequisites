@@ -77,6 +77,9 @@ jobs:
       - name: "Antigravity export (hermetic: Markdown agents, tiers, skills, MCP merge, idempotence)"
         run: node scripts/test-antigravity-export.mjs
 
+      - name: "EGM launcher (help, prompt construction, artifact paths, bridge selection, plugin check)"
+        run: node scripts/test-egm.mjs
+
       - name: "Offline diagnostic (exit codes 0/1, no network requests)"
         run: node scripts/test-doctor.mjs
 

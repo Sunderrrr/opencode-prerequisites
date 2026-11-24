@@ -1382,7 +1382,7 @@ fi
 : > "$DEST/.opencode-prerequisites.installed"
 chmod 600 "$DEST/.opencode-prerequisites.installed"
 secure_tree "$DEST"
-echo "✅ Config installed in $DEST; launchers (agent-wt, oc-new-rust, oc-new-android, oc-new-web, oc-models, oc-deps, oc-backup, oc-restore, oc-usage, oc-secrets, oc-playwright-mcp, oc-uiux-search, oc-impeccable, oc-chrome-devtools-mcp, oc-terraform-mcp, oc-rea, oc-rea-mcp, oc-semgrep-mcp, oc-versions, oc-codex, oc-antigravity, oc-export-claude, oc-export-codex, oc-export-antigravity) in $BIN"
+echo "✅ Config installed in $DEST; launchers (agent-wt, oc-new-rust, oc-new-android, oc-new-web, oc-models, oc-deps, oc-backup, oc-restore, oc-usage, oc-secrets, oc-playwright-mcp, oc-uiux-search, oc-impeccable, oc-chrome-devtools-mcp, oc-terraform-mcp, oc-rea, oc-rea-mcp, oc-semgrep-mcp, oc-versions, oc-codex, oc-antigravity, oc-egm, oc-export-claude, oc-export-codex, oc-export-antigravity) in $BIN"
 echo "ℹ️  Profile: $PROFILE (packs: $PACKS_CSV)"
 
 # OpenCode Desktop wiring (Linux): independent of the tools choice (--desktop never implies --no-tools).

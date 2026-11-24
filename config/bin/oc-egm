@@ -1,0 +1,227 @@
+#!/usr/bin/env bash
+# oc-egm: run an EGM (Elephant-Goldfish Model) skill through Codex or Antigravity.
+#   oc-egm review docs/designs/webhooks.md
+#   oc-egm --via antigravity brainstorm "Add webhook delivery"
+#   oc-egm -C ~/src/app --artifact .dev/docs draft
+#   oc-egm check
+#   oc-egm -h
+# EGM's OpenCode adapter targets OpenCode V1 only (HOST_VERSION 1.18.29), not V2.4.1:
+# this launcher goes through the Codex/Antigravity bridges instead. The plugin must be
+# installed in the target CLI (Codex: egm@egm, Antigravity: egm); `oc-egm check` verifies it.
+# The prompt leaves the machine for OpenAI (Codex) or Google (Antigravity): never put a
+# secret in the document or in ARGS.
+# Bash 3.2+ (macOS/Linux). Needs bash, grep, and oc-codex or oc-antigravity on PATH
+# (otherwise the sibling launcher is used).
+set -Eeuo pipefail
+
+# GUI-launched OpenCode Desktop does not inherit the shell PATH (Electron): load the kit PATH.
+# shellcheck disable=SC1091
+for d in "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/libexec" "$HOME/.config/opencode/libexec" "$(cd "${BASH_SOURCE[0]%/*}/../libexec" 2>/dev/null && pwd)"; do [ -r "$d/desktop-env.sh" ] && . "$d/desktop-env.sh" && break; done
+IFS=$'\n\t'
+shopt -s inherit_errexit 2>/dev/null || true
+
+here="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+
+usage() {
+  cat <<'EOF'
+Usage: oc-egm [-C DIR] [--via codex|antigravity] [--artifact DIR] COMMAND [ARGS...]
+       oc-egm check
+       oc-egm -h
+
+Run an EGM (Elephant-Goldfish Model) skill through the Codex or Antigravity CLI.
+OpenCode's EGM adapter is V1-only, so this launcher uses the bridges instead.
+
+Commands:
+  brainstorm     explore an idea and write concepts_brief.md
+  draft          turn a brief into design_draft.md
+  review         review a design with fresh-context reviewers
+  resolve        work through the review findings
+  bootstrap      document an existing codebase
+  lite           fast-track a small change
+  drift-report   compare checked-in documents with the code
+
+Options:
+  -C, --cd DIR        working directory (default: $PWD)
+      --via VIA       codex (default) or antigravity
+      --artifact DIR  EGM artifact directory (default: .dev/docs), exported to the prompt
+  -h, --help          show this help
+
+Check:
+  oc-egm check        verify that Codex has egm@egm and Antigravity has the egm plugin
+
+Examples:
+  oc-egm review docs/designs/webhooks.md
+  oc-egm -C ~/src/app --artifact .dev/docs draft
+  oc-egm --via antigravity brainstorm "Add webhook delivery"
+  oc-egm check
+
+The prompt leaves the machine for OpenAI (Codex) or Google (Antigravity): never put a
+secret in the document or in ARGS. A full review starts 8-15 fresh-context reviewers
+and consumes quota: reserve it for a significant design.
+EOF
+}
+
+die() {
+  printf '❌ oc-egm: %s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+# abspath BASE PATH: absolute, lexically normalised path (PATH may not exist yet).
+abspath() {
+  local base="$1" p="$2" part out=""
+  local -a parts
+  [[ $p = /* ]] || p="$base/$p"
+  IFS=/ read -ra parts <<<"$p"
+  for part in "${parts[@]}"; do
+    case "$part" in
+      '' | .) ;;
+      ..) out="${out%/*}" ;;
+      *) out+="/$part" ;;
+    esac
+  done
+  printf '%s\n' "${out:-/}"
+}
+
+check_plugins() {
+  local rc=0 out
+  printf 'oc-egm: EGM plugin check\n'
+  if command -v codex >/dev/null 2>&1; then
+    if out="$(codex plugin list 2>&1)" && grep -Fq -- 'egm@egm' <<<"$out"; then
+      printf '✅ codex: egm@egm OK\n'
+    else
+      printf '❌ codex: egm@egm missing (codex plugin marketplace add google/elephant-goldfish-model && codex plugin add egm@egm)\n'
+      rc=1
+    fi
+  else
+    printf '❌ codex: CLI not found on PATH (install Codex CLI and run codex login)\n'
+    rc=1
+  fi
+  if command -v agy >/dev/null 2>&1; then
+    if out="$(agy plugin list 2>&1)" && grep -Eq '^[[:space:]]*-[[:space:]]+egm([[:space:]]|$)' <<<"$out"; then
+      printf '✅ antigravity: egm OK\n'
+    else
+      printf '❌ antigravity: egm missing (agy plugin install https://github.com/google/elephant-goldfish-model)\n'
+      rc=1
+    fi
+  else
+    printf '❌ antigravity: CLI not found on PATH (install Antigravity CLI as agy and sign in once)\n'
+    rc=1
+  fi
+  return "$rc"
+}
+
+via="codex"
+dir="$PWD"
+artifact=".dev/docs"
+cmd=""
+args=()
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -C | --cd)
+      [ "$#" -ge 2 ] || die "option $1 requires a directory" 2
+      dir="$2"
+      shift 2
+      ;;
+    --cd=*)
+      dir="${1#*=}"
+      shift
+      ;;
+    --via)
+      [ "$#" -ge 2 ] || die "option $1 requires codex or antigravity" 2
+      via="$2"
+      shift 2
+      ;;
+    --via=*)
+      via="${1#*=}"
+      shift
+      ;;
+    --artifact)
+      [ "$#" -ge 2 ] || die "option $1 requires a directory" 2
+      artifact="$2"
+      shift 2
+      ;;
+    --artifact=*)
+      artifact="${1#*=}"
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      while [ "$#" -gt 0 ]; do
+        if [ -z "$cmd" ]; then cmd="$1"; else args+=("$1"); fi
+        shift
+      done
+      ;;
+    -*)
+      if [ -z "$cmd" ]; then die "unknown option: $1 (try --help)" 2; fi
+      args+=("$1")
+      shift
+      ;;
+    *)
+      if [ -z "$cmd" ]; then cmd="$1"; else args+=("$1"); fi
+      shift
+      ;;
+  esac
+done
+
+[ -n "$cmd" ] || {
+  usage >&2
+  exit 2
+}
+
+if [ "$cmd" = "check" ]; then
+  status=0
+  check_plugins || status=$?
+  exit "$status"
+fi
+
+case "$cmd" in
+  brainstorm | draft | review | resolve | bootstrap | lite | drift-report) ;;
+  *) die "unknown command: $cmd (try --help)" 2 ;;
+esac
+
+case "$via" in
+  codex | antigravity) ;;
+  *) die "invalid --via '$via' (codex|antigravity)" 2 ;;
+esac
+
+[ -n "$artifact" ] || die "--artifact requires a non-empty directory" 2
+[ -d "$dir" ] || die "directory not found: $dir" 2
+
+base="$(cd -- "$dir" && pwd -P)" || die "cannot resolve directory: $dir" 2
+artifact_abs="$(abspath "$base" "$artifact")"
+
+skill="egm-$cmd"
+prompt="Use the \`$skill\` skill. EGM artifact directory: $artifact_abs."
+if [ "${#args[@]}" -gt 0 ]; then
+  extra=""
+  for arg in "${args[@]}"; do
+    [ -z "$extra" ] || extra+=" "
+    extra+="$arg"
+  done
+  prompt+=" $extra."
+fi
+prompt+=" Return the reports' paths and a short summary."
+
+if [ "$via" = "codex" ]; then
+  bridge="oc-codex"
+  bridge_args=(-C "$dir")
+else
+  bridge="oc-antigravity"
+  bridge_args=(--yes -C "$dir")
+fi
+
+if command -v "$bridge" >/dev/null 2>&1; then
+  bridge_cmd="$(command -v "$bridge")"
+elif [ -x "$here/$bridge" ]; then
+  bridge_cmd="$here/$bridge"
+else
+  die "$bridge not found on PATH (install the kit, then rerun ./install.sh)" 127
+fi
+
+printf 'oc-egm: %s via %s in %s\n' "$skill" "$via" "$base" >&2
+exec "$bridge_cmd" "${bridge_args[@]}" "$prompt"
