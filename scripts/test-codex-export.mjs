@@ -144,7 +144,7 @@ fs.mkdirSync(home, { recursive: true })
 const env = { ...process.env, HOME: home, CODEX_HOME: out, OPENAI_API_KEY: "sk-test-dummy" }
 const r1 = run(["--out", out], { env })
 check("export: exit 0", r1.status === 0, r1.stderr)
-check("export: summary printed", /Codex export: 30 agents, \d+ skills, \d+ MCP servers, 2 profiles/.test(r1.stdout), r1.stdout)
+check("export: summary printed", new RegExp("Codex export: " + coreAgents.length + " agents, \\d+ skills, \\d+ MCP servers, 2 profiles").test(r1.stdout), r1.stdout)
 check("export: target exists", exists(out))
 check("export: AGENTS.md generated", exists(path.join(out, "AGENTS.md")))
 check("export: manifest generated", exists(path.join(out, ".oc-export-manifest.json")))
@@ -207,6 +207,7 @@ const ceoToml = toml.ceo ? toml.ceo.instructions : ""
 check("ceo: model routing section", /## Model routing \(Codex\)/.test(ceoToml) && /gpt-6\.2-astra/.test(ceoToml))
 check("ceo: delegation section", /## CEO delegation rules \(Codex\)/.test(ceoToml) && /spawn_agent/.test(ceoToml))
 check("ceo: @mentions adapted to code spans", /`architect`/.test(ceoToml) && !/(^|[^A-Za-z0-9_@])@architect\b/.test(ceoToml))
+check("ceo: an existing `@shell` span stays a single code span", /`shell`/.test(ceoToml) && !/``shell``/.test(ceoToml))
 check("agents: @ts-ignore preserved verbatim", /@ts-ignore/.test(toml.typescript ? toml.typescript.instructions : "") && !/`ts-ignore`/.test(toml.typescript ? toml.typescript.instructions : ""))
 
 // AGENTS.md
@@ -281,6 +282,10 @@ check("conflict: export exits 0", r3.status === 0, r3.stderr)
 check("conflict: foreign target preserved", read(path.join(conflictOut, "AGENTS.md")) === "LOCAL AGENTS CONTENT\n")
 check("conflict: generated version written to .new", exists(path.join(conflictOut, "AGENTS.md.new")) && read(path.join(conflictOut, "AGENTS.md.new")) === agentsMd)
 check("conflict: summary counts the .new", /1 preserved as \.new/.test(r3.stdout), r3.stdout)
+// A second run must not claim the file through the manifest and overwrite it.
+const r3b = run(["--out", conflictOut], { env })
+check("conflict: second run keeps the foreign target", r3b.status === 0 && read(path.join(conflictOut, "AGENTS.md")) === "LOCAL AGENTS CONTENT\n", r3b.stderr)
+check("conflict: second run keeps the .new and does not claim the target", exists(path.join(conflictOut, "AGENTS.md.new")) && read(path.join(conflictOut, "AGENTS.md.new")) === agentsMd && !read(path.join(conflictOut, ".oc-export-manifest.json")).includes("AGENTS.md"), r3b.stdout)
 const r4 = run(["--out", conflictOut, "--force"], { env })
 check("force: exit 0", r4.status === 0, r4.stderr)
 check("force: target overwritten with the generated version", read(path.join(conflictOut, "AGENTS.md")) === agentsMd)
@@ -291,7 +296,7 @@ const dryOut = path.join(tmp, "dry")
 const r5 = run(["--out", dryOut, "--dry-run"], { env })
 check("dry-run: exit 0", r5.status === 0, r5.stderr)
 check("dry-run: writes nothing", !exists(dryOut))
-check("dry-run: prints the plan", /Codex export \(dry run\)/.test(r5.stdout) && /agents: 30, skills: \d+, MCP: \d+/.test(r5.stdout), r5.stdout.slice(0, 300))
+check("dry-run: prints the plan", /Codex export \(dry run\)/.test(r5.stdout) && new RegExp("agents: " + coreAgents.length + ", skills: \\d+, MCP: \\d+").test(r5.stdout), r5.stdout.slice(0, 300))
 check("dry-run: lists an agent TOML and the config merge", /agents\/ceo\.toml/.test(r5.stdout) && /config: .*mcp_servers\./.test(r5.stdout))
 
 // ---------- 5. --mcp-only ----------
@@ -316,6 +321,13 @@ check("global: writes shared ~/.agents/skills", exists(path.join(globalHome, ".a
 check("global: no duplicate skills inside ~/.codex", !exists(path.join(globalHome, ".codex", "skills")))
 check("global: summary points at the shared skills", /shared user-level skills/.test(r7.stdout), r7.stdout)
 check("global: mentions the Codex app sharing config", /Codex app reads the same/.test(r7.stdout), r7.stdout)
+
+// CODEX_HOME is honored when set (Orca and other launchers use a per-account home).
+const customHome = path.join(tmp, "custom-home")
+const customCodex = path.join(customHome, "codex-dir")
+const r7b = run(["--global"], { env: { ...process.env, HOME: customHome, CODEX_HOME: customCodex, OPENAI_API_KEY: "sk-test-dummy" } })
+check("global: honors CODEX_HOME", r7b.status === 0 && exists(path.join(customCodex, "AGENTS.md")) && exists(path.join(customCodex, "agents", "ceo.toml")) && !exists(path.join(customHome, ".codex")), r7b.stderr)
+check("global: skills stay in ~/.agents/skills with CODEX_HOME", exists(path.join(customHome, ".agents", "skills", "tdd", "SKILL.md")), r7b.stderr)
 
 // ---------- 7. Fixture: executable skill, disabled/remote/local MCP, merge/backup ----------
 const fixture = path.join(tmp, "fixture")

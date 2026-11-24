@@ -36,11 +36,11 @@ Options:
 The CLI always runs with --output-format json and the launcher prints .response.
 Without --yes, headless mode denies every tool request: the launcher reports the
 denied action and exits 1 instead of returning an empty answer.
-`--mode plan` is advisory only (not a sandbox): without --yes tools are denied
-(empty response, exit 1); with --yes it can still read/write. Plan is unstable and
-returns a plan file link (file://.../brain/<id>/*.md), not the plan text. It is
-therefore not a read-only mode: for analysis use targeted allow-rules or accept
-the refusals.
+--mode plan is advisory only (not a sandbox): without --yes tools are denied
+(empty response, exit 1); with --yes it can still read/write. The plan is
+unstable and is returned as a plan file link (file://.../brain/<id>/*.md), not
+the plan text. It is not a read-only mode: for analysis use targeted allow-rules
+or accept the refusals.
 `--mode auto` is refused by this account: the CLI prints a warning and continues in
 the default mode, so pass --yes instead when the task must execute or edit.
 

@@ -62,9 +62,9 @@ const HELP = [
   "  oc-export-codex [--out DIR] [--project DIR] [--global] [--force] [--dry-run] [--mcp-only]",
   "",
   "Options:",
-  "  --out DIR       target directory (default with --global: ~/.codex)",
+  "  --out DIR       target directory (default with --global: $CODEX_HOME or ~/.codex)",
   "  --project DIR   project export in DIR/.codex",
-  "  --global        user-level export: ~/.codex + ~/.agents/skills",
+  "  --global        user-level export: $CODEX_HOME (or ~/.codex) + ~/.agents/skills",
   "  --force         overwrite files that this exporter did not create (default: keep them, write <file>.new)",
   "  --dry-run       print the plan, write nothing",
   "  --mcp-only      only merge the MCP tables into <out>/config.toml",
@@ -361,11 +361,14 @@ function modelFor(name) {
 
 function adaptText(text, mentions) {
   // Only real agent names become Codex agent references; `@ts-ignore`, `@version`
-  // and similar non-agent mentions survive verbatim.
-  return text.replace(/(^|[^A-Za-z0-9_@])@([a-z][a-z0-9-]+)/g, (match, pre, name) => {
-    if (!mentions.has(name)) return match
-    return pre + "`" + name + "`"
-  })
+  // and similar non-agent mentions survive verbatim. An existing code span keeps
+  // its backticks: `@shell` -> `shell`, never ``shell``.
+  return text
+    .replace(/`@([a-z][a-z0-9-]+)`/g, (match, name) => (mentions.has(name) ? "`" + name + "`" : match))
+    .replace(/(^|[^A-Za-z0-9_@])@([a-z][a-z0-9-]+)/g, (match, pre, name) => {
+      if (!mentions.has(name)) return match
+      return pre + "`" + name + "`"
+    })
 }
 
 function buildAgentBody(agent, mentions) {
@@ -769,7 +772,10 @@ function applyPlan(plan, outDir, manifest, force, dryRun) {
       }
     }
   }
-  return { written, unchanged, preserved }
+  // The manifest may only claim files this run wrote or found already identical.
+  // A target kept as .new is still the user's file: claiming it would overwrite it on the next run.
+  const claimed = plan.filter((entry) => !conflicts.has(path.join(entry.root, entry.rel)))
+  return { written, unchanged, preserved, claimed }
 }
 
 function buildManifest(outDir, plan) {
@@ -799,9 +805,13 @@ function main() {
 
   const layout = locateConfig(args)
   const global = args.global || (!args.out && !args.project)
+  // Respect CODEX_HOME: Orca and other launchers point Codex at a per-account home.
+  const codexHome = process.env.CODEX_HOME && process.env.CODEX_HOME.trim()
+    ? path.resolve(expandHome(process.env.CODEX_HOME))
+    : path.join(homeDir(), ".codex")
   const outDir = args.project
     ? path.join(path.resolve(expandHome(args.project)), ".codex")
-    : path.resolve(expandHome(args.out || path.join(homeDir(), ".codex")))
+    : path.resolve(expandHome(args.out || codexHome))
   const skillsRoot = global ? path.join(homeDir(), ".agents", "skills") : path.join(outDir, "skills")
   const configFile = path.join(outDir, "config.toml")
 
@@ -878,7 +888,7 @@ function main() {
 
   const manifest = loadManifest(outDir)
   const stats = applyPlan(plan, outDir, manifest, args.force, false)
-  writeAtomic(path.join(outDir, MANIFEST), JSON.stringify(buildManifest(outDir, plan), null, 2) + "\n")
+  writeAtomic(path.join(outDir, MANIFEST), JSON.stringify(buildManifest(outDir, stats.claimed), null, 2) + "\n")
 
   if (configChanged) {
     if (backup) fs.copyFileSync(configFile, backup)

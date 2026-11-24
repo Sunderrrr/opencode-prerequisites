@@ -311,8 +311,8 @@ for Antigravity, an empty `.response` is an error (exit 1), never a silent succe
 ### `--json` output is not the answer
 
 For Codex, `--json` is the raw event stream, not the final message: omit it to get the final
-text. For Antigravity, the launcher extracts `.response` when `jq` is installed; without `jq`
-it prints the raw JSON, which is expected. Install `jq` or parse the JSON yourself.
+text. For Antigravity, the launcher extracts `.response` with `jq`, or `python3` when `jq` is
+missing; `--json` prints the raw JSON instead. One of the two parsers is required.
 
 ### Wayland / XWayland
 

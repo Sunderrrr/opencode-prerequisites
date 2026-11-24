@@ -49,9 +49,9 @@ oc-export-codex --mcp-only --out DIR      # merge MCP servers into DIR/config.to
 
 | Option | Meaning |
 |---|---|
-| `--out DIR` | Target config directory (default: `~/.codex`) |
+| `--out DIR` | Target config directory (default: `$CODEX_HOME` or `~/.codex`) |
 | `--project DIR` | Project export, written to `DIR/.codex` |
-| `--global` | User-level export: `~/.codex` plus `~/.agents/skills` |
+| `--global` | User-level export: `$CODEX_HOME` (or `~/.codex`) plus `~/.agents/skills` |
 | `--force` | Overwrite files the exporter does not own instead of writing `<file>.new` |
 | `--dry-run` | Print the plan, write nothing |
 | `--mcp-only` | Only merge MCP tables into `<out>/config.toml` |
@@ -77,8 +77,9 @@ Global export (`--global`, or no target):
 ~/.agents/skills/<name>/       skills, shared with other agent tools
 ```
 
-`<CODEX_HOME>` defaults to `~/.codex`; use `--out "$CODEX_HOME"` when you run Codex with a
-custom home. On Windows the default user home is `%USERPROFILE%\.codex`.
+`<CODEX_HOME>` defaults to `~/.codex`; `--global` honors a `CODEX_HOME` already exported (Orca
+and some launchers set one per account). On Windows the default user home is
+`%USERPROFILE%\.codex`.
 
 Non-global export (`--out DIR` or `--project DIR`) keeps the tree together:
 
@@ -263,7 +264,7 @@ node scripts/test-codex-export.mjs
 node scripts/validate-kit.mjs
 ```
 
-At the time of writing the suite passes 114 checks, including the 30 exported roles, the
+At the time of writing the suite passes 119 checks, including the 30 exported roles, the
 model/effort mapping, byte-identical skills, MCP merge/backup, `.new`/`--force`, `--dry-run`,
 `--mcp-only`, `--global`, the launcher, `codex mcp list --json`, `codex doctor --json` and
 `codex debug prompt-input` with the 30 kit roles. `validate-kit.mjs` reports 30 core agents

@@ -13,10 +13,10 @@ worker: it reads the workspace, reasons and may edit files. You never edit files
 (`edit` is denied); you launch the CLI and return its output.
 
 ## Calling it
-- Analysis, review or planning: `oc-antigravity -C <worktree> --mode plan --yes "<task>"`. `plan`
-  is **advisory only, not a sandbox**: without `--yes` every tool request is denied (the CLI
+- Analysis, review or planning: `oc-antigravity -C <worktree> --mode plan --yes "<task>"`.
+  The plan is advisory only, not a sandbox: without `--yes` every tool request is denied (the CLI
   answers with an empty response and the launcher exits 1); with `--yes` it can still read and
-  write files. The plan itself is non-deterministic and the CLI returns a link to a plan file
+  write files. The plan is also non-deterministic and the CLI returns a link to a plan file
   (`file://.../brain/<id>/*.md`), not the plan text. For a genuinely read-only analysis, rely on
   targeted allow-rules under `permissions.allow`, or accept the refusals: `plan` will not
   guarantee that nothing is written.
@@ -34,7 +34,7 @@ worker: it reads the workspace, reasons and may edit files. You never edit files
 - `-m <model>` only when the brief names a model; otherwise Antigravity uses its own config.
 - `--timeout <duration>` for a task that legitimately needs more than 10 minutes.
 - `--json` only when the caller asks for JSON; the launcher extracts `.response` with `jq`
-  when available, otherwise it prints the raw JSON.
+  (or `python3` when `jq` is missing) and prints the raw JSON only with `--json`.
 - The launcher changes directory itself: Antigravity has **no `--cd`**. `-C` is the bridge's
   option. Antigravity's `-p` is the prompt and swallows everything after it, so every flag
   must come **before** the prompt; the launcher already does this.

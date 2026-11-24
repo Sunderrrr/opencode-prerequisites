@@ -270,6 +270,9 @@ never launched or restarted by the exporter.
 - **MCP merge only adds.** An existing server entry is never updated by a re-export, and a
   server removed from the kit stays in `mcp_config.json`. Use `agy mcp remove` or edit
   the file.
+- **No manifest cleanup.** Unlike the Codex export, no manifest tracks generated files: an
+  agent or skill removed from the kit stays in `~/.gemini/config`. Delete it by hand (or start
+  from a fresh `--out`) when the kit drops a role.
 - **No commands, hooks or plugins.** OpenCode commands (`/codex`, `/verify`, ...), the guard
   plugin, notification hooks and plugin bundles are not exported. Only `AGENTS.md`, agents,
   skills and MCP servers are.
