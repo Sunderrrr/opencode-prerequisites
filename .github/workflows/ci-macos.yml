@@ -71,6 +71,12 @@ jobs:
       - name: "Lite profile (12 agents, MCP, plugins, skills, commands, CEO prose)"
         run: node scripts/test-lite.mjs
 
+      - name: "Codex export (hermetic: TOML agents, skills, profiles, MCP merge, idempotence)"
+        run: node scripts/test-codex-export.mjs
+
+      - name: "Antigravity export (hermetic: Markdown agents, tiers, skills, MCP merge, idempotence)"
+        run: node scripts/test-antigravity-export.mjs
+
       - name: "Offline diagnostic (exit codes 0/1, no network requests)"
         run: node scripts/test-doctor.mjs
 
@@ -90,7 +96,7 @@ jobs:
         run: |
           /bin/bash ./install.sh --no-tools
           test -f "$OPENCODE_CONFIG_DIR/opencode.jsonc"
-          test "$(ls "$OPENCODE_CONFIG_DIR/agents" | wc -l | tr -d ' ')" -eq 28
+          test "$(ls "$OPENCODE_CONFIG_DIR/agents" | wc -l | tr -d ' ')" -eq 30
           test -f "$OPENCODE_CONFIG_DIR/skills/tdd/SKILL.md"
           test ! -e "$OPENCODE_CONFIG_DIR/agents/android.md"
 

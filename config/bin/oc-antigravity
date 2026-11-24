@@ -1,0 +1,256 @@
+#!/usr/bin/env bash
+# oc-antigravity: run Antigravity CLI non-interactively.
+#   oc-antigravity "summarise this repository"
+#   oc-antigravity --yes -C /path/to/project "run the tests and fix the failures"
+#   oc-antigravity -C /path/to/project --mode plan --yes "propose a plan"  (advisory, see below)
+#   oc-antigravity --json "list the TODOs" | jq -r .response
+#   oc-antigravity -h
+# All flags must come before -p: anything after -p is swallowed as the prompt.
+# The CLI always runs with --output-format json; .response is extracted (jq, then python3).
+# A non-empty .denied_actions is an error: the CLI exits 0 with an empty answer in headless mode.
+# Antigravity has no --cd, so the script changes directory itself.
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+# GUI-launched OpenCode Desktop does not inherit the shell PATH (Electron): load the kit PATH.
+# shellcheck disable=SC1091
+for d in "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/libexec" "$HOME/.config/opencode/libexec" "$(cd "${BASH_SOURCE[0]%/*}/../libexec" 2>/dev/null && pwd)"; do [ -r "$d/desktop-env.sh" ] && . "$d/desktop-env.sh" && break; done
+
+usage() {
+  cat <<'EOF'
+Usage: oc-antigravity [-C DIR] [-m MODEL] [--mode MODE] [--yes] [--json] [--timeout DUR] PROMPT...
+
+Run Antigravity CLI in non-interactive print mode.
+
+Options:
+  -C, --cd DIR      working directory (default: $PWD)
+  -m, --model MODEL model to use (default: Antigravity config)
+      --mode MODE   accept-edits | plan (default: accept-edits); auto is not
+                    available for this account (the CLI warns and falls back)
+      --yes         auto-approve every tool request (--dangerously-skip-permissions):
+                    required for a task that must execute or edit in headless mode
+      --json        print the raw JSON (still fails when a tool was denied)
+      --timeout DUR print timeout (default: 10m, 0 waits forever)
+  -h, --help        show this help
+
+The CLI always runs with --output-format json and the launcher prints .response.
+Without --yes, headless mode denies every tool request: the launcher reports the
+denied action and exits 1 instead of returning an empty answer.
+`--mode plan` is advisory only (not a sandbox): without --yes tools are denied
+(empty response, exit 1); with --yes it can still read/write. Plan is unstable and
+returns a plan file link (file://.../brain/<id>/*.md), not the plan text. It is
+therefore not a read-only mode: for analysis use targeted allow-rules or accept
+the refusals.
+`--mode auto` is refused by this account: the CLI prints a warning and continues in
+the default mode, so pass --yes instead when the task must execute or edit.
+
+Examples:
+  oc-antigravity --yes "run the tests and fix the failures"
+  oc-antigravity -C . --mode plan --yes "propose a migration plan, then print it"
+EOF
+}
+
+die() {
+  printf '❌ oc-antigravity: %s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+dir="$PWD"
+model=""
+mode="accept-edits"
+yes=0
+json=0
+timeout="10m"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -C | --cd)
+      [ "$#" -ge 2 ] || die "option $1 requires a directory" 2
+      dir="$2"
+      shift 2
+      ;;
+    --cd=*)
+      dir="${1#*=}"
+      shift
+      ;;
+    -m | --model)
+      [ "$#" -ge 2 ] || die "option $1 requires a model name" 2
+      model="$2"
+      shift 2
+      ;;
+    --model=*)
+      model="${1#*=}"
+      shift
+      ;;
+    --mode)
+      [ "$#" -ge 2 ] || die "option $1 requires a mode" 2
+      mode="$2"
+      shift 2
+      ;;
+    --mode=*)
+      mode="${1#*=}"
+      shift
+      ;;
+    --yes)
+      yes=1
+      shift
+      ;;
+    --json)
+      json=1
+      shift
+      ;;
+    --timeout)
+      [ "$#" -ge 2 ] || die "option $1 requires a duration" 2
+      timeout="$2"
+      shift 2
+      ;;
+    --timeout=*)
+      timeout="${1#*=}"
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      die "unknown option: $1 (try --help)" 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+case "$mode" in
+  accept-edits | auto | plan) ;;
+  *) die "invalid mode '$mode' (accept-edits|auto|plan)" 2 ;;
+esac
+
+[ "$#" -gt 0 ] || die "missing prompt (try --help)" 2
+[ -d "$dir" ] || die "directory not found: $dir" 2
+
+prompt=""
+for arg in "$@"; do
+  [ -z "$prompt" ] || prompt+=" "
+  prompt+="$arg"
+done
+[ -n "$prompt" ] || die "empty prompt" 2
+
+# Prefer `agy`: the Linux desktop app also installs /usr/bin/antigravity and ignores
+# the CLI subcommands (it hangs instead of answering).
+if command -v agy >/dev/null 2>&1; then
+  cli=agy
+elif command -v antigravity >/dev/null 2>&1; then
+  cli=antigravity
+else
+  die "Antigravity CLI not found on PATH (install it, then run 'agy --version')" 127
+fi
+resolved="$(command -v "$cli")"
+real="$(readlink -f "$resolved" 2>/dev/null || printf '%s' "$resolved")"
+case "$real" in
+  /opt/Antigravity/*) die "the antigravity on PATH is the desktop app ($real), not the CLI: install the Antigravity CLI and call agy" 127 ;;
+esac
+"$cli" --version >/dev/null 2>&1 ||
+  die "'$cli --version' does not answer: the binary on PATH is broken" 127
+
+jq=""
+python=""
+if command -v jq >/dev/null 2>&1; then
+  jq="$(command -v jq)"
+elif command -v python3 >/dev/null 2>&1; then
+  python="$(command -v python3)"
+else
+  die "jq or python3 is required to parse the JSON output" 127
+fi
+
+# json_field <name>: print d[name] as a string ("" when null/missing). Reads the JSON on stdin.
+# A missing, null or non-string field prints nothing; invalid JSON exits non-zero.
+json_field() {
+  local name="$1"
+  if [ -n "$jq" ]; then
+    # SC2016 is a false positive: $k is the jq variable bound by --arg k, not a shell expansion.
+    # shellcheck disable=SC2016
+    "$jq" -er --arg k "$name" 'if (.[$k] | type) == "string" then .[$k] else "" end'
+  else
+    "$python" -c 'import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+v = d.get(sys.argv[1])
+print(v if isinstance(v, str) else "")' "$name"
+  fi
+}
+
+# json_denied: print one "action<TAB>display_name" line per denied action (nothing when empty).
+json_denied() {
+  if [ -n "$jq" ]; then
+    "$jq" -r '(.denied_actions // [])[] | [(.action // "action"), (.display_name // "")] | @tsv'
+  else
+    "$python" -c 'import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+for a in d.get("denied_actions") or []:
+    print("%s\t%s" % (a.get("action") or "action", a.get("display_name") or ""))'
+  fi
+}
+
+cli_args=(--output-format json --mode "$mode" --print-timeout "$timeout")
+[ -z "$model" ] || cli_args=(--model "$model" "${cli_args[@]}")
+[ "$yes" -eq 0 ] || cli_args=(--dangerously-skip-permissions "${cli_args[@]}")
+
+run() {
+  cd -- "$dir" || return 1
+  # Every flag, including --dangerously-skip-permissions, comes before -p.
+  "$cli" "${cli_args[@]}" -p "$prompt"
+}
+
+if out="$(run)"; then
+  rc=0
+else
+  rc=$?
+fi
+if [ "$rc" -ne 0 ]; then
+  [ -z "$out" ] || printf '%s\n' "$out" >&2
+  die "antigravity exited with status $rc" "$rc"
+fi
+[ -n "$out" ] || die "antigravity returned no output (exit 0)" 1
+
+denied=""
+if ! denied="$(printf '%s\n' "$out" | json_denied)"; then
+  [ "$json" -eq 0 ] || printf '%s\n' "$out"
+  die "cannot parse the JSON output (expected .denied_actions)" 1
+fi
+if [ -n "$denied" ]; then
+  # --json: the caller asked for the raw document, so print it before failing.
+  [ "$json" -eq 0 ] || printf '%s\n' "$out"
+  while IFS= read -r line; do
+    action="${line%%$'\t'*}"
+    display="${line#*$'\t'}"
+    if [ -n "$display" ] && [ "$display" != "$line" ]; then
+      printf '❌ oc-antigravity: denied action: %s (%s)\n' "$action" "$display" >&2
+    else
+      printf '❌ oc-antigravity: denied action: %s\n' "$action" >&2
+    fi
+  done <<<"$denied"
+  printf '   Add an allow-rule under permissions.allow in Antigravity settings.json, or re-run with --yes.\n' >&2
+  exit 1
+fi
+
+if [ "$json" -eq 1 ]; then
+  printf '%s\n' "$out"
+  exit 0
+fi
+
+if ! response="$(printf '%s\n' "$out" | json_field response)"; then
+  printf '%s\n' "$out" >&2
+  die "cannot extract .response from the JSON output" 1
+fi
+[ -n "$response" ] || die "empty .response and no denied_actions" 1
+printf '%s\n' "$response"

@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# oc-codex: run Codex CLI non-interactively, print only the final answer.
+#   oc-codex "summarise this repository"
+#   oc-codex -C /path/to/project -m gpt-5.1 -s read-only "Reply with exactly: OK"
+#   oc-codex --json "list the TODOs"        # codex JSON stream instead of the last message
+#   oc-codex -h
+# Codex noise (hooks, progress) is captured; stderr stays visible.
+# `-a never` is a global option and must come before `exec`; exec itself has no
+# --full-auto and no -a anymore.
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+# GUI-launched OpenCode Desktop does not inherit the shell PATH (Electron): load the kit PATH.
+# shellcheck disable=SC1091
+for d in "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/libexec" "$HOME/.config/opencode/libexec" "$(cd "${BASH_SOURCE[0]%/*}/../libexec" 2>/dev/null && pwd)"; do [ -r "$d/desktop-env.sh" ] && . "$d/desktop-env.sh" && break; done
+
+usage() {
+  cat <<'EOF'
+Usage: oc-codex [-C DIR] [-m MODEL] [-s SANDBOX] [--json] PROMPT...
+
+Run Codex CLI in non-interactive mode and print its final message.
+
+Options:
+  -C, --cd DIR        working directory (default: $PWD)
+  -m, --model MODEL   model to use (default: Codex config)
+  -s, --sandbox MODE  read-only | workspace-write | danger-full-access
+                      (default: workspace-write)
+      --json          pass --json to codex (print the JSON stream)
+  -h, --help          show this help
+
+Examples:
+  oc-codex "explain the build"
+  oc-codex -C ~/src/app -s read-only "Reply with exactly: OK"
+EOF
+}
+
+die() {
+  printf '❌ oc-codex: %s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+dir="$PWD"
+model=""
+sandbox="workspace-write"
+json=0
+json_flag=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -C | --cd)
+      [ "$#" -ge 2 ] || die "option $1 requires a directory" 2
+      dir="$2"
+      shift 2
+      ;;
+    --cd=*)
+      dir="${1#*=}"
+      shift
+      ;;
+    -m | --model)
+      [ "$#" -ge 2 ] || die "option $1 requires a model name" 2
+      model="$2"
+      shift 2
+      ;;
+    --model=*)
+      model="${1#*=}"
+      shift
+      ;;
+    -s | --sandbox)
+      [ "$#" -ge 2 ] || die "option $1 requires a sandbox mode" 2
+      sandbox="$2"
+      shift 2
+      ;;
+    --sandbox=*)
+      sandbox="${1#*=}"
+      shift
+      ;;
+    --json)
+      json=1
+      json_flag="--json"
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      die "unknown option: $1 (try --help)" 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+case "$sandbox" in
+  read-only | workspace-write | danger-full-access) ;;
+  *) die "invalid sandbox mode '$sandbox' (read-only|workspace-write|danger-full-access)" 2 ;;
+esac
+
+[ "$#" -gt 0 ] || die "missing prompt (try --help)" 2
+[ -d "$dir" ] || die "directory not found: $dir" 2
+
+prompt=""
+for arg in "$@"; do
+  [ -z "$prompt" ] || prompt+=" "
+  prompt+="$arg"
+done
+[ -n "$prompt" ] || die "empty prompt" 2
+
+command -v codex >/dev/null 2>&1 ||
+  die "codex not found on PATH (install Codex CLI, e.g. mise use -g npm:@openai/codex)" 127
+
+tmp=""
+trap 'rm -rf -- "${tmp:-}"' EXIT
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/oc-codex.XXXXXX")" || die "cannot create a temporary directory"
+last="$tmp/last-message.md"
+noise="$tmp/stdout.log"
+
+# shellcheck disable=SC2086  # ${model:+...} must word-split into "-m MODEL".
+if codex -a never exec -C "$dir" -s "$sandbox" --skip-git-repo-check ${model:+-m "$model"} $json_flag -o "$last" "$prompt" >"$noise"; then
+  :
+else
+  rc=$?
+  die "codex exited with status $rc" "$rc"
+fi
+
+if [ "$json" -eq 1 ] && [ -s "$noise" ]; then
+  cat -- "$noise"
+elif [ -s "$last" ]; then
+  cat -- "$last"
+  [ "$(tail -c 1 -- "$last")" = "" ] || printf '\n'
+else
+  die "codex produced no final message" 1
+fi

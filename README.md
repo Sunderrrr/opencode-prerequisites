@@ -1,6 +1,6 @@
 # opencode-prerequisites
 
-My starter kit for [OpenCode](https://opencode.ai) with the **OpenCode Go** subscription: a CEO that leads 27 specialist agents (28 in total; 30 with the Android module), skills, commands, MCP servers, composable packs, memory, multi-agent git safety, operational tools and Rust/Android/web project templates. `VERSION` is 1.0.1 (v1.0.0 and v1.0.1 are tagged and signed).
+My starter kit for [OpenCode](https://opencode.ai) with the **OpenCode Go** subscription: a CEO that leads 29 specialist agents (30 in total; 32 with the Android module), skills, commands, MCP servers, composable packs, memory, multi-agent git safety, operational tools and Rust/Android/web project templates. `VERSION` is 1.0.1 (v1.0.0 and v1.0.1 are tagged and signed).
 
 > ⚠️ Agents run in **unrestricted mode** (no permission prompts). Work in a clean, committed git repository. Only the blocks from `config/plugins/guard/` remain.
 
@@ -9,11 +9,11 @@ My starter kit for [OpenCode](https://opencode.ai) with the **OpenCode Go** subs
 ```bash
 git clone https://github.com/Sunderrrr/opencode-prerequisites.git
 cd opencode-prerequisites
-./install.sh                        # full (default): 28 agents, 18 skills, 12 commands, 11 MCP entries (9 active by default; 10 with a kubeconfig or --android; 11 with both)
+./install.sh                        # full (default): 30 agents, 18 skills, 14 commands, 11 MCP entries (9 active by default; 10 with a kubeconfig or --android; 11 with both)
 ./install.sh --profile core         # 12 agents, 9 skills, 7 commands, 7 MCP servers
 ./install.sh --lite                 # alias of --profile lite: 12 agents, context7 + grep_app, no heavy tools
 ./install.sh --no-tools             # config only: nothing is installed (no tools, no MemPalace)
-./install.sh --with design,devops   # add packs (design, devops, languages, data, docs, control, reverse, research, floci, audit, architecture)
+./install.sh --with design,devops   # add packs (design, devops, languages, data, docs, control, reverse, research, external, floci, audit, architecture)
 ./install.sh --without design       # remove packs from the selected profile (core cannot be removed)
 ./install.sh --no-pack              # forget the remembered packs and reset to the full profile
 ./install.sh --version              # print the kit version (VERSION)
@@ -92,6 +92,26 @@ claude --agent ceo                 # start Claude Code with the CEO
 ```
 
 Model routing is explicit on every call: **haiku** for reading and mechanical work (`researcher`, `web-researcher`), **sonnet** for implementation and tests (`rust`, `backend`, `frontend`, `database`, `devops`, `qa`, `debugger`, `docs`), **opus** for architecture, security, review and arbitration (`ceo`, `architect`, `security`, `review`, `verify-app`, `integrator`, `designer`). Fixed variants (`rust-haiku`, `review-opus`, `architect-opus`) pin a tier even when a call omits `model:`. The MCP file is written to the **project root** (`./.mcp.json`), not inside `.claude/`; `--mcp-out` overrides the destination. Full details: [docs/claude-code.md](docs/claude-code.md).
+
+## Codex and Antigravity
+
+The same sources export to the two other harnesses. Both exporters are deterministic, idempotent, merge the MCP servers instead of replacing them and keep a backup before touching an existing config:
+
+```bash
+oc-export-codex --global           # ~/.codex: AGENTS.md, 30 TOML agents, MCP in config.toml, fast/deep profiles
+oc-export-codex --out /tmp/codex   # isolated CODEX_HOME; skills go to <out>/skills
+codex --profile fast               # or deep (astra/high); default is sol/medium
+
+oc-export-antigravity --global     # ~/.gemini/config: AGENTS.md, 30 Markdown agents, skills, mcp_config.json
+oc-export-antigravity --project .  # <project>/.agents for the CLI and the app
+agy --agent ceo                    # main agent; the other 29 are subagents
+```
+
+Codex agents are **TOML** with an exact model and reasoning effort per role (`gpt-6.2-astra`, `gpt-6.2-sol`, `gpt-6.1-terra`, `gpt-6-luna`). Antigravity agents are Markdown but only accept the `inherit`/`flash`/`pro` tier, so the exact model is chosen at launch. Without `--force`, a locally edited generated file is left in place and the new version is written as `<file>.new`.
+
+The kit also ships a thin **`external` pack** (included in full, left out of core/lite): the `@codex` and `@antigravity` bridge subagents, the `/codex` and `/antigravity` commands, and the `oc-codex`/`oc-antigravity` launchers. They hand one task to the installed CLI, return its output verbatim and leave editing to that CLI's own sandbox. The prompts leave the machine for OpenAI or Google.
+
+Details: [docs/codex.md](docs/codex.md), [docs/antigravity.md](docs/antigravity.md), [docs/external-agents.md](docs/external-agents.md).
 
 ## Reverse engineering (REA)
 
@@ -212,6 +232,8 @@ How it is built: the image starts from Ubuntu 24.04, downloads the Android tools
 | `control` | `code-simplifier` | — | — | `--with control` (in full) |
 | `reverse` | `reverse-engineer` | `reverse-engineer-anything` | rea | `--with reverse` (in full) |
 | `research` | `web-researcher` | — | — | `--with research` (in full) |
+| `external` | `codex`, `antigravity` | — | — | `--with external` (in full); adds `/codex`, `/antigravity` |
+| `floci` | — | `floci` | — | `--with floci` (in full) |
 | `audit` | — | `security-audit` | — | `--with audit` (in full); adds `/audit` |
 | `architecture` | — | `improve-codebase-architecture`, `codebase-design`, `grilling`, `domain-modeling` | — | `--with architecture` (in full); adds `/architecture` |
 | `pentest` | `pentest` | — | — | `--pentest` (agent in full; tools only with the flag) |
@@ -222,14 +244,14 @@ The seven **mandatory** MCP servers are context7, grep_app, playwright, obscura,
 | | Full (default) | Core (`--profile core`) | Lite (`--lite`) |
 |---|---|---|---|
 | Packs | all except `android` | `core` | `core` |
-| Agents | 28 (+2 with `--android`) | 12 | 12 |
+| Agents | 30 (+2 with `--android`) | 12 | 12 |
 | Skills | 18 (19 with `--android`) | 9 | 9 |
-| Commands | 12 | 7 | 7 |
+| Commands | 14 | 7 | 7 |
 | MCP | 11 entries, 9 active by default (10 with a kubeconfig or `--android`, 11 with both) | 7 | context7, grep_app |
 | Memory | MemPalace (venv `~/.mempalace/venv`, ≈ 500 MB) | MemPalace | — |
 | Tools | installed | installed | none (`--lite` implies `--no-tools`) |
 
-The core and light profiles are derived from the full one by `scripts/make-lite.mjs`: there are no separate configs to maintain. The light profile additionally removes `plugins/mempalace/` (otherwise OpenCode would load memory even though its config file is gone) and keeps only context7 and grep_app. Commands follow their packs: full has 12, core/lite keep the 7 that belong to core and do not target a removed agent (`/impeccable`, `/simplify` and `/ship` need the `design` or `control` packs; `/audit` needs `audit`; `/architecture` needs `architecture`).
+The core and light profiles are derived from the full one by `scripts/make-lite.mjs`: there are no separate configs to maintain. The light profile additionally removes `plugins/mempalace/` (otherwise OpenCode would load memory even though its config file is gone) and keeps only context7 and grep_app. Commands follow their packs: full has 14, core/lite keep the 7 that belong to core and do not target a removed agent (`/impeccable`, `/simplify` and `/ship` need the `design` or `control` packs; `/audit` needs `audit`; `/architecture` needs `architecture`; `/codex` and `/antigravity` need `external`).
 
 ## Contents
 
@@ -237,7 +259,7 @@ The core and light profiles are derived from the full one by `scripts/make-lite.
 - `config/AGENTS.md`: global rules (≈ 1,150 words, read on every session): CEO, Rust by default, "done = proven", multi-agent git, internet safety, quota.
 - `config/agents/`: `ceo` (default), domain (`architect`, `backend`, `frontend`, `designer`, `database`, `devops`, `security`, `pentest`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`, `reverse-engineer`), languages/tools (`rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`), control (`review`, `code-simplifier`, `verify-app`), git (`integrator`).
 - `config/skills/` (18, 19 with `--android`): `anti-ia-detection` (detects and fixes AI-writing tics in French; the skill is French by design), `code-mode` (short scripts instead of tool-call chains), `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`, `reverse-engineer-anything`, `ui-ux-pro-max`, `impeccable`, `floci` (opt-in pack: local AWS/GCP/Azure/OCI emulators), `security-audit` (audit pack: source-first vulnerability audit), `improve-codebase-architecture`, `codebase-design`, `grilling`, `domain-modeling` (architecture pack: Matt Pocock's architecture audit, see [docs/architecture.md](docs/architecture.md)).
-- `config/commands/` (12): `/audit`, `/architecture`, `/check`, `/plan-first`, `/impeccable`, `/simplify`, `/verify`, `/learn`, `/remember`, `/ship`, `/pr`, `/usage`.
+- `config/commands/` (14): `/audit`, `/architecture`, `/check`, `/plan-first`, `/impeccable`, `/simplify`, `/verify`, `/learn`, `/remember`, `/ship`, `/pr`, `/usage`, `/codex`, `/antigravity`.
 - `config/plugins/`: `guard/` (textual safeguard: blocks reading secret files and common destructive commands; **it is not a barrier** and does not replace a security review) and `notify/` (notification when a session is waiting), in the **OpenCode plugin v2 format** (a folder, `export default Plugin.define({ id, setup })`); tested by `scripts/test-plugins.mjs`. Compaction at 90% is native: `compaction.buffer: "10%"`.
 - `config/bin/oc-models`: per-agent model choice; `config/bin/agent-wt`: one git worktree per agent (`new`, `merge`, `remove`, `list`, `registry`, `integration`, `sync`). `agent-wt list --porcelain` gives the machine state (one line per worktree, 7 tab-separated fields); `agent-wt registry --out .worktrees/REGISTRY.md` maintains the CEO's persistent registry (table rewritten, existing `## History` section kept, legacy `## Historique` also preserved).
 - `config/bin/oc-backup`, `oc-restore` and `oc-usage`: see "Backup, restore and usage" below. `config/bin/oc-new-web <name>`: web project generator.
@@ -280,6 +302,9 @@ The kit is validated by script (`validate-kit.mjs`), by the **official OpenCode 
 - [docs/windows.md](docs/windows.md): native Windows (config-only), `install.ps1`, `.cmd` shims, `doctor.ps1`, and what still needs WSL2.
 - [docs/desktop.md](docs/desktop.md): OpenCode Desktop on Linux (`.deb`/`.rpm`/AppImage), why the GUI `PATH` differs, `--desktop`, Wayland, AppImage/FUSE, troubleshooting.
 - [docs/claude-code.md](docs/claude-code.md): `oc-export-claude`, model routing, fixed variants and the project `.mcp.json`.
+- [docs/codex.md](docs/codex.md): `oc-export-codex`, TOML agents, model/effort mapping, Codex profiles and MCP merge.
+- [docs/antigravity.md](docs/antigravity.md): `oc-export-antigravity`, global vs project layout, model tiers, skills and MCP merge.
+- [docs/external-agents.md](docs/external-agents.md): the `@codex`/`@antigravity` bridges, `oc-codex`/`oc-antigravity`, auth, flags and sandbox rules.
 - [docs/rea.md](docs/rea.md): the reverse pack, REA legal scope, `oc-rea` CLI, MCP, skill, optional native engines and troubleshooting.
 - [docs/security-audit.md](docs/security-audit.md): the `security-audit` skill, guidance vs full audit, six phases, artefacts, sandbox limits, agent mapping and the `/audit` command.
 - [docs/architecture.md](docs/architecture.md): the `architecture` pack (Matt Pocock's four skills), the `/architecture` command, the temp HTML report, CDN/CSP and headless limits, license and SHA.

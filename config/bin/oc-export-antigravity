@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# oc-export-antigravity: export the kit to Antigravity CLI / app format.
+#   oc-export-antigravity --global             ~/.gemini/config
+#   oc-export-antigravity --project .          <project>/.agents
+#   oc-export-antigravity --out /tmp/config    custom config directory
+# See "oc-export-antigravity --help" and docs/antigravity.md.
+# Bash 3.2 compatible: no arrays, no mapfile.
+set -Eeuo pipefail
+
+here="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+config="${OPENCODE_CONFIG_DIR:-${HOME:-}/.config/opencode}"
+
+if ! command -v node >/dev/null 2>&1; then
+  printf 'oc-export-antigravity: node not found in PATH\n' >&2
+  exit 127
+fi
+
+# Repository checkout: <repo>/config/bin -> <repo>/scripts/export-antigravity.mjs.
+# Installed kit: install.sh copies the exporter to <config>/libexec/export-antigravity.mjs.
+for candidate in \
+  "$here/../../scripts/export-antigravity.mjs" \
+  "$config/libexec/export-antigravity.mjs" \
+  "$here/../libexec/export-antigravity.mjs"; do
+  if [ -f "$candidate" ]; then
+    exec node "$candidate" "$@"
+  fi
+done
+
+printf 'oc-export-antigravity: exporter not found (looked in %s, %s, %s)\n' \
+  "$here/../../scripts/export-antigravity.mjs" \
+  "$config/libexec/export-antigravity.mjs" \
+  "$here/../libexec/export-antigravity.mjs" >&2
+exit 127

@@ -542,26 +542,26 @@ check("idempotence: a second core+design+devops run is byte-identical (treeDiges
   rCDDAgain.status === 0 && treeDigest(pCDD.cfg) === cddDigest,
   `before ${cddDigest.slice(0, 12)} after ${treeDigest(pCDD.cfg).slice(0, 12)}`)
 
-// full --without design: 27 agents, no designer, pentest kept.
+// full --without design: 29 agents, no designer, pentest kept.
 const pFull = packEnv("pack-full")
 const rFullMinus = runP(pFull, ["--profile", "full", "--without", "design"])
 const fullMinusAgents = agentsP(pFull.cfg)
-check("full --without design: 27 agents, no designer, pentest kept",
-  rFullMinus.status === 0 && fullMinusAgents.length === 27 && !fullMinusAgents.includes("designer") && fullMinusAgents.includes("pentest"),
+check("full --without design: 29 agents, no designer, pentest kept",
+  rFullMinus.status === 0 && fullMinusAgents.length === 29 && !fullMinusAgents.includes("designer") && fullMinusAgents.includes("pentest"),
   `code ${rFullMinus.status} | ${fullMinusAgents.length} agents | ${rFullMinus.stderr}`)
-check("full --without design: 16 skills, 11 commands, marker excludes design and keeps audit+architecture",
-  skillsP(pFull.cfg).length === 16 && commandsP(pFull.cfg).length === 11
-  && profileP(pFull.cfg) === "profile=full\npacks=core,devops,floci,languages,data,docs,control,reverse,research,audit,architecture,pentest\n",
+check("full --without design: 16 skills, 13 commands, marker excludes design and keeps external+audit+architecture",
+  skillsP(pFull.cfg).length === 16 && commandsP(pFull.cfg).length === 13
+  && profileP(pFull.cfg) === "profile=full\npacks=core,devops,floci,languages,data,docs,control,reverse,research,external,audit,architecture,pentest\n",
   `${skillsP(pFull.cfg).length} skills, ${commandsP(pFull.cfg).length} commands | ${profileP(pFull.cfg)}`)
 
 // Remembered full-minus-design, then --no-pack resets to full.
 const rFullRemember = runP(pFull)
-check("remembered choice: full --without design is replayed (27 agents)",
-  rFullRemember.status === 0 && agentsP(pFull.cfg).length === 27 && /Profile remembered: full/.test(rFullRemember.stdout))
+check("remembered choice: full --without design is replayed (29 agents)",
+  rFullRemember.status === 0 && agentsP(pFull.cfg).length === 29 && /Profile remembered: full/.test(rFullRemember.stdout))
 const rNoPack = runP(pFull, ["--no-pack"])
-check("--no-pack: resets to the full profile (28 agents, 18 skills, 12 commands, designer back)",
-  rNoPack.status === 0 && agentsP(pFull.cfg).length === 28 && agentsP(pFull.cfg).includes("designer")
-  && skillsP(pFull.cfg).length === 18 && commandsP(pFull.cfg).length === 12
+check("--no-pack: resets to the full profile (30 agents, 18 skills, 14 commands, designer back)",
+  rNoPack.status === 0 && agentsP(pFull.cfg).length === 30 && agentsP(pFull.cfg).includes("designer")
+  && skillsP(pFull.cfg).length === 18 && commandsP(pFull.cfg).length === 14
   && profileP(pFull.cfg).startsWith("profile=full\npacks=core,design,"), rNoPack.stdout + rNoPack.stderr)
 
 // --lite: 12 agents, context7 + grep_app only, no tools.

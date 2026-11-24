@@ -101,7 +101,7 @@ check("table: every listed agent/skill/command/mcp exists in the kit", missingRo
   missingRows.map((r) => `line ${r.line}: ${r.kind} ${r.item}`).join("; "))
 
 // ---------- 1. complete fake configuration ----------
-const ALL_AGENTS = [...configAgents, "android", "mobile-tester"] // 28 kit agents + the 2 Android ones
+const ALL_AGENTS = [...configAgents, "android", "mobile-tester"] // 30 kit agents + the 2 Android ones
 const FIXTURE_SKILLS = [...new Set(rows.filter((r) => r.kind === "skill").map((r) => r.item))]
 const fixtureSkills = FIXTURE_SKILLS.length ? FIXTURE_SKILLS : configSkills
 const CEO = `---

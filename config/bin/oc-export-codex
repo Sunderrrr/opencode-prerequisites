@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# oc-export-codex: export the kit to Codex CLI / Codex app format.
+#   oc-export-codex --global            ~/.codex + ~/.agents/skills
+#   oc-export-codex --out /tmp/codex    custom CODEX_HOME
+#   oc-export-codex --project .         <project>/.codex
+# See "oc-export-codex --help" and docs/codex.md.
+set -euo pipefail
+
+here="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+config="${OPENCODE_CONFIG_DIR:-${HOME:-}/.config/opencode}"
+
+if ! command -v node >/dev/null 2>&1; then
+  printf 'oc-export-codex: node not found in PATH\n' >&2
+  exit 127
+fi
+
+# Repository checkout: <repo>/config/bin -> <repo>/scripts/export-codex.mjs.
+# Installed kit: install.sh copies the exporter to <config>/libexec/export-codex.mjs.
+for candidate in \
+  "$here/../../scripts/export-codex.mjs" \
+  "$config/libexec/export-codex.mjs" \
+  "$here/../libexec/export-codex.mjs"; do
+  if [ -f "$candidate" ]; then
+    exec node "$candidate" "$@"
+  fi
+done
+
+printf 'oc-export-codex: exporter not found (looked in %s, %s, %s)\n' \
+  "$here/../../scripts/export-codex.mjs" \
+  "$config/libexec/export-codex.mjs" \
+  "$here/../libexec/export-codex.mjs" >&2
+exit 127

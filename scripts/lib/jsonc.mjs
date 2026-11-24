@@ -24,6 +24,21 @@ export function parseJsonc(text) {
 
 // Minimal YAML frontmatter: top-level "key: value" pairs.
 // Accepts LF and CRLF (a Windows checkout may convert the Markdown files).
+// Quoted scalars are unquoted: YAML requires quotes when a plain scalar contains
+// ": " (for example a description with a colon), so callers must see the text value.
+function scalar(value) {
+  const v = value.trim()
+  if (v.length >= 2 && v.startsWith('"') && v.endsWith('"')) {
+    try {
+      return JSON.parse(v)
+    } catch {
+      return v.slice(1, -1)
+    }
+  }
+  if (v.length >= 2 && v.startsWith("'") && v.endsWith("'")) return v.slice(1, -1).replace(/''/g, "'")
+  return v
+}
+
 export function frontmatter(md) {
   const text = md.replace(/\r\n/g, "\n")
   const m = text.match(/^---\n([\s\S]*?)\n---\n/)
@@ -31,7 +46,7 @@ export function frontmatter(md) {
   const fm = {}
   for (const line of m[1].split("\n")) {
     const k = line.match(/^([A-Za-z_][\w-]*):\s*(.*)$/)
-    if (k) fm[k[1]] = k[2].trim()
+    if (k) fm[k[1]] = scalar(k[2])
   }
   return fm
 }
