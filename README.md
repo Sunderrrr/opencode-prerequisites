@@ -98,11 +98,11 @@ Model routing is explicit on every call: **haiku** for reading and mechanical wo
 The same sources export to the two other harnesses. Both exporters are deterministic, idempotent, merge the MCP servers instead of replacing them and keep a backup before touching an existing config:
 
 ```bash
-oc-export-codex --global           # ~/.codex: AGENTS.md, 30 TOML agents, MCP in config.toml, fast/deep profiles
+oc-export-codex --global           # ~/.codex: AGENTS.md, 30 TOML agents (32 with Android), MCP in config.toml, fast/deep profiles
 oc-export-codex --out /tmp/codex   # isolated CODEX_HOME; skills go to <out>/skills
 codex --profile fast               # or deep (astra/high); default is sol/medium
 
-oc-export-antigravity --global     # ~/.gemini/config: AGENTS.md, 30 Markdown agents, skills, mcp_config.json
+oc-export-antigravity --global     # ~/.gemini/config: AGENTS.md, 30 Markdown agents (32 with --android), skills, mcp_config.json
 oc-export-antigravity --project .  # <project>/.agents for the CLI and the app
 agy --agent ceo                    # main agent; the other 29 are subagents
 ```

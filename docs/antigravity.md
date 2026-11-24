@@ -273,6 +273,10 @@ never launched or restarted by the exporter.
 - **No manifest cleanup.** Unlike the Codex export, no manifest tracks generated files: an
   agent or skill removed from the kit stays in `~/.gemini/config`. Delete it by hand (or start
   from a fresh `--out`) when the kit drops a role.
+- **Android comes from the source config.** A repository checkout exports 30 agents and 18
+  skills; `--android` adds the addon (32/19). An installed kit that already includes the
+  Android module has those files in its `agents/` and `skills/`, so they are exported even
+  without the flag.
 - **No commands, hooks or plugins.** OpenCode commands (`/codex`, `/verify`, ...), the guard
   plugin, notification hooks and plugin bundles are not exported. Only `AGENTS.md`, agents,
   skills and MCP servers are.

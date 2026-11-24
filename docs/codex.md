@@ -3,7 +3,8 @@
 `oc-export-codex` converts the kit into the layout read by the Codex CLI and the Codex app:
 global instructions, one TOML agent per role, skills, MCP servers and two model profiles. The
 export is generated, deterministic and idempotent: re-exporting unchanged sources produces the
-same bytes. A full export writes 30 agents, 18 skills, 11 MCP servers and 2 profiles.
+same bytes. A full export writes 30 agents, 18 skills, 11 MCP servers and 2 profiles (32
+agents and 19 skills from an installed config that includes the Android module).
 
 The exporter never logs in to Codex, starts a session or edits a kit source. Authentication
 stays in the Codex home (`codex login`), or in the environment when an API key is used.
@@ -198,9 +199,10 @@ The Codex CLI and the Codex app share the same personal configuration root:
 | Profiles | `~/.codex/fast.config.toml`, `~/.codex/deep.config.toml` | `codex --profile fast\|deep` |
 | Skills | `~/.agents/skills/<name>/SKILL.md` | Shared user-level skill folder |
 
-The app is published for macOS, Windows and Linux and reads the same `~/.codex` tree
-(`%USERPROFILE%\.codex` on Windows). This export was validated with the Linux CLI; the app UI
-and the Windows path are not exercised by the exporter test suite.
+The app is published for macOS and Windows and reads the same `~/.codex` tree
+(`%USERPROFILE%\.codex` on Windows). On Linux the CLI is the supported surface; the ChatGPT
+desktop app is a separate product and is not driven here. This export was validated with the
+Linux CLI; the app UI and the Windows path are not exercised by the exporter test suite.
 
 Typical session:
 
@@ -243,10 +245,13 @@ doctor reports the config and auth source. The exporter does not store an API ke
 - **MCP merge only adds.** An existing server entry is never updated by a re-export and a
   server removed from the kit stays in `config.toml`. Edit the table by hand if the kit changes
   a command or URL.
-- **No commands, hooks, plugins or Android addon.** Only `AGENTS.md`, agents, skills, MCP
-  servers and the two profiles are exported. OpenCode commands (`/codex`, `/verify`, ...), the
-  guard plugin and `addons/android` (`android`, `mobile-tester`, `android-dev`) are not part of
-  a Codex export.
+- **No commands, hooks or plugins.** Only `AGENTS.md`, agents, skills, MCP servers and the two
+  profiles are exported. OpenCode commands (`/codex`, `/verify`, ...), the guard plugin and
+  its notification hooks are not part of a Codex export.
+- **Android depends on the source config.** A repository checkout exports the 30 core agents.
+  Exporting from an installed config that includes `--android` also writes `android` and
+  `mobile-tester` (32 agents, 19 skills); those roles need the `oc-android` launcher and Podman,
+  and the `mobile` MCP is not exported by Codex.
 - **Skills are copied verbatim.** OpenCode-specific tool names or `@agent` mentions inside a
   skill body are not adapted; agent bodies are adapted (real agent mentions become code spans),
   skills are not. Review a skill before relying on it under Codex.
