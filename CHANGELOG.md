@@ -1,8 +1,8 @@
 # Changelog
 
-Format [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning [SemVer](https://semver.org/). Version 1.0.1 (`VERSION`); v1.0.0 is tagged and signed, v1.0.1 is tagged and signed (89a2619), 17 commits behind HEAD. Entries describe `main`.
+Format [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning [SemVer](https://semver.org/). Version 1.1.0 (`VERSION`); v1.0.0, v1.0.1 and v1.1.0 are tagged and signed. Entries describe `main`.
 
-## [Unreleased] - 2026-11-24
+## [1.1.0] - 2026-11-25
 
 ### Added
 

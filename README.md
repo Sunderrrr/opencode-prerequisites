@@ -1,6 +1,6 @@
 # opencode-prerequisites
 
-My starter kit for [OpenCode](https://opencode.ai) with the **OpenCode Go** subscription: a CEO that leads 29 specialist agents (30 in total; 32 with the Android module), skills, commands, MCP servers, composable packs, memory, multi-agent git safety, operational tools and Rust/Android/web project templates. `VERSION` is 1.0.1 (v1.0.0 and v1.0.1 are tagged and signed).
+My starter kit for [OpenCode](https://opencode.ai) with the **OpenCode Go** subscription: a CEO that leads 31 specialist agents (32 in total; 34 with the Android module), skills, commands, MCP servers, composable packs, memory, multi-agent git safety, operational tools and Rust/Android/web project templates. `VERSION` is 1.1.0 (v1.0.0, v1.0.1 and v1.1.0 are tagged and signed).
 
 > ⚠️ Agents run in **unrestricted mode** (no permission prompts). Work in a clean, committed git repository. Only the blocks from `config/plugins/guard/` remain.
 
@@ -9,7 +9,7 @@ My starter kit for [OpenCode](https://opencode.ai) with the **OpenCode Go** subs
 ```bash
 git clone https://github.com/Sunderrrr/opencode-prerequisites.git
 cd opencode-prerequisites
-./install.sh                        # full (default): 30 agents, 18 skills, 14 commands, 11 MCP entries (9 active by default; 10 with a kubeconfig or --android; 11 with both)
+./install.sh                        # full (default): 32 agents, 18 skills, 16 commands, 11 MCP entries (9 active by default; 10 with a kubeconfig or --android; 11 with both)
 ./install.sh --profile core         # 12 agents, 9 skills, 7 commands, 7 MCP servers
 ./install.sh --lite                 # alias of --profile lite: 12 agents, context7 + grep_app, no heavy tools
 ./install.sh --no-tools             # config only: nothing is installed (no tools, no MemPalace)
@@ -98,18 +98,18 @@ Model routing is explicit on every call: **haiku** for reading and mechanical wo
 The same sources export to the two other harnesses. Both exporters are deterministic, idempotent, merge the MCP servers instead of replacing them and keep a backup before touching an existing config:
 
 ```bash
-oc-export-codex --global           # ~/.codex: AGENTS.md, 30 TOML agents (32 with Android), MCP in config.toml, fast/deep profiles
+oc-export-codex --global           # ~/.codex: AGENTS.md, 32 TOML agents (34 with Android), MCP in config.toml, fast/deep profiles
 oc-export-codex --out /tmp/codex   # isolated CODEX_HOME; skills go to <out>/skills
 codex --profile fast               # or deep (astra/high); default is sol/medium
 
-oc-export-antigravity --global     # ~/.gemini/config: AGENTS.md, 30 Markdown agents (32 with --android), skills, mcp_config.json
+oc-export-antigravity --global     # ~/.gemini/config: AGENTS.md, 32 Markdown agents (34 with --android), skills, mcp_config.json
 oc-export-antigravity --project .  # <project>/.agents for the CLI and the app
 agy --agent ceo                    # main agent; the other 29 are subagents
 ```
 
 Codex agents are **TOML** with an exact model and reasoning effort per role (`gpt-6.2-astra`, `gpt-6.2-sol`, `gpt-6.1-terra`, `gpt-6-luna`). Antigravity agents are Markdown but only accept the `inherit`/`flash`/`pro` tier, so the exact model is chosen at launch. Without `--force`, a locally edited generated file is left in place and the new version is written as `<file>.new`.
 
-The kit also ships a thin **`external` pack** (included in full, left out of core/lite): the `@codex` and `@antigravity` bridge subagents, the `/codex` and `/antigravity` commands, and the `oc-codex`/`oc-antigravity` launchers. They hand one task to the installed CLI, return its output verbatim and leave editing to that CLI's own sandbox. The prompts leave the machine for OpenAI or Google.
+The kit also ships a thin **`external` pack** (included in full, left out of core/lite): the `@codex`, `@antigravity` and `@mistral` bridge subagents, the `/codex`, `/antigravity` and `/mistral` commands, and the `oc-codex`/`oc-antigravity`/`oc-mistral` launchers. They hand one task to the installed CLI, return its output verbatim and leave editing to that CLI's own sandbox. The prompts leave the machine for OpenAI, Google or Mistral AI. `@mistral` drives Mistral Vibe (`vibe`), not the Studio CLI `mistral` (apps, deployment, evals, no chat).
 
 Details: [docs/codex.md](docs/codex.md), [docs/antigravity.md](docs/antigravity.md), [docs/external-agents.md](docs/external-agents.md).
 
@@ -232,7 +232,7 @@ How it is built: the image starts from Ubuntu 24.04, downloads the Android tools
 | `control` | `code-simplifier` | — | — | `--with control` (in full) |
 | `reverse` | `reverse-engineer` | `reverse-engineer-anything` | rea | `--with reverse` (in full) |
 | `research` | `web-researcher` | — | — | `--with research` (in full) |
-| `external` | `codex`, `antigravity` | — | — | `--with external` (in full); adds `/codex`, `/antigravity` |
+| `external` | `codex`, `antigravity`, `egm`, `mistral` | — | — | `--with external` (in full); adds `/codex`, `/antigravity`, `/egm`, `/mistral` |
 | `floci` | — | `floci` | — | `--with floci` (in full) |
 | `audit` | — | `security-audit` | — | `--with audit` (in full); adds `/audit` |
 | `architecture` | — | `improve-codebase-architecture`, `codebase-design`, `grilling`, `domain-modeling` | — | `--with architecture` (in full); adds `/architecture` |
@@ -244,14 +244,14 @@ The seven **mandatory** MCP servers are context7, grep_app, playwright, obscura,
 | | Full (default) | Core (`--profile core`) | Lite (`--lite`) |
 |---|---|---|---|
 | Packs | all except `android` | `core` | `core` |
-| Agents | 30 (+2 with `--android`) | 12 | 12 |
+| Agents | 32 (+2 with `--android`) | 12 | 12 |
 | Skills | 18 (19 with `--android`) | 9 | 9 |
-| Commands | 14 | 7 | 7 |
+| Commands | 16 | 7 | 7 |
 | MCP | 11 entries, 9 active by default (10 with a kubeconfig or `--android`, 11 with both) | 7 | context7, grep_app |
 | Memory | MemPalace (venv `~/.mempalace/venv`, ≈ 500 MB) | MemPalace | — |
 | Tools | installed | installed | none (`--lite` implies `--no-tools`) |
 
-The core and light profiles are derived from the full one by `scripts/make-lite.mjs`: there are no separate configs to maintain. The light profile additionally removes `plugins/mempalace/` (otherwise OpenCode would load memory even though its config file is gone) and keeps only context7 and grep_app. Commands follow their packs: full has 14, core/lite keep the 7 that belong to core and do not target a removed agent (`/impeccable`, `/simplify` and `/ship` need the `design` or `control` packs; `/audit` needs `audit`; `/architecture` needs `architecture`; `/codex` and `/antigravity` need `external`).
+The core and light profiles are derived from the full one by `scripts/make-lite.mjs`: there are no separate configs to maintain. The light profile additionally removes `plugins/mempalace/` (otherwise OpenCode would load memory even though its config file is gone) and keeps only context7 and grep_app. Commands follow their packs: full has 16, core/lite keep the 7 that belong to core and do not target a removed agent (`/impeccable`, `/simplify` and `/ship` need the `design` or `control` packs; `/audit` needs `audit`; `/architecture` needs `architecture`; `/codex`, `/antigravity`, `/egm` and `/mistral` need `external`).
 
 ## Contents
 
@@ -259,7 +259,7 @@ The core and light profiles are derived from the full one by `scripts/make-lite.
 - `config/AGENTS.md`: global rules (≈ 1,150 words, read on every session): CEO, Rust by default, "done = proven", multi-agent git, internet safety, quota.
 - `config/agents/`: `ceo` (default), domain (`architect`, `backend`, `frontend`, `designer`, `database`, `devops`, `security`, `pentest`, `qa`, `docs`, `debugger`, `researcher`, `web-researcher`, `reverse-engineer`), languages/tools (`rust`, `python`, `typescript`, `go`, `shell`, `docker`, `ansible`, `terraform`, `kubernetes`), control (`review`, `code-simplifier`, `verify-app`), git (`integrator`).
 - `config/skills/` (18, 19 with `--android`): `anti-ia-detection` (detects and fixes AI-writing tics in French; the skill is French by design), `code-mode` (short scripts instead of tool-call chains), `git-commit`, `project-onboarding`, `safe-refactor`, `grill-me`, `tdd`, `handoff`, `web-research`, `reverse-engineer-anything`, `ui-ux-pro-max`, `impeccable`, `floci` (opt-in pack: local AWS/GCP/Azure/OCI emulators), `security-audit` (audit pack: source-first vulnerability audit), `improve-codebase-architecture`, `codebase-design`, `grilling`, `domain-modeling` (architecture pack: Matt Pocock's architecture audit, see [docs/architecture.md](docs/architecture.md)).
-- `config/commands/` (14): `/audit`, `/architecture`, `/check`, `/plan-first`, `/impeccable`, `/simplify`, `/verify`, `/learn`, `/remember`, `/ship`, `/pr`, `/usage`, `/codex`, `/antigravity`.
+- `config/commands/` (16): `/audit`, `/architecture`, `/check`, `/plan-first`, `/impeccable`, `/simplify`, `/verify`, `/learn`, `/remember`, `/ship`, `/pr`, `/usage`, `/codex`, `/antigravity`, `/egm`, `/mistral`.
 - `config/plugins/`: `guard/` (textual safeguard: blocks reading secret files and common destructive commands; **it is not a barrier** and does not replace a security review) and `notify/` (notification when a session is waiting), in the **OpenCode plugin v2 format** (a folder, `export default Plugin.define({ id, setup })`); tested by `scripts/test-plugins.mjs`. Compaction at 90% is native: `compaction.buffer: "10%"`.
 - `config/bin/oc-models`: per-agent model choice; `config/bin/agent-wt`: one git worktree per agent (`new`, `merge`, `remove`, `list`, `registry`, `integration`, `sync`). `agent-wt list --porcelain` gives the machine state (one line per worktree, 7 tab-separated fields); `agent-wt registry --out .worktrees/REGISTRY.md` maintains the CEO's persistent registry (table rewritten, existing `## History` section kept, legacy `## Historique` also preserved).
 - `config/bin/oc-backup`, `oc-restore` and `oc-usage`: see "Backup, restore and usage" below. `config/bin/oc-new-web <name>`: web project generator.
@@ -272,7 +272,7 @@ The core and light profiles are derived from the full one by `scripts/make-lite.
 - `templates/android-project/` + `oc-new-android <name>`: Android Kotlin + Jetpack Compose project (`com.example.<name>`, Gradle wrapper, `git init`), ready for `oc-android gradle assembleDebug` (`--android` module required).
 - `templates/web-project/` + `oc-new-web <name>`: Vite + React + TypeScript + Tailwind CSS v4 project with design tokens, light/dark theme, accessible demo page, Playwright smoke tests, `AGENTS.md` and `git init`.
 - `profiles/packs.tsv`: pack table (agent/skill/MCP per pack), the single source of truth for `--profile`, `--with` and `--without`.
-- `VERSION` (1.0.1) and `./install.sh --version`; v1.0.0 and v1.0.1 are tagged and signed.
+- `VERSION` (1.1.0) and `./install.sh --version`; v1.0.0, v1.0.1 and v1.1.0 are tagged and signed.
 - `.github/renovate.json`: Renovate custom managers for the pins in `install.sh`, the launchers, `opencode.jsonc`, the workflows, the Android `Containerfile` and the GitHub Actions tags.
 - `scripts/validate-kit.mjs`: validation (used by the installer and CI); `.github/workflows/ci.yml`: validation, dry-run installation, ShellCheck, Rust template.
 
@@ -310,7 +310,7 @@ The kit is validated by script (`validate-kit.mjs`), by the **official OpenCode 
 - [docs/architecture.md](docs/architecture.md): the `architecture` pack (Matt Pocock's four skills), the `/architecture` command, the temp HTML report, CDN/CSP and headless limits, license and SHA.
 - [docs/code-mode.md](docs/code-mode.md): the Code Mode pattern in OpenCode and Claude Code, when a script beats tool calls, sandbox and secret rules.
 - [ROADMAP.md](ROADMAP.md): shipped and verified, open work, out of scope.
-- [CHANGELOG.md](CHANGELOG.md): what changes on `main` (Keep a Changelog, SemVer, v1.0.0 and v1.0.1 tagged and signed).
+- [CHANGELOG.md](CHANGELOG.md): what changes on `main` (Keep a Changelog, SemVer, v1.0.0, v1.0.1 and v1.1.0 tagged and signed).
 - [SECURITY.md](SECURITY.md): reporting a vulnerability through a private advisory, security scope.
 - [CONTRIBUTING.md](CONTRIBUTING.md): prerequisites, local validation and proposing a fix.
 
