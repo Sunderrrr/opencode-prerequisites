@@ -3,7 +3,7 @@
 `oc-export-codex` converts the kit into the layout read by the Codex CLI and the Codex app:
 global instructions, one TOML agent per role, skills, MCP servers and two model profiles. The
 export is generated, deterministic and idempotent: re-exporting unchanged sources produces the
-same bytes. A full export writes 30 agents, 18 skills, 11 MCP servers and 2 profiles (32
+same bytes. A full export writes 32 agents, 18 skills, 11 MCP servers and 2 profiles (34
 agents and 19 skills from an installed config that includes the Android module).
 
 The exporter never logs in to Codex, starts a session or edits a kit source. Authentication
@@ -248,9 +248,9 @@ doctor reports the config and auth source. The exporter does not store an API ke
 - **No commands, hooks or plugins.** Only `AGENTS.md`, agents, skills, MCP servers and the two
   profiles are exported. OpenCode commands (`/codex`, `/verify`, ...), the guard plugin and
   its notification hooks are not part of a Codex export.
-- **Android depends on the source config.** A repository checkout exports the 30 core agents.
+- **Android depends on the source config.** A repository checkout exports the 32 core agents.
   Exporting from an installed config that includes `--android` also writes `android` and
-  `mobile-tester` (32 agents, 19 skills); those roles need the `oc-android` launcher and Podman,
+  `mobile-tester` (34 agents, 19 skills); those roles need the `oc-android` launcher and Podman,
   and the `mobile` MCP is not exported by Codex.
 - **Skills are copied verbatim.** OpenCode-specific tool names or `@agent` mentions inside a
   skill body are not adapted; agent bodies are adapted (real agent mentions become code spans),
@@ -272,8 +272,8 @@ node scripts/validate-kit.mjs
 At the time of writing the suite passes 119 checks, including the 30 exported roles, the
 model/effort mapping, byte-identical skills, MCP merge/backup, `.new`/`--force`, `--dry-run`,
 `--mcp-only`, `--global`, the launcher, `codex mcp list --json`, `codex doctor --json` and
-`codex debug prompt-input` with the 30 kit roles. `validate-kit.mjs` reports 30 core agents
-(32 with Android), 18 skills and the kit's MCP servers.
+`codex debug prompt-input` with the 32 kit roles. `validate-kit.mjs` reports 32 core agents
+(34 with Android), 18 skills and the kit's MCP servers.
 
 When the launcher changes, also run:
 

@@ -85,6 +85,8 @@ jobs:
         run: node scripts/test-antigravity-export.mjs
       - name: "EGM launcher (help, prompt construction, artifact paths, bridge selection, plugin check)"
         run: node scripts/test-egm.mjs
+      - name: "Mistral Vibe launcher (help, arguments, approval policy, output format, exit codes)"
+        run: node scripts/test-mistral.mjs
       - name: Android Containerfile (hadolint, errors only)
         run: docker run --rm -i docker.io/hadolint/hadolint:v2.15.1 hadolint --failure-threshold error - < addons/android/libexec/oc-android/Containerfile
       - name: Installation with the Android module, remembered then removed

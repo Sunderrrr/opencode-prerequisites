@@ -54,6 +54,61 @@ The other commands are on-demand: **`bootstrap`** documents an existing codebase
 **`lite`** fast-tracks a small iteration, bug fix or refactor, and **`drift-report`**
 compares checked-in documents with the current code.
 
+## Review gates
+
+EGM is wired into the CEO as gates: a document is reviewed **before** implementation at the
+three moments below. The CEO (or the delegating agent) names the gate that applies, and says
+why when one is skipped.
+
+| Moment | Which skill | Exit criterion |
+|---|---|---|
+| **Project start**, after the `@architect` plan | `bootstrap` for an existing codebase; `brainstorm` → `draft` → `review` for a new project | Findings handled or explicitly waived before any implementation |
+| **New brick**: module or component, public API, auth/keys/data, migration, more than 3 files, irreversible choice | `lite` (or `draft` + `review` for a large or risky brick) | One-page note in `.dev/docs/`; missing assumptions, failure modes and a simpler alternative addressed |
+| **Milestone / sprint / step** | `review` on the plan, then `drift-report` (documented design vs code) | Gaps closed or accepted before the next step; outcome included in the report |
+
+Rules:
+
+- **Ask for a critique, not a validation.** The brief must request missing assumptions,
+  failure modes and a simpler alternative. A report that only praises the design has not
+  passed the gate.
+- **Write the document first.** The gate reviews a file: the one-page note in `.dev/docs/`
+  for a brick, the plan or the specification for a project start. `oc-egm` injects the
+  artifact directory; approve specifications into `docs/designs/`.
+- **Handle or waive every finding.** Fix the document or the design, or record an explicit
+  waiver with its reason; `resolve` classifies each finding (`PROPOSE FIX`, `CONTEST`,
+  `ESCALATE`, `DECLINE`). Silence is not a waiver.
+- **No implementation before the gate reports.** An irreversible choice, a public API or a
+  migration waits for the gate; do not start the code "while the review runs".
+- **EGM reviews a document, not the program.** It does not run the code and does not replace
+  tests, `@verify-app` or a security review of auth, personal data, secrets or network code.
+- **No secrets in the document or the prompt**: the text leaves the machine for OpenAI
+  (Codex) or Google (Antigravity).
+- **Cost**: a full `review` spawns 8–15 reviewers; use `lite` for a small brick, and keep the
+  full review for a project start, a migration or a significant design.
+
+Examples:
+
+```text
+# Existing service, new public endpoint: document, then the light gate
+@egm bootstrap src/                         # once, to map the existing code
+@egm lite "POST /webhooks: idempotency, retries, signature"   # after the one-page note
+@egm resolve                                # classify the findings, then implement
+
+# New project: the full chain before the first line of code
+@egm brainstorm "Local-first issue tracker"
+@egm draft
+@egm review
+
+# Milestone end: plan review, then check the documents against the code
+@egm review docs/designs/webhooks.md
+@egm drift-report
+```
+
+A gate is **not** warranted for a typo, a comment or formatting change, a dependency bump
+with no API change, a one-file local fix, a reversible change or a throwaway experiment. An
+emergency hotfix goes out first; review the cause afterwards if it is structural. Skipping a
+gate is a decision to state, not to hide.
+
 ## Installation
 
 Install the whole plugin in the host that will run the review: copying `skills/` alone
@@ -92,7 +147,9 @@ oc-egm check
 ```
 
 `check` only proves that the plugins are installed. It does not run a review and does not
-prove reviewer isolation.
+prove reviewer isolation. It reads the local `egm` marketplace only (`codex plugin list -m egm`),
+so it does not wait on the remote catalog, and each probe is bounded by
+`OC_EGM_PROBE_TIMEOUT` (seconds, default 15).
 
 ## `oc-egm`
 
@@ -203,7 +260,9 @@ never moves an existing project file on its own.
 ## Troubleshooting
 
 - `oc-egm check` reports a missing plugin: rerun the host install command above, then
-  `codex plugin list` / `agy plugin list`. Start a new Codex session after installing.
+  `codex plugin list -m egm` / `agy plugin list`. Start a new Codex session after installing.
+- `oc-egm check` reports a timeout: the CLI did not answer within `OC_EGM_PROBE_TIMEOUT`
+  (default 15 s). Check the network, rerun the probe above, or raise the variable.
 - `agy` is the CLI; `/usr/bin/antigravity` on Linux is the desktop app and hangs on CLI
   subcommands. `oc-antigravity` already refuses the desktop binary.
 - “denied action” from `oc-antigravity`: add an allow-rule in the Antigravity

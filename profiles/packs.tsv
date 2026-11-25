@@ -51,8 +51,12 @@ reverse	mcp	rea
 research	agent	web-researcher
 external	agent	codex
 external	agent	antigravity
+external	agent	egm
+external	agent	mistral
 external	command	codex
 external	command	antigravity
+external	command	egm
+external	command	mistral
 audit	skill	security-audit
 audit	command	audit
 architecture	skill	improve-codebase-architecture

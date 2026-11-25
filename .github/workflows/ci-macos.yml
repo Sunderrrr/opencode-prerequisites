@@ -80,6 +80,9 @@ jobs:
       - name: "EGM launcher (help, prompt construction, artifact paths, bridge selection, plugin check)"
         run: node scripts/test-egm.mjs
 
+      - name: "Mistral Vibe launcher (help, arguments, approval policy, output format, exit codes)"
+        run: node scripts/test-mistral.mjs
+
       - name: "Offline diagnostic (exit codes 0/1, no network requests)"
         run: node scripts/test-doctor.mjs
 

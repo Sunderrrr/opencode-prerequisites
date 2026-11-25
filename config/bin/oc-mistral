@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# oc-mistral: run Mistral Vibe CLI non-interactively, print its answer.
+#   oc-mistral "summarise this repository"
+#   oc-mistral --yes -C /path/to/project "run the tests and fix the failures"
+#   oc-mistral -C /path/to/project -m devstral-medium --max-turns 20 "review src/auth"
+#   oc-mistral --json "list the TODOs"
+#   oc-mistral -h
+# Mistral Vibe (`vibe`) is the official code CLI. `mistral` is the Studio CLI (apps, deploy,
+# evals, no chat): this launcher never calls it.
+# In headless mode without --yes the approval policy is `ask`: every tool request is refused,
+# which is intended for an answer that must not touch the workspace. `--yes` selects
+# `auto-approve` and lets the CLI work inside its workspace.
+# Bash 3.2+ (macOS/Linux). Needs bash and vibe.
+set -Eeuo pipefail
+IFS=$'\n\t'
+shopt -s inherit_errexit 2>/dev/null || true
+
+# GUI-launched OpenCode Desktop does not inherit the shell PATH (Electron): load the kit PATH.
+# shellcheck disable=SC1091
+for d in "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/libexec" "$HOME/.config/opencode/libexec" "$(cd "${BASH_SOURCE[0]%/*}/../libexec" 2>/dev/null && pwd)"; do [ -r "$d/desktop-env.sh" ] && . "$d/desktop-env.sh" && break; done
+
+usage() {
+  cat <<'EOF'
+Usage: oc-mistral [-C DIR] [-m MODEL] [--max-turns N] [--yes] [--json] PROMPT...
+
+Run Mistral Vibe CLI (`vibe`) in headless mode and print its answer.
+
+Options:
+  -C, --cd DIR        working directory (default: $PWD)
+  -m, --model MODEL   model alias to use (default: Vibe config)
+      --max-turns N   maximum number of assistant turns (default: 40)
+      --yes           auto-approve tool calls (approval policy auto-approve);
+                      without it the policy is ask, so tools are refused in
+                      headless mode (intended for a read-only answer)
+      --json          print the raw JSON output instead of text
+  -h, --help          show this help
+
+Examples:
+  oc-mistral "explain the build"
+  oc-mistral --yes -C ~/src/app "run the tests and fix the failures"
+  oc-mistral --json "list the TODO markers in src/"
+
+Mistral Vibe is the code CLI. The Studio CLI (`mistral`) handles apps, deployment and evals
+and has no chat: do not confuse the two. Install: `uv tool install mistral-vibe`.
+Auth: `vibe --setup` or MISTRAL_API_KEY; never put a secret in the prompt.
+EOF
+}
+
+die() {
+  printf '❌ oc-mistral: %s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+dir="$PWD"
+model=""
+max_turns=40
+yes=0
+json=0
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -C | --cd)
+      [ "$#" -ge 2 ] || die "option $1 requires a directory" 2
+      dir="$2"
+      shift 2
+      ;;
+    --cd=*)
+      dir="${1#*=}"
+      shift
+      ;;
+    -m | --model)
+      [ "$#" -ge 2 ] || die "option $1 requires a model name" 2
+      model="$2"
+      shift 2
+      ;;
+    --model=*)
+      model="${1#*=}"
+      shift
+      ;;
+    --max-turns)
+      [ "$#" -ge 2 ] || die "option $1 requires a number" 2
+      max_turns="$2"
+      shift 2
+      ;;
+    --max-turns=*)
+      max_turns="${1#*=}"
+      shift
+      ;;
+    --yes)
+      yes=1
+      shift
+      ;;
+    --json)
+      json=1
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      die "unknown option: $1 (try --help)" 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+case "$max_turns" in
+  '' | *[!0-9]*) die "invalid --max-turns '$max_turns' (positive integer expected)" 2 ;;
+esac
+[ "$max_turns" -gt 0 ] || die "invalid --max-turns '$max_turns' (positive integer expected)" 2
+
+[ "$#" -gt 0 ] || die "missing prompt (try --help)" 2
+[ -d "$dir" ] || die "directory not found: $dir" 2
+
+prompt=""
+for arg in "$@"; do
+  [ -z "$prompt" ] || prompt+=" "
+  prompt+="$arg"
+done
+[ -n "$prompt" ] || die "empty prompt" 2
+
+command -v vibe >/dev/null 2>&1 ||
+  die "vibe not found on PATH (install Mistral Vibe: uv tool install mistral-vibe, then run 'vibe --setup')" 127
+
+output="text"
+[ "$json" -eq 0 ] || output="json"
+approval="ask"
+[ "$yes" -eq 0 ] || approval="auto-approve"
+
+args=(-p "$prompt" --workdir "$dir" --trust --output "$output" --approval-policy "$approval" --max-turns "$max_turns")
+[ -z "$model" ] || args+=(--model "$model")
+
+if vibe "${args[@]}"; then
+  :
+else
+  rc=$?
+  die "vibe exited with status $rc" "$rc"
+fi

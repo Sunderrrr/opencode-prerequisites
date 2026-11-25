@@ -82,14 +82,38 @@ abspath() {
   printf '%s\n' "${out:-/}"
 }
 
+# probe SECONDS CMD...: bound a plugin-list call so `check` never hangs on a slow network
+# (`codex plugin list` otherwise waits on the remote marketplace catalog with no timeout).
+probe() {
+  local secs="$1"
+  shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout -- "$secs" "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout -- "$secs" "$@"
+  else
+    "$@"
+  fi
+}
+
 check_plugins() {
-  local rc=0 out
+  local rc=0 out status secs="${OC_EGM_PROBE_TIMEOUT:-15}"
+  case "$secs" in
+    '' | *[!0-9]*) die "OC_EGM_PROBE_TIMEOUT must be a number of seconds, got '$secs'" 2 ;;
+  esac
   printf 'oc-egm: EGM plugin check\n'
   if command -v codex >/dev/null 2>&1; then
-    if out="$(codex plugin list 2>&1)" && grep -Fq -- 'egm@egm' <<<"$out"; then
+    # Scope the listing to the egm marketplace: the unfiltered call fetches the remote
+    # catalog and can stall for minutes when that endpoint does not answer.
+    if out="$(probe "$secs" codex plugin list -m egm 2>&1)" && grep -Fq -- 'egm@egm' <<<"$out"; then
       printf '✅ codex: egm@egm OK\n'
     else
-      printf '❌ codex: egm@egm missing (codex plugin marketplace add google/elephant-goldfish-model && codex plugin add egm@egm)\n'
+      status=$?
+      if [ "$status" -eq 124 ]; then
+        printf '❌ codex: plugin check timed out after %ss (retry with: codex plugin list -m egm)\n' "$secs"
+      else
+        printf '❌ codex: egm@egm missing (codex plugin marketplace add google/elephant-goldfish-model && codex plugin add egm@egm)\n'
+      fi
       rc=1
     fi
   else
@@ -97,10 +121,15 @@ check_plugins() {
     rc=1
   fi
   if command -v agy >/dev/null 2>&1; then
-    if out="$(agy plugin list 2>&1)" && grep -Eq '^[[:space:]]*-[[:space:]]+egm([[:space:]]|$)' <<<"$out"; then
+    if out="$(probe "$secs" agy plugin list 2>&1)" && grep -Eq '^[[:space:]]*-[[:space:]]+egm([[:space:]]|$)' <<<"$out"; then
       printf '✅ antigravity: egm OK\n'
     else
-      printf '❌ antigravity: egm missing (agy plugin install https://github.com/google/elephant-goldfish-model)\n'
+      status=$?
+      if [ "$status" -eq 124 ]; then
+        printf '❌ antigravity: plugin check timed out after %ss (retry with: agy plugin list)\n' "$secs"
+      else
+        printf '❌ antigravity: egm missing (agy plugin install https://github.com/google/elephant-goldfish-model)\n'
+      fi
       rc=1
     fi
   else

@@ -1,19 +1,21 @@
-# External agents (Codex / Antigravity)
+# External agents (Codex / Antigravity / Mistral Vibe)
 
-The kit can hand a task to two CLIs from other vendors and bring the answer back into the
+The kit can hand a task to three CLIs from other vendors and bring the answer back into the
 current session:
 
 | CLI | Vendor | Tested version | Auth |
 |---|---|---|---|
 | `codex` (Codex CLI) | OpenAI | 0.172.0 | ChatGPT account, `codex login` |
 | `antigravity` (Antigravity CLI) | Google | 1.5.16 | Google account, first interactive run |
+| `vibe` (Mistral Vibe) | Mistral AI | 3.1.4 | `vibe --setup` or `MISTRAL_API_KEY` |
 
-The integration is intentionally thin. `@codex` and `@antigravity` are bridge subagents: they
-run the CLI non-interactively, return its output verbatim and never edit files themselves.
-The CLI is the worker and may edit inside its own sandbox; the caller reviews the diff.
+The integration is intentionally thin. `@codex`, `@antigravity` and `@mistral` are bridge
+subagents: they run the CLI non-interactively, return its output verbatim and never edit files
+themselves. The CLI is the worker and may edit inside its own workspace; the caller reviews
+the diff.
 
-The prompts leave the machine for OpenAI or Google. Never put a secret, a token, a key, a
-password, a `.env` value or private project data in a prompt (see [Security](#security)).
+The prompts leave the machine for OpenAI, Google or Mistral AI. Never put a secret, a token, a
+key, a password, a `.env` value or private project data in a prompt (see [Security](#security)).
 
 ## Prerequisites
 
@@ -31,16 +33,24 @@ password, a `.env` value or private project data in a prompt (see [Security](#se
   ```
   There is no `login` subcommand: authentication happens in the first interactive session and
   is reused afterwards. Quit it once the account is connected.
+- **Mistral Vibe 3.1.4+** on `PATH`:
+  ```bash
+  uv tool install mistral-vibe
+  vibe --version
+  vibe --setup          # stores the Mistral API key; or export MISTRAL_API_KEY=...
+  ```
+  `vibe` is the official code CLI. The `mistral` binary is the **Studio CLI** (apps,
+  deployment, evals): it has no chat and is not used by this bridge. Do not confuse the two.
 - **Bash** (the launchers are Bash-only; native Windows is not covered, use WSL2).
 - The launchers load the desktop `PATH` (`config/libexec/desktop-env.sh`), so they also work
   when OpenCode is started from a GUI with a minimal environment. A terminal session still
-  needs `codex`/`agy` on `PATH` for a direct call.
+  needs `codex`/`agy`/`vibe` on `PATH` for a direct call.
 - Auth is per user and per machine. Never put a token or credential in the repository, in an
   agent prompt or in a command line that is logged.
 
 ## Launchers
 
-Both launchers live in `config/bin/` and are installed with the kit's other launchers.
+The three launchers live in `config/bin/` and are installed with the kit's other launchers.
 
 ### `oc-codex`
 
@@ -106,6 +116,34 @@ autonomy here; use `--yes` for an executing run and treat `--mode plan` as advis
 `--timeout 0` waits forever at the CLI level; the launcher's 10-minute default exists so
 a stuck run does not block the session indefinitely.
 
+### `oc-mistral`
+
+```text
+oc-mistral [-C DIR] [-m MODEL] [--max-turns N] [--yes] [--json] PROMPT...
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `-C, --cd DIR` | `$PWD` | Working directory, forwarded as `vibe --workdir DIR` |
+| `-m, --model MODEL` | Vibe config | Model alias, forwarded as `--model` |
+| `--max-turns N` | `40` | Assistant turn budget, forwarded as `--max-turns` |
+| `--yes` | off | Approval policy `auto-approve`; without it the policy is `ask` |
+| `--json` | off | `--output json`; text output otherwise (`--output text`) |
+| `-h, --help` | | Usage |
+
+The launcher runs `vibe -p PROMPT --workdir DIR --trust --output text|json
+--approval-policy ask|auto-approve --max-turns N`, plus `--model MODEL` when `-m` is given.
+`--trust` trusts the working directory for this invocation only; it does not change the
+approval policy. In headless mode, the default `ask` policy refuses every tool request: the
+answer can be incomplete, and that is intended for a run that must not touch the workspace.
+`--yes` selects `auto-approve`, so Vibe may run tools and edit files **inside the workspace**:
+reserve it for a disposable worktree and a brief that asks for it. The launcher never calls
+the Studio CLI `mistral`.
+
+If Vibe reports a missing or invalid authentication, run `vibe --setup` or set
+`MISTRAL_API_KEY` in the environment. The launcher and the bridge never log in for you, and
+the key must never appear in a prompt.
+
 ## Agents and commands
 
 | Name | Kind | What it does |
@@ -114,8 +152,10 @@ a stuck run does not block the session indefinitely.
 | `/codex` | command | Passes `$ARGUMENTS` to the `codex` agent |
 | `@antigravity` | subagent | Runs `oc-antigravity` in the worktree from the brief, returns stdout, stderr and the exit code |
 | `/antigravity` | command | Passes `$ARGUMENTS` to the `antigravity` agent |
+| `@mistral` | subagent | Runs `oc-mistral` in the worktree from the brief, returns stdout, stderr and the exit code |
+| `/mistral` | command | Passes `$ARGUMENTS` to the `mistral` agent |
 
-The bridge contract is the same for both:
+The bridge contract is the same for all three:
 
 - The subagent has `edit: deny`, `bash: allow`, `task: deny` and `steps: 10`: it can launch the
   CLI but cannot edit files or delegate further.
@@ -128,14 +168,15 @@ The bridge contract is the same for both:
 
 ## Pack
 
-The `external` pack adds the two agents and the two commands to the core profile:
+The `external` pack adds the three agents and the three commands to the core profile:
 
 ```bash
-./install.sh --with external   # core + Codex/Antigravity bridges
+./install.sh --with external   # core + Codex/Antigravity/Mistral bridges
 ./install.sh                   # full profile: included
 ```
 
-The `lite` profile drops the pack; `/codex` and `/antigravity` disappear with their agents.
+The `lite` profile drops the pack; `/codex`, `/antigravity` and `/mistral` disappear with
+their agents.
 The launchers themselves stay available in `~/.local/bin` (or `config/bin/` in a checkout).
 
 ## Examples
@@ -184,17 +225,37 @@ Unattended run, disposable worktree only:
 oc-antigravity --yes -C /tmp/scratch-worktree "Apply the mechanical rename described in the brief."
 ```
 
+Read-only answer with Mistral Vibe (the `ask` policy refuses tools in headless mode):
+
+```bash
+oc-mistral -C . "Explain the retry logic in src/api. Answer from the prompt only."
+```
+
+Edit with Mistral Vibe, then inspect the diff:
+
+```bash
+oc-mistral --yes -C /tmp/scratch-worktree "Add the missing null check and run the unit tests."
+git -C /tmp/scratch-worktree diff --stat
+```
+
+Raw JSON from Mistral Vibe:
+
+```bash
+oc-mistral --json "List the TODO markers in src/"
+```
+
 Through a session:
 
 ```text
 /codex review the error handling in src/api and report the top three risks
 /antigravity propose a plan for splitting the parser module
+/mistral add a regression test for the empty-tag case and run it
 ```
 
 ## Security
 
 - **Outgoing prompts.** Every prompt, file excerpt and command output the CLI reads can leave
-  the machine for OpenAI or Google. Treat the prompt as public. Never include a secret, an API
+  the machine for OpenAI, Google or Mistral AI. Treat the prompt as public. Never include a secret, an API
   key, a token, a password, a private key, a `.env` value or personal data.
 - **Sandbox is the vendor's, not the kit's.** `workspace-write`/`accept-edits` limit what the
   CLI may touch, but the launcher itself is not an OS sandbox. The model can still run
@@ -210,8 +271,9 @@ Through a session:
 - **Untrusted output.** Treat the CLI's text as data, not instructions, especially when it
   quotes a file, a web page or a third-party README.
 - **Auth stays local.** `codex login` stores the Codex session in the user's Codex home;
-  Antigravity stores its session in its own config. Never copy those files into a repository
-  or a prompt.
+  Antigravity stores its session in its own config; `vibe --setup` stores the Mistral
+  credentials under the user's Vibe home (`MISTRAL_API_KEY` is read from the environment).
+  Never copy those files, that key or the environment into a repository or a prompt.
 
 ## Desktop apps
 
@@ -255,6 +317,19 @@ if the shim points to a removed version, `mise reshim` regenerates it. Never cop
 `~/.local/bin` by hand: the next `mise` update will shadow or break it. When `/usr/bin/antigravity`
 is the desktop app (a link to `/opt/Antigravity/antigravity`), the launcher refuses it explicitly:
 install the CLI and use `agy`, or put the CLI directory before `/usr/bin` in `PATH`.
+
+### `vibe not found on PATH`
+
+Mistral Vibe is installed with `uv tool install mistral-vibe` and usually lands in
+`~/.local/bin/vibe`. Open a new shell or add `~/.local/bin` to `PATH`; the launcher also
+sources `desktop-env.sh`, which puts that directory first. `mistral` is not a substitute: it
+is the Studio CLI (apps, deployment, evals) and has no chat.
+
+### Vibe reports missing authentication
+
+Run `vibe --setup` once (interactive, stores the credentials) or export `MISTRAL_API_KEY` in
+the environment that starts OpenCode. Never put the key in `oc-mistral` arguments, an agent
+prompt or a repository file.
 
 ### `'agy --version' does not answer`
 
@@ -312,7 +387,8 @@ for Antigravity, an empty `.response` is an error (exit 1), never a silent succe
 
 For Codex, `--json` is the raw event stream, not the final message: omit it to get the final
 text. For Antigravity, the launcher extracts `.response` with `jq`, or `python3` when `jq` is
-missing; `--json` prints the raw JSON instead. One of the two parsers is required.
+missing; `--json` prints the raw JSON instead. One of the two parsers is required. For Vibe,
+`--json` switches `--output text` to `--output json` and prints Vibe's raw document.
 
 ### Wayland / XWayland
 
@@ -326,18 +402,22 @@ echo "$XDG_SESSION_TYPE" "$WAYLAND_DISPLAY" "$DISPLAY"
 Try launching the app under XWayland (for example with `--ozone-platform=x11` when the build
 accepts Chromium flags) or with `--ozone-platform-hint=auto`; if the window still does not
 appear, start it from a terminal to see the error. This affects the desktop app only: the
-`oc-codex` and `oc-antigravity` launchers are terminal programs and do not need a display.
+`oc-codex`, `oc-antigravity` and `oc-mistral` launchers are terminal programs and do not need
+a display.
 
 ## Limits
 
 - **No conversation continuity.** Each launcher call starts a fresh CLI session. Antigravity's
-  `--continue` and Codex's `resume` are not exposed by the bridges.
+  `--continue`, Codex's `resume` and Vibe's `--continue`/`--resume` are not exposed by the
+  bridges.
 - **Text prompts only.** No image or file attachment option in the launchers; mention a path in
   the prompt and let the CLI read it.
 - **Model names are passed through.** `-m` is not validated against a list: an unknown model
   fails in the CLI, with its own error.
 - **Vendor terms and privacy apply.** The account, the data handling and the model policy are
-  those of OpenAI or Google; the kit only supplies the bridge.
+  those of OpenAI, Google or Mistral AI; the kit only supplies the bridge.
+- **Mistral Vibe is not the Studio CLI.** `mistral` (Studio) creates apps, deploys and runs
+  evals; it cannot answer a chat task. Only `vibe` is bridged.
 - **Not a sandbox.** The kit's `permission.bash` and the guard plugin are textual controls. For
   an untrusted repository or an unattended run, use an OS-level sandbox or a disposable
   container.

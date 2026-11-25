@@ -124,6 +124,22 @@ check("check: missing CLIs reported, exit 1", r.status === 1 &&
 r = run(["--via", "antigravity", "check"])
 check("check: ignores --via and still checks both", r.status === 0 && /✅ codex/.test(r.stdout) && /✅ antigravity/.test(r.stdout), r.stdout)
 
+// A stalled plugin-list call is bounded and reported, never left hanging.
+write(path.join(tmp, "bin", "timeout"), `#!/bin/sh
+[ "$1" = "--" ] && shift
+shift
+case "$1" in codex) exit 124 ;; esac
+exec "$@"
+`, 0o755)
+r = run(["check"], { OC_EGM_PROBE_TIMEOUT: "1" })
+check("check: a timed-out probe is reported and exit 1",
+  r.status === 1 && /❌ codex: plugin check timed out after 1s/.test(r.stdout)
+  && /✅ antigravity: egm OK/.test(r.stdout), r.stdout + r.stderr)
+r = run(["check"], { OC_EGM_PROBE_TIMEOUT: "soon" })
+check("check: invalid OC_EGM_PROBE_TIMEOUT exits 2",
+  r.status === 2 && /must be a number of seconds/.test(r.stderr), `${r.status} ${r.stderr}`)
+fs.rmSync(path.join(tmp, "bin", "timeout"))
+
 // ---------- 6. missing bridge ----------
 const standalone = path.join(tmp, "standalone")
 write(path.join(standalone, "oc-egm"), raw, 0o755)

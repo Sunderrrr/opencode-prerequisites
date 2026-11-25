@@ -49,11 +49,11 @@
 - Browser: `playwright` (page tests) or `obscura` (lightweight reading/scraping), never both together. Scrape only what I ask, in compliance with the terms of use.
 - Large reading work: the CEO delegates to `@explore`/`@researcher`. Load a skill when its description matches.
 
-## External agents (Codex / Antigravity)
-- Two bridge subagents hand a task to another vendor's CLI: `@codex` (`oc-codex`, Codex CLI, GPT/Codex, ChatGPT auth) and `@antigravity` (`oc-antigravity`, Antigravity CLI, Google auth). The `/codex` and `/antigravity` commands pass `$ARGUMENTS` to them.
-- Prerequisites: `codex` (0.172+) logged in with `codex login`; `antigravity` (1.5.16+) with its first interactive run completed (Google sign-in). Both must be on `PATH`; the launchers also load the desktop `PATH`.
-- The prompts leave the machine for OpenAI or Google. Never put a secret, token, key, password, `.env` value or private data in a prompt.
-- The CLI is the worker: it may edit files inside its own sandbox (`workspace-write` for Codex, `accept-edits` for Antigravity; `read-only` or `plan` for analysis). Always review its diff before keeping it; the bridge returns its output verbatim and does not rewrite it.
+## External agents (Codex / Antigravity / Mistral Vibe)
+- Three bridge subagents hand a task to another vendor's CLI: `@codex` (`oc-codex`, Codex CLI, GPT/Codex, ChatGPT auth), `@antigravity` (`oc-antigravity`, Antigravity CLI, Google auth) and `@mistral` (`oc-mistral`, Mistral Vibe `vibe`, Mistral AI). The `/codex`, `/antigravity` and `/mistral` commands pass `$ARGUMENTS` to them.
+- Prerequisites: `codex` (0.172+) logged in with `codex login`; `antigravity` (1.5.16+) with its first interactive run completed (Google sign-in); `vibe` (3.1.4+) authenticated with `vibe --setup` or `MISTRAL_API_KEY`. All must be on `PATH`; the launchers also load the desktop `PATH`. `mistral` is the Studio CLI (apps, deployment, evals, no chat): never use it for a chat task.
+- The prompts leave the machine for OpenAI, Google or Mistral AI. Never put a secret, token, key, password, `.env` value or private data in a prompt.
+- The CLI is the worker: it may edit files inside its own sandbox (`workspace-write` for Codex, `accept-edits` for Antigravity, `ask`/`auto-approve` for Mistral Vibe; `read-only` or `plan` for analysis). Always review its diff before keeping it; the bridge returns its output verbatim and does not rewrite it.
 - The desktop apps are installed separately (`chatgpt`, `antigravity`); their login is manual and they are not driven by these launchers. Details: `docs/external-agents.md`.
 
 ## EGM (design/review)
@@ -64,6 +64,12 @@
 - A full review spawns **8–15 reviewers**: reserve it for a significant design, a risky migration or an architecture decision. It is not a substitute for tests, `@verify-app` or a security review.
 - Never put a secret, token, `.env` value or personal data in the document or the prompt: it leaves the machine for OpenAI or Google.
 - Optional artifact directory `EGM artifact directory: .dev/docs` (scratch drafts); commit approved specifications under `docs/designs/`.
+
+### Review gates
+- **Project start**: after the `@architect` plan, `@egm bootstrap` (existing code) or `@egm brainstorm` → `@egm draft` → `@egm review` (new project). No implementation before the findings are handled or explicitly waived.
+- **New brick** (module or component, public API, auth/keys/data, migration, more than 3 files, irreversible choice): one-page note in `.dev/docs/`, then `@egm lite` (or `draft` + `review`). Demand critiques (missing assumptions, failure modes, simpler alternative), not praise; implement after the findings are handled or waived.
+- **Milestone / sprint / step**: before starting the next one, `@egm review` on the plan plus `@egm drift-report` (doc vs code); include the outcome in the report.
+- **Skip** when the change is small, local and reversible; say why a gate is skipped. EGM does not replace tests, `@verify-app` or the security review.
 
 ## Security
 - Never a key, token or password in code or in a commit.
