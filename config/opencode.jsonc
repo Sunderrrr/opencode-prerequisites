@@ -34,7 +34,7 @@
     "webfetch": "allow",
     "websearch": "allow", // built-in web search (Exa/Parallel), no key needed with the OpenCode Go provider
     "skill": { "*": "allow" },
-    // The ~229 tools of the rea MCP are visible only to the reverse-engineer agent (which allows them in its file):
+    // The 263 tools of the rea MCP are visible only to the reverse-engineer agent (which allows them in its file):
     // exposing them to every agent would weigh down each session.
     "rea_*": "deny",
     // Same for the ~34 tools of the mobile MCP (Android module: android and mobile-tester agents only).
@@ -67,7 +67,7 @@
         "command": ["{env:HOME}/.local/bin/oc-playwright-mcp"]
       },
       // Chrome DevTools (Google, Apache-2.0): DOM, console, network and performance
-      // inspection in headless, isolated Chrome. Launcher pinned to 1.12.0; telemetry off
+      // inspection in headless, isolated Chrome. Launcher pinned to 1.14.0; telemetry off
       // (--no-usage-statistics, --no-performance-crux, no update check) and a fresh profile
       // per run (--isolated). Requires Chrome/Chromium; tools denied globally ("chrome-devtools_*").
       "chrome-devtools": {
@@ -85,7 +85,7 @@
       // Kubernetes READ-ONLY (see k8s-mcp.toml: read_only + Secrets blocked). Uses your kubeconfig.
       "kubernetes": {
         "type": "local",
-        "command": ["npx", "-y", "kubernetes-mcp-server@0.1.2", "--config", "{env:HOME}/.config/opencode/k8s-mcp.toml"]
+        "command": ["npx", "-y", "kubernetes-mcp-server@0.1.3", "--config", "{env:HOME}/.config/opencode/k8s-mcp.toml"]
       },
       // Vulnerability / misconfiguration / secret scan (images, IaC, code). Requires `trivy` + mcp plugin (install.sh).
       "trivy": {

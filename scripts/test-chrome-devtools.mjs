@@ -69,7 +69,7 @@ const parse = (stdout) => {
 }
 // The fake npx sees every argv, including npx's own -y flag.
 const expectedArgs = (exe) =>
-  `-y chrome-devtools-mcp@1.12.0 --headless --isolated --no-usage-statistics --no-performance-crux --executablePath ${exe}`
+  `-y chrome-devtools-mcp@1.14.0 --headless --isolated --no-usage-statistics --no-performance-crux --executablePath ${exe}`
 
 // --- 1. OC_CHROME_PATH wins over PATH; exact pin/flags; telemetry off; passthrough ------
 const custom = chrome("custom-chrome")
@@ -115,13 +115,13 @@ check("Playwright fallback: newest chromium-* revision (chrome-linux64)",
 
 r = run(bin, ["--check"], { HOME: pwHome })
 check("--check: Playwright build reported as may-work/unsupported",
-  r.status === 0 && /chrome-devtools-mcp 1\.12\.0: Chrome found at .*chromium-1248.*not officially supported/.test(r.stdout),
+  r.status === 0 && /chrome-devtools-mcp 1\.14\.0: Chrome found at .*chromium-1248.*not officially supported/.test(r.stdout),
   r.stdout + r.stderr)
 
 // --- 4. --check starts nothing ---------------------------------------------------------
 r = run(bin, ["--check"], { OC_CHROME_PATH: custom })
 check("--check: resolves the binary without starting npx",
-  r.status === 0 && /^chrome-devtools-mcp 1\.12\.0: Chrome found at /.test(r.stdout) && !/NO_UPDATE=/.test(r.stdout),
+  r.status === 0 && /^chrome-devtools-mcp 1\.14\.0: Chrome found at /.test(r.stdout) && !/NO_UPDATE=/.test(r.stdout),
   r.stdout + r.stderr)
 
 // --- 5. clear failures ----------------------------------------------------------------
@@ -165,7 +165,7 @@ check("doctor: warns when the chrome-devtools MCP has no Chrome",
   r.stdout + r.stderr)
 r = runDoctor({ OC_CHROME_PATH: custom })
 check("doctor: reports the Chrome binary when OC_CHROME_PATH resolves",
-  /chrome-devtools: chrome-devtools-mcp 1\.12\.0: Chrome found at /.test(r.stdout),
+  /chrome-devtools: chrome-devtools-mcp 1\.14\.0: Chrome found at /.test(r.stdout),
   r.stdout + r.stderr)
 
 fs.rmSync(TMP, { recursive: true, force: true })

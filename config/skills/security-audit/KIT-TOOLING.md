@@ -78,7 +78,7 @@ never installs them with `sudo`.
 | --- | --- | --- |
 | `trivy` | local, `trivy mcp`, scan-only | dependency, secret and IaC scans; findings kept in batches |
 | `semgrep` | local, official Semgrep MCP 0.9.0 (`oc-semgrep-mcp`) | SAST. `semgrep_*` is `deny` globally in `opencode.jsonc` and allowed only for `@pentest`; `@security` uses the `semgrep` binary |
-| `kubernetes` | local, `kubernetes-mcp-server@0.1.2` with `config/k8s-mcp.toml` | **read-only** cluster inspection: `read_only = true`, and the `Secret` kind is in `denied_resources`, so a Secret is never returned |
+| `kubernetes` | local, `kubernetes-mcp-server@0.1.3` with `config/k8s-mcp.toml` | **read-only** cluster inspection: `read_only = true`, and the `Secret` kind is in `denied_resources`, so a Secret is never returned |
 | `terraform` | local | provider/module documentation, not target scanning |
 | `context7`, `grep_app` | remote | library docs and code examples |
 | `rea` | local, reverse pack | shipped-artifact analysis only, `@reverse-engineer` only |

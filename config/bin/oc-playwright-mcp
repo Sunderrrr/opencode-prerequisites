@@ -22,10 +22,10 @@ for d in "${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}/libexec" "$HOME/.config
 : "${HOME:?HOME is not set (needed for the Playwright MCP data directory)}"
 
 MCP_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/opencode-prerequisites/mcp/playwright"
-# Pinned version (last verified stable: 0.0.84): no surprise @latest at startup.
-pkg="@playwright/mcp@0.0.84"
-# npm view @playwright/mcp@0.0.84 bin → { "playwright-mcp": "cli.js" }
-# npm view @playwright/mcp@0.0.84 dependencies → playwright-core (utilsBundle.js lives there).
+# Pinned version (last verified stable: 0.0.86): no surprise @latest at startup.
+pkg="@playwright/mcp@0.0.86"
+# npm view @playwright/mcp@0.0.86 bin → { "playwright-mcp": "cli.js" }
+# npm view @playwright/mcp@0.0.86 dependencies → playwright-core (utilsBundle.js lives there).
 MCP_DIR="$MCP_HOME/node_modules/@playwright/mcp"
 MCP_ENTRY="$MCP_DIR/cli.js"
 MCP_UTILS="$MCP_HOME/node_modules/playwright-core/lib/utilsBundle.js"
@@ -34,7 +34,7 @@ usage() {
   printf '%s\n' \
     'Usage: oc-playwright-mcp [--check|--repair|--help] [MCP arguments...]' \
     "  --check    verify the dedicated install in $MCP_HOME (no network)" \
-    '  --repair   reinstall @playwright/mcp@0.0.84, then --check' \
+    '  --repair   reinstall @playwright/mcp@0.0.86, then --check' \
     '  --help     show this help'
 }
 
@@ -49,7 +49,7 @@ check_install() {
     return 1
   }
   if installed; then
-    printf 'playwright-mcp 0.0.84: installed in %s\n' "$MCP_HOME"
+    printf 'playwright-mcp 0.0.86: installed in %s\n' "$MCP_HOME"
     return 0
   fi
   printf '%s\n' \

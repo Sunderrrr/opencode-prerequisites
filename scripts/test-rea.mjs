@@ -66,7 +66,7 @@ check("oc-rea-mcp exists and is executable", fs.existsSync(MCP) && (fs.statSync(
 const cliSrc = read(CLI)
 check("oc-rea: bash shebang", cliSrc.startsWith("#!/usr/bin/env bash"))
 check("oc-rea: strict mode", /^set -Eeuo pipefail$/m.test(cliSrc))
-check("oc-rea: pins rea-agents@6.8.0 by default", /OC_REA_VERSION:-6\.8\.0/.test(cliSrc))
+check("oc-rea: pins rea-agents@6.10.1 by default", /OC_REA_VERSION:-6\.10\.1/.test(cliSrc))
 check("oc-rea: never runs rea setup", !/\bsetup\b/.test(cliSrc))
 
 // ---------- 2. Node gate (accepted and rejected versions) ----------
@@ -75,7 +75,7 @@ let allOk = true
 for (const v of accepted) {
   resetLog()
   const r = run(CLI, ["--version"], { OC_REA_NODE_VERSION: v })
-  if (r.status !== 0 || log().trim() !== "-y rea-agents@6.8.0 --version") {
+  if (r.status !== 0 || log().trim() !== "-y rea-agents@6.10.1 --version") {
     allOk = false
     check(`Node ${v}: accepted`, false, `code ${r.status} | ${log().trim()} | ${r.stderr.trim()}`)
   }
@@ -102,7 +102,7 @@ check("oc-rea --check: exit 0 without npx", r.status === 0 && log().trim() === "
 resetLog()
 r = run(CLI, ["analyze-javascript-application", "/tmp/app", "--json"], { OC_REA_NODE_VERSION: "26.13.0" })
 check("oc-rea: arguments passed through unchanged",
-  r.status === 0 && log().trim() === "-y rea-agents@6.8.0 analyze-javascript-application /tmp/app --json",
+  r.status === 0 && log().trim() === "-y rea-agents@6.10.1 analyze-javascript-application /tmp/app --json",
   `code ${r.status} | ${log().trim()}`)
 
 resetLog()
@@ -112,18 +112,18 @@ check("oc-rea: OC_REA_VERSION overrides the pin", r.status === 0 && log().trim()
 resetLog()
 r = run(CLI, ["--version"], { OC_REA_NODE_VERSION: "26.13.0" })
 check("oc-rea: --version output is the CLI's (not a local echo)",
-  r.status === 0 && /^FAKE_NPX -y rea-agents@6\.8\.0 --version$/m.test(r.stdout), r.stdout)
+  r.status === 0 && /^FAKE_NPX -y rea-agents@6\.10\.1 --version$/m.test(r.stdout), r.stdout)
 
 // ---------- 4. MCP launcher ----------
 resetLog()
 r = run(MCP, [], { OC_REA_NODE_VERSION: "26.13.0" })
 check("oc-rea-mcp: starts the pinned MCP command",
-  r.status === 0 && log().trim() === "-y rea-agents@6.8.0 mcp", `code ${r.status} | ${log().trim()}`)
+  r.status === 0 && log().trim() === "-y rea-agents@6.10.1 mcp", `code ${r.status} | ${log().trim()}`)
 
 resetLog()
 r = run(MCP, ["--log-level", "debug"], { OC_REA_NODE_VERSION: "26.13.0" })
 check("oc-rea-mcp: arguments passed after mcp",
-  r.status === 0 && log().trim() === "-y rea-agents@6.8.0 mcp --log-level debug", log().trim())
+  r.status === 0 && log().trim() === "-y rea-agents@6.10.1 mcp --log-level debug", log().trim())
 
 resetLog()
 r = run(MCP, ["--check"], { OC_REA_NODE_VERSION: "26.13.0" })
@@ -140,15 +140,15 @@ check("agent: read-only and rea_* allowed", /edit: deny/.test(agent) && /"rea_\*
 check("agent: legal scope and refusal", /Legal scope/.test(agent) && /refuse/i.test(agent))
 check("agent: documents oc-rea CLI fallback", /oc-rea\b/.test(agent))
 
-const skillFiles = ["SKILL.md", "LICENSE", "UPSTREAM.md", "references/android-applications.md",
+const skillFiles = ["SKILL.md", "LICENSE", "UPSTREAM.md", "references/android-applications.md", "references/desktop-build.md",
   "references/connection-and-recovery.md", "references/environments.md", "references/evidence-workflows.md",
   "references/javascript-applications.md", "references/native-and-artifacts.md", "references/runtime-observation.md"]
 const missingSkill = skillFiles.filter((f) => !fs.existsSync(path.join(SKILL, f)))
 check("skill: all vendored files present", missingSkill.length === 0, `missing: ${missingSkill.join(", ")}`)
 const skillMd = read(path.join(SKILL, "SKILL.md"))
-check("skill: name and tool count", /^name: reverse-engineer-anything$/m.test(skillMd) && /tool_count: 229/.test(skillMd))
+check("skill: name and tool count", /^name: reverse-engineer-anything$/m.test(skillMd) && /tool_count: 263/.test(skillMd))
 check("skill: MIT license", /^MIT License$/m.test(read(path.join(SKILL, "LICENSE"))))
-check("skill: UPSTREAM records 6.8.0", /rea-agents@6\.8\.0/.test(read(path.join(SKILL, "UPSTREAM.md"))))
+check("skill: UPSTREAM records 6.10.1", /rea-agents@6\.10\.1/.test(read(path.join(SKILL, "UPSTREAM.md"))))
 
 const cfg = read(path.join(ROOT, "config", "opencode.jsonc"))
 check("config: rea MCP declared", /"rea": \{/.test(cfg) && /oc-rea-mcp/.test(cfg))
@@ -177,7 +177,7 @@ const dBin = path.join(dHome, "bin")
 const reaLog = path.join(TMP, "rea.log")
 write(path.join(dBin, "oc-rea"), `#!/bin/sh
 printf '%s\\n' "$*" >> "\${REA_LOG:-/dev/null}"
-[ "$1" = "--version" ] && echo "6.8.0"
+[ "$1" = "--version" ] && echo "6.10.1"
 exit 0
 `)
 write(path.join(dBin, "oc-rea-mcp"), "#!/bin/sh\nexit 0\n")
@@ -214,7 +214,7 @@ check("doctor offline: no --version call", !read(reaLog).includes("--version"), 
 
 d = runDoctor(false)
 out = d.stdout + d.stderr
-check("doctor online: oc-rea --version result shown", /oc-rea --version: 6\.8\.0/.test(out), out.slice(-800))
+check("doctor online: oc-rea --version result shown", /oc-rea --version: 6\.10\.1/.test(out), out.slice(-800))
 check("doctor online: --version actually called", read(reaLog).includes("--version"), read(reaLog))
 check("doctor online: engine absence is a warning, not an error",
   /no Ghidra\/IDA\/Hopper found/.test(out) || /native engines:/.test(out))
