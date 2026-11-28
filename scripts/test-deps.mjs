@@ -83,17 +83,17 @@ const makeInstalledConfig = () => {
 // Versions published "by default": equal to the current pins (except the v prefix of GitHub tags).
 const LATEST = {
   npm: {
-    "playwright": "1.65.0",
-    "skills": "1.7.6",
-    "kubernetes-mcp-server": "0.1.2",
-    "@playwright/mcp": "0.0.84",
-    "chrome-devtools-mcp": "1.12.0",
-    "rea-agents": "6.8.0",
-    "@mobilenext/mobile-mcp": "1.0.16",
+    "playwright": "1.65.1",
+    "skills": "1.9.1",
+    "kubernetes-mcp-server": "0.1.3",
+    "@playwright/mcp": "0.0.86",
+    "chrome-devtools-mcp": "1.14.0",
+    "rea-agents": "6.10.1",
+    "@mobilenext/mobile-mcp": "1.0.20",
   },
   pypi: {
-    "mempalace": "3.11.0",
-    "semgrep": "1.184.0",
+    "mempalace": "3.12.0",
+    "semgrep": "1.187.0",
     "semgrep-mcp": "0.9.0",
     "pydantic": "2.14.3",
     "setuptools": "84.2.1",
@@ -101,8 +101,8 @@ const LATEST = {
   github: {
     "aquasecurity/trivy": "v0.76.2",
     "aquasecurity/trivy-plugin-mcp": "v0.0.20",
-    "h4ckf0r0day/obscura": "v0.2.6",
-    "astral-sh/uv": "0.13.7",
+    "h4ckf0r0day/obscura": "v0.2.7",
+    "astral-sh/uv": "0.13.10",
     "hashicorp/terraform-mcp-server": "v1.4.1",
   },
 }
@@ -167,11 +167,11 @@ check("intentional: pydantic and setuptools, with their reasons",
   && /intentional: setuptools 80\.10\.2 .*pkg_resources/.test(r.stdout), r.stdout)
 
 // --- 2. drift detected ----------------------------------------------------
-resetFixtures({ "npm\u0000kubernetes-mcp-server": "0.1.3" })
+resetFixtures({ "npm\u0000kubernetes-mcp-server": "0.1.4" })
 r = run(["check", "--only", "kubernetes-mcp-server"], { cache: freshCache("drift") })
 check("drift: exit 1", r.status === 1, r.stdout + r.stderr)
 check("drift: pinned, latest and status on the same line",
-  /kubernetes-mcp-server\s+\|\s+0\.1\.2\s+\|\s+0\.1\.3\s+\|\s+drift/.test(r.stdout), r.stdout)
+  /kubernetes-mcp-server\s+\|\s+0\.1\.3\s+\|\s+0\.1\.4\s+\|\s+drift/.test(r.stdout), r.stdout)
 check("drift: summary shows 1 drift",
   /1 packages · 0 up to date · 1 drift · 0 unknown · 0 intentional/.test(r.stdout), r.stdout)
 
@@ -180,7 +180,7 @@ resetFixtures()
 fs.rmSync(fixtureFile("npm", "@playwright/mcp"), { force: true })
 r = run(["check", "--only", "@playwright/mcp"], { cache: freshCache("unknown") })
 check("unknown: exit 1 and unknown status",
-  r.status === 1 && /@playwright\/mcp\s+\|\s+0\.0\.84\s+\|\s+—\s+\|\s+unknown/.test(r.stdout), r.stdout + r.stderr)
+  r.status === 1 && /@playwright\/mcp\s+\|\s+0\.0\.86\s+\|\s+—\s+\|\s+unknown/.test(r.stdout), r.stdout + r.stderr)
 check("unknown: cause shown on stderr", /fixture not found/.test(r.stderr), r.stderr)
 
 // --- 4. --json usable by a machine ----------------------------------------
@@ -202,7 +202,7 @@ const playwrightPinLine = fs.readFileSync(path.join(ROOT, "config", "bin", "oc-p
   .findIndex((l) => /^pkg="@playwright\/mcp@[0-9]+\.[0-9]+\.[0-9]+"$/.test(l)) + 1
 check("--json: package/pinned/latest/status/file/line fields",
   playwrightPinLine > 0
-  && mcp?.pinned === "0.0.84" && mcp.latest === "0.0.84" && mcp.status === "up to date"
+  && mcp?.pinned === "0.0.86" && mcp.latest === "0.0.86" && mcp.status === "up to date"
   && mcp.ecosystem === "npm" && mcp.file === "config/bin/oc-playwright-mcp"
   && mcp.line === playwrightPinLine,
   JSON.stringify({ ...mcp, playwrightPinLine }))
@@ -210,7 +210,7 @@ const chromeMcp = payload?.results?.find((x) => x.package === "chrome-devtools-m
 const chromeExecLine = fs.readFileSync(path.join(ROOT, "config", "bin", "oc-chrome-devtools-mcp"), "utf8")
   .split("\n").findIndex((l) => l.startsWith("exec npx -y chrome-devtools-mcp@")) + 1
 check("--json: chrome-devtools-mcp pin read from its launcher",
-  chromeMcp?.pinned === "1.12.0" && chromeMcp.latest === "1.12.0" && chromeMcp.status === "up to date"
+  chromeMcp?.pinned === "1.14.0" && chromeMcp.latest === "1.14.0" && chromeMcp.status === "up to date"
   && chromeMcp.ecosystem === "npm" && chromeMcp.file === "config/bin/oc-chrome-devtools-mcp"
   && chromeMcp.line === chromeExecLine, JSON.stringify(chromeMcp))
 
@@ -247,7 +247,7 @@ payload = jsonOf(r.stdout)
 check("snapshot: 17 pins, versions as pinned, no timestamp",
   r.status === 0 && Object.keys(payload?.pins ?? {}).length === 17
   && payload.pins.trivy === "0.76.2"
-  && payload.pins["@mobilenext/mobile-mcp"] === "1.0.16"
+  && payload.pins["@mobilenext/mobile-mcp"] === "1.0.20"
   && payload.kit_version === fs.readFileSync(path.join(ROOT, "VERSION"), "utf8").trim()
   && !/generated_at/.test(r.stdout), r.stdout + r.stderr)
 r = run(["snapshot"], { cache: freshCache("snapshot-again") })

@@ -62,7 +62,7 @@ if [ -n "\${NPM_FAIL:-}" ] && [ -f "$NPM_FAIL" ]; then
 fi
 rm -rf "$prefix/node_modules"
 mkdir -p "$prefix/node_modules/@playwright/mcp" "$prefix/node_modules/playwright-core/lib"
-printf '%s\\n' '{"name":"@playwright/mcp","version":"0.0.84","bin":{"playwright-mcp":"cli.js"}}' > "$prefix/node_modules/@playwright/mcp/package.json"
+printf '%s\\n' '{"name":"@playwright/mcp","version":"0.0.86","bin":{"playwright-mcp":"cli.js"}}' > "$prefix/node_modules/@playwright/mcp/package.json"
 printf '%s\\n' '// fake cli' > "$prefix/node_modules/@playwright/mcp/cli.js"
 printf '%s\\n' '// fake utilsBundle' > "$prefix/node_modules/playwright-core/lib/utilsBundle.js"
 exit 0
@@ -118,9 +118,9 @@ resetLogs()
 let r = run([], envFor(home1, binFull))
 let nodeArgs = lines(nodeLog)[0] ?? ""
 let expectedNodeArgs = `${mcpEntry(home1)} --executable-path ${path.join(binFull, chromium)} --headless${isRoot ? " --no-sandbox" : ""}`
-check("first run: installs @playwright/mcp@0.0.84 into the dedicated XDG directory",
+check("first run: installs @playwright/mcp@0.0.86 into the dedicated XDG directory",
   r.status === 0 && lines(npmLog).length === 1
-  && lines(npmLog)[0] === `install --prefix ${mcpHome(home1)} --no-audit --no-fund --silent @playwright/mcp@0.0.84`,
+  && lines(npmLog)[0] === `install --prefix ${mcpHome(home1)} --no-audit --no-fund --silent @playwright/mcp@0.0.86`,
   `code ${r.status} | npm: ${lines(npmLog).join(" ; ")} | ${r.stderr}`)
 check("first run: package.json, cli.js and playwright-core/lib/utilsBundle.js exist",
   fs.existsSync(path.join(mcpHome(home1), "node_modules", "@playwright", "mcp", "package.json"))
@@ -135,7 +135,7 @@ const binCheck = makeBin("check", { npm: false, npx: false })
 resetLogs()
 r = run(["--check"], envFor(home1, binCheck))
 check("--check: exit 0 and reports the install path",
-  r.status === 0 && new RegExp(`playwright-mcp 0\\.0\\.84: installed in ${esc(mcpHome(home1))}`).test(r.stdout),
+  r.status === 0 && new RegExp(`playwright-mcp 0\\.0\\.86: installed in ${esc(mcpHome(home1))}`).test(r.stdout),
   `code ${r.status} | ${r.stdout}${r.stderr}`)
 check("--check: runs neither npm nor the server", lines(npmLog).length === 0 && lines(nodeLog).length === 0)
 check("--check: no shared npx cache path printed", !/_npx/.test(r.stdout + r.stderr))
@@ -161,7 +161,7 @@ resetLogs()
 r = run(["--repair"], envFor(home1, binFull))
 check("--repair: reinstalls and exits 0 with the --check message",
   r.status === 0 && fs.existsSync(mcpUtils(home1)) && lines(npmLog).length === 1
-  && /playwright-mcp 0\.0\.84: installed in/.test(r.stdout),
+  && /playwright-mcp 0\.0\.86: installed in/.test(r.stdout),
   `code ${r.status} | ${r.stdout}${r.stderr}`)
 check("--repair: launches no server", lines(nodeLog).length === 0)
 resetLogs()
@@ -176,7 +176,7 @@ fs.writeFileSync(npmFail, "1")
 resetLogs()
 r = run([], envFor(home3, binFull, { NPM_FAIL: npmFail }))
 const npxLines = lines(npxLog)
-const expectedNpxArgs = `-y @playwright/mcp@0.0.84 --executable-path ${path.join(binFull, chromium)} --headless${isRoot ? " --no-sandbox" : ""}`
+const expectedNpxArgs = `-y @playwright/mcp@0.0.86 --executable-path ${path.join(binFull, chromium)} --headless${isRoot ? " --no-sandbox" : ""}`
 check("fallback: npm failure warns and keeps running (exit 0)",
   r.status === 0 && /dedicated npm install failed/.test(r.stderr) && /dedicated cache/.test(r.stderr),
   `code ${r.status} | ${r.stderr}`)
@@ -234,7 +234,7 @@ r = run(["--repair"], { ...docEnv, PATH: `${docBinFull}${path.delimiter}${sysDir
 check("doctor setup: dedicated install ready", r.status === 0, r.stdout + r.stderr)
 r = runDoctor()
 check("doctor: reports the dedicated install when present",
-  /playwright: playwright-mcp 0\.0\.84: installed in/.test(r.stdout), r.stdout + r.stderr)
+  /playwright: playwright-mcp 0\.0\.86: installed in/.test(r.stdout), r.stdout + r.stderr)
 check("doctor: keeps the browser check", /playwright: (system browser|no browser|Playwright Chromium)/.test(r.stdout),
   r.stdout)
 

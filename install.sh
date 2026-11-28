@@ -45,12 +45,12 @@ umask 077
 # Defaults verified on the authoring machine; uv = latest stable release at audit time.
 OC_TRIVY_VERSION="${OC_TRIVY_VERSION:-0.76.2}"
 OC_TRIVY_MCP_VERSION="${OC_TRIVY_MCP_VERSION:-v0.0.20}"
-OC_OBSCURA_VERSION="${OC_OBSCURA_VERSION:-0.2.6}"
-OC_UV_VERSION="${OC_UV_VERSION:-0.13.7}"
-OC_MEMPALACE_VERSION="${OC_MEMPALACE_VERSION:-3.11.0}"
-OC_SEMGREP_VERSION="${OC_SEMGREP_VERSION:-1.184.0}"
-OC_PLAYWRIGHT_VERSION="${OC_PLAYWRIGHT_VERSION:-1.65.0}"
-OC_SKILLS_VERSION="${OC_SKILLS_VERSION:-1.7.6}"
+OC_OBSCURA_VERSION="${OC_OBSCURA_VERSION:-0.2.7}"
+OC_UV_VERSION="${OC_UV_VERSION:-0.13.10}"
+OC_MEMPALACE_VERSION="${OC_MEMPALACE_VERSION:-3.12.0}"
+OC_SEMGREP_VERSION="${OC_SEMGREP_VERSION:-1.187.0}"
+OC_PLAYWRIGHT_VERSION="${OC_PLAYWRIGHT_VERSION:-1.65.1}"
+OC_SKILLS_VERSION="${OC_SKILLS_VERSION:-1.9.1}"
 
 LITE=0; PROFILE=""; PROFILE_EXPLICIT=0; NOPACK=0; NOTOOLS=0
 TOOLS=1; MATT=0; MEMONLY=0; ALLOWROOT=0; SHELLENV=0; DESKTOP=0; ANDROID=0; NOANDROID=0; PENTEST=0; NOPENTEST=0; PENTEST_EXPLICIT=0; FORCE_CONFIG=0
@@ -1278,7 +1278,7 @@ config_phase() {
       fi
     elif rea_msg="$("$BIN/oc-rea-mcp" --check 2>&1)"; then
       if mcp_state enable rea; then
-        echo "✅ rea MCP (REA 6.8.0) enabled: Node ${OC_REA_NODE_VERSION:-$(node -p 'process.versions.node')} is suitable"
+        echo "✅ rea MCP (REA 6.10.1) enabled: Node ${OC_REA_NODE_VERSION:-$(node -p 'process.versions.node')} is suitable"
       fi
     else
       if mcp_disable rea "Node too old for REA: remove this line after updating Node"; then
@@ -1292,7 +1292,7 @@ config_phase() {
   if [ "$LITE" = 0 ] && [ -f "$DEST/opencode.jsonc" ] && grep -q '"mobile": {' "$DEST/opencode.jsonc"; then
     if [ "$ANDROID" = 1 ] && "$BIN/oc-mobile-mcp" --check >/dev/null 2>&1; then
       if mcp_state enable mobile; then
-        echo "✅ mobile MCP (mobile-mcp 1.0.16) enabled (adb from the Podman emulator)"
+        echo "✅ mobile MCP (mobile-mcp 1.0.20) enabled (adb from the Podman emulator)"
       fi
     else
       if mcp_disable mobile "Android module not installed (./install.sh --android) or Podman missing"; then :; fi
@@ -1404,9 +1404,9 @@ if [ "$TOOLS" = 1 ]; then
   PLAYWRIGHT_MCP_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/opencode-prerequisites/mcp/playwright"
   if need npm; then
     if "$BIN/oc-playwright-mcp" --check >/dev/null 2>&1; then
-      echo "✅ Playwright MCP @playwright/mcp@0.0.84 already installed in $PLAYWRIGHT_MCP_HOME"
+      echo "✅ Playwright MCP @playwright/mcp@0.0.86 already installed in $PLAYWRIGHT_MCP_HOME"
     else
-      echo "⬇️  Playwright MCP @playwright/mcp@0.0.84 (dedicated install)..."
+      echo "⬇️  Playwright MCP @playwright/mcp@0.0.86 (dedicated install)..."
       if "$BIN/oc-playwright-mcp" --repair; then
         echo "✅ Playwright MCP installed in $PLAYWRIGHT_MCP_HOME"
       else

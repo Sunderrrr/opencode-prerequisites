@@ -68,7 +68,7 @@ if [ "${1:-}" = "--check" ]; then
   case "$exe" in
     "$HOME"/.cache/ms-playwright/*) note=" (Playwright Chromium: may work, not officially supported)" ;;
   esac
-  echo "chrome-devtools-mcp 1.12.0: Chrome found at $exe$note"
+  echo "chrome-devtools-mcp 1.14.0: Chrome found at $exe$note"
   exit 0
 fi
 
@@ -80,4 +80,4 @@ command -v npx >/dev/null 2>&1 || {
 # No npm registry round-trip just to compare versions at every startup.
 export CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS=1
 
-exec npx -y chrome-devtools-mcp@1.12.0 --headless --isolated --no-usage-statistics --no-performance-crux --executablePath "$exe" "$@"
+exec npx -y chrome-devtools-mcp@1.14.0 --headless --isolated --no-usage-statistics --no-performance-crux --executablePath "$exe" "$@"

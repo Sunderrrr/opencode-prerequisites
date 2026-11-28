@@ -122,12 +122,12 @@ const install = fs.readFileSync(INSTALL, "utf8")
 const DEFAULTS = {
   OC_TRIVY_VERSION: "0.76.2",
   OC_TRIVY_MCP_VERSION: "v0.0.20",
-  OC_OBSCURA_VERSION: "0.2.6",
-  OC_UV_VERSION: "0.13.7",
-  OC_MEMPALACE_VERSION: "3.11.0",
-  OC_SEMGREP_VERSION: "1.184.0",
-  OC_PLAYWRIGHT_VERSION: "1.65.0",
-  OC_SKILLS_VERSION: "1.7.6",
+  OC_OBSCURA_VERSION: "0.2.7",
+  OC_UV_VERSION: "0.13.10",
+  OC_MEMPALACE_VERSION: "3.12.0",
+  OC_SEMGREP_VERSION: "1.187.0",
+  OC_PLAYWRIGHT_VERSION: "1.65.1",
+  OC_SKILLS_VERSION: "1.9.1",
 }
 for (const [key, want] of Object.entries(DEFAULTS)) {
   const m = install.match(new RegExp(`^${key}="\\$\\{${key}:-([^}]*)\\}"$`, "m"))

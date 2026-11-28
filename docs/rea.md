@@ -1,13 +1,13 @@
 # Reverse engineering with REA
 
-The kit ships an optional **reverse** pack around [REA (Reverse Engineer Anything)](https://github.com/morluto/rea), an MIT-licensed CLI and MCP server (npm package `rea-agents`, pinned here at **6.8.0**). REA inspects shipped artifacts — native binaries, JavaScript/Electron applications, .NET assemblies, Android APKs, firmware and network captures — and returns Evidence for every observation. The `reverse-engineer` agent drives it and writes the analysis.
+The kit ships an optional **reverse** pack around [REA (Reverse Engineer Anything)](https://github.com/morluto/rea), an MIT-licensed CLI and MCP server (npm package `rea-agents`, pinned here at **6.10.1**). REA inspects shipped artifacts — native binaries, JavaScript/Electron applications, .NET assemblies, Android APKs, firmware and network captures — and returns Evidence for every observation. The `reverse-engineer` agent drives it and writes the analysis.
 
 The pack contains three parts:
 
 | Part | What it is |
 | --- | --- |
 | `reverse-engineer` agent | The kit's own read-only analyst: legal scope, method, report format. |
-| `reverse-engineer-anything` skill | Vendored **unmodified** from `rea-agents@6.8.0` (`config/skills/reverse-engineer-anything/`, MIT, see `UPSTREAM.md`). |
+| `reverse-engineer-anything` skill | Vendored **unmodified** from `rea-agents@6.10.1` (`config/skills/reverse-engineer-anything/`, MIT, see `UPSTREAM.md`). |
 | `rea` MCP + `oc-rea` CLI | The pinned REA server (stdio) and the same toolset from a terminal. |
 
 ## Legal scope
@@ -62,14 +62,14 @@ All arguments are passed through unchanged. The agent uses this CLI when the MCP
 }
 ```
 
-Its ~229 tools (`rea_*`) are **denied globally** and allowed only to the `reverse-engineer` agent, so other sessions do not carry that tool catalog. The MCP is part of the reverse pack: `./install.sh --without reverse` disables it.
+Its 263 tools (`rea_*`) are **denied globally** and allowed only to the `reverse-engineer` agent, so other sessions do not carry that tool catalog. The MCP is part of the reverse pack: `./install.sh --without reverse` disables it.
 
 ## Skill and agent
 
-- Skill: `config/skills/reverse-engineer-anything/` — method, tool catalog and per-target references (native, JavaScript, Android, firmware, runtime). It is a byte-for-byte copy of the upstream skill; `UPSTREAM.md` records the version and origin.
+- Skill: `config/skills/reverse-engineer-anything/` — method, tool catalog and per-target references (native, JavaScript, Android, firmware, runtime, desktop builds). It is a byte-for-byte copy of the upstream skill; `UPSTREAM.md` records the version and origin.
 - Agent: `config/agents/reverse-engineer.md` — read-only, bash allowed, `rea_*` allowed, refuses out-of-scope work, separates observations, derivations, inferences and unknowns.
 
-Keep the skill and the MCP at the same version: the skill describes the tools of `rea-agents@6.8.0`.
+Keep the skill and the MCP at the same version: the skill describes the tools of `rea-agents@6.10.1`.
 
 ## Native engines are optional
 
@@ -84,7 +84,7 @@ REA uses the analysis engines already installed on the machine. The kit installs
 The kit owns the integration: `mcp.servers.rea` in `opencode.jsonc` and the vendored skill. `rea setup` (and `rea setup --install-hopper`) would write its own agent/skill files and can install Hopper; do not run it here. A read-only diagnostic is fine:
 
 ```bash
-npx -y rea-agents@6.8.0 doctor --client opencode --json
+npx -y rea-agents@6.10.1 doctor --client opencode --json
 ```
 
 ## Troubleshooting

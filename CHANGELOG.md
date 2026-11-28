@@ -2,6 +2,15 @@
 
 Format [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning [SemVer](https://semver.org/). Version 1.1.0 (`VERSION`); v1.0.0, v1.0.1 and v1.1.0 are tagged and signed. Entries describe `main`.
 
+## [Unreleased]
+
+### Changed
+
+- 2026-11-28: **dependency and REA refresh**: `oc-deps update --write --yes` moved 11 pins — obscura 0.2.6 → 0.2.7, uv 0.13.7 → 0.13.10, mempalace 3.11.0 → 3.12.0, semgrep 1.184.0 → 1.187.0, playwright 1.65.0 → 1.65.1, `skills` 1.7.6 → 1.9.1, kubernetes-mcp-server 0.1.2 → 0.1.3, `@playwright/mcp` 0.0.84 → 0.0.86, chrome-devtools-mcp 1.12.0 → 1.14.0, `rea-agents` 6.8.0 → 6.10.1 and `@mobilenext/mobile-mcp` 1.0.16 → 1.0.20. `oc-deps check` then reports 17 packages, 15 up to date, 0 drift and the same 2 intentional pins (pydantic 2.11.10, setuptools 80.10.2, constrained by semgrep-mcp).
+- 2026-11-28: the vendored `reverse-engineer-anything` skill is refreshed from the `rea-agents@6.10.1` npm tarball (unmodified, 263 tools, new `references/desktop-build.md`; `UPSTREAM.md` records the npm shasum/integrity and notes that the package publishes no `gitHead`). `oc-rea`, `oc-rea-mcp`, the `reverse-engineer` agent, `docs/rea.md` and the README use 6.10.1; `scripts/test-rea.mjs` follows the new pin and tool count.
+- 2026-11-28: vendored skills refreshed in the same batch — Matt Pocock's architecture quartet at `bbadaa6`, floci 1.0.0, ui-ux-pro-max 2.15.0 (commit `11ca2b3`) and impeccable 4.11.1 (engine 0.1.31).
+- 2026-11-28: `scripts/test-deps.mjs` (50 checks), `scripts/test-rea.mjs` (47 checks) and `scripts/test-supply-chain.mjs` expectations updated to the new pins.
+
 ## [1.1.0] - 2026-11-25
 
 ### Added

@@ -3,13 +3,13 @@
 The **`architecture`** pack vendors Matt Pocock's architecture-audit quartet: four skills
 that map a codebase, name its architectural friction with a shared vocabulary, stress-test
 the chosen direction with the user, and keep the project's domain model current. They are
-vendored from [mattpocock/skills](https://github.com/mattpocock/skills):
-`improve-codebase-architecture`, `codebase-design` and `grilling` are at commit
-`abeeaf95660ba9e8b7c753eb38f441ca707a8823`, while `domain-modeling` is at
-`bbadaa631c37af594e5a05c9cefacd9956136b18`, where only `GLOSSARY-FORMAT.md` changed
-(MIT, © 2026 Matt Pocock). Each skill carries
-the upstream `LICENSE` verbatim and an `UPSTREAM.md` with its exact file list, local
-modifications, dependencies and risks:
+vendored from [mattpocock/skills](https://github.com/mattpocock/skills) at commit
+`abeeaf95660ba9e8b7c753eb38f441ca707a8823` (MIT, © 2026 Matt Pocock). `domain-modeling`
+is pinned at `bbadaa631c37af594e5a05c9cefacd9956136b18`, where only `GLOSSARY-FORMAT.md`
+changed, while `improve-codebase-architecture`, `codebase-design` and `grilling` stay at
+`abeeaf95660ba9e8b7c753eb38f441ca707a8823`. Each skill carries the upstream `LICENSE`
+verbatim and an `UPSTREAM.md` with its exact file list, local modifications, dependencies
+and risks:
 
 | Skill | Upstream path | Files |
 |---|---|---|
