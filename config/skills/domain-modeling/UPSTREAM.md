@@ -1,19 +1,28 @@
 # Origin
 
 Vendored from **mattpocock/skills** — https://github.com/mattpocock/skills — at commit
-`abeeaf95660ba9e8b7c753eb38f441ca707a8823` (MIT, © 2026 Matt Pocock).
+`bbadaa631c37af594e5a05c9cefacd9956136b18` (MIT, © 2026 Matt Pocock).
 
 - Upstream path: `skills/engineering/domain-modeling/`.
-- Vendored on: **2026-11-23**, from the clone at `/tmp/opencode/matt-skills`.
+- Vendored on: **2026-11-23** at `abeeaf95660ba9e8b7c753eb38f441ca707a8823`;
+  refreshed on **2026-11-28** to `bbadaa6` from the tag tarball, files compared
+  byte-for-byte against the raw blobs.
 - License: **MIT** (`LICENSE`, kept verbatim, © 2026 Matt Pocock).
 - Pack: `architecture` (opt-in, included in the full profile, absent from core/lite).
+- Refresh scope: the GitHub compare API reports 10 commits between `abeeaf9` and
+  `bbadaa6`; among the four vendored architecture skills only `GLOSSARY-FORMAT.md`
+  changed (`domain-modeling: express term relationships inside definitions`, #1485).
+  `SKILL.md`, `ADR-FORMAT.md` and `agents/openai.yaml` are unchanged upstream. The other
+  nine commits touch `chief-of-staff` and `to-tickets`, which the kit does not vendor.
 
 ## Vendored files
 
 - `SKILL.md` (3,346 bytes): challenge terms, invent edge-case scenarios, create or
   update the glossary and ADRs as decisions crystallise; single-context and
   multi-context (`GLOSSARY-MAP.md`) layouts.
-- `GLOSSARY-FORMAT.md` (2,300 bytes): the `GLOSSARY.md` structure and entry format.
+- `GLOSSARY-FORMAT.md` (2,504 bytes): the `GLOSSARY.md` structure and entry format,
+  including bold cross-references to other glossary terms inside a definition
+  (sha256 `479bb4d9cae0ef5cca8fa23ffb5ed5b1b93b41490878315551ceb0c727146cb6`).
 - `ADR-FORMAT.md` (2,733 bytes): `docs/adr/NNNN-slug.md`, minimal template.
 - `agents/openai.yaml` (101 bytes): Codex metadata, ignored by OpenCode, kept as-is.
 - Added locally: `LICENSE`, this `UPSTREAM.md`.
