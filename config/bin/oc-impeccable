@@ -8,8 +8,8 @@
 #   3. ~/.config/opencode/skills/impeccable
 # then execs `sh <skill>/scripts/impeccable "$@"`.
 #
-# The skill launcher runs a pinned Rust engine (0.1.19). The first real command
-# downloads that binary (~22 MB) from GitHub releases into ~/.impeccable/bin/
+# The skill launcher runs a pinned Rust engine (0.1.31). The first real command
+# downloads that binary (~26 MB) from GitHub releases into ~/.impeccable/bin/
 # and verifies it against <skill>/scripts/engine-checksums.txt. `--help` is
 # forwarded to the engine, so it can trigger the download too. `live` and
 # `generate` additionally need a dev server and a browser.
@@ -28,7 +28,7 @@ usage() {
   cat <<'EOF'
 Usage: oc-impeccable <command> [arguments...]
 
-Run the vendored Impeccable skill launcher (engine 0.1.19).
+Run the vendored Impeccable skill launcher (engine 0.1.31).
 The command is forwarded to <skill>/scripts/impeccable.
 
 Skill lookup order:
@@ -41,7 +41,7 @@ Examples:
   oc-impeccable critique src/App.tsx
   oc-impeccable --help
 
-The first real command downloads the engine (~22 MB, sha256 verified) into
+The first real command downloads the engine (~26 MB, sha256 verified) into
 ~/.impeccable/bin/. `live` and `generate` need a dev server and a browser.
 EOF
 }
