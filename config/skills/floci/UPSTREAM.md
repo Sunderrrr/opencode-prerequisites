@@ -1,12 +1,22 @@
 # Origin
 
 Vendored from **floci-cli** — https://github.com/floci-io/floci-cli — at commit
-`ae4bf9935280e98d713281666a8cf920db9e3ea8` (2026-11-12, upstream version **0.4.0**).
+`5306c3c1a5cfd52f8f6a6e0fa2e56442a38f7ac9` (tag `1.0.0`, released 2026-11-19).
 
-- Skill version: **0.4.0** (the release that ships `skills/floci/`).
+- Skill version: CLI release **1.0.0**. The upstream plugin manifest at that commit
+  (`plugin.json`, not vendored) declares plugin version **1.0.6**: upstream versions the
+  plugin separately from the CLI release, which is why the vendored subset carries no
+  version string of its own.
 - License: **MIT**, © 2024 Floci Contributors (`LICENSE`, kept verbatim).
-- Vendored on: **2026-11-12**, from a shallow `git fetch --depth 1` of that SHA.
-- Upstream size: 17 files, about 108 KB on disk; the 16 kept files are 77,425 bytes.
+- Vendored on: **2026-11-12** at `ae4bf9935280e98d713281666a8cf920db9e3ea8` (0.4.0);
+  refreshed on **2026-11-28** to `5306c3c1` (1.0.0) from the tag tarball, files compared
+  byte-for-byte against the raw blobs.
+- Upstream size at 1.0.0: 17 files, 80,729 bytes; the 16 kept files are 77,559 bytes.
+- Refresh scope: the GitHub compare API reports 5 commits between `ae4bf99` and
+  `5306c3c1`; within `skills/floci/` only `references/troubleshooting.md` changed
+  (+2 lines on the macOS `podman machine` socket). The other changes are CLI sources,
+  tests, CI, `README.md`, `CHANGELOG.md`, `pom.xml` and `plugin.json`, none of which the
+  kit vendors.
 
 ## Vendored files
 
@@ -14,7 +24,9 @@ Copied from the upstream `skills/floci/` directory:
 
 - `SKILL.md`.
 - `references/` — `aws.md`, `azure.md`, `ci.md`, `docker.md`, `docs.md`, `gcp.md`,
-  `namespaces.md`, `oci.md`, `troubleshooting.md` (9 files).
+  `namespaces.md`, `oci.md`, `troubleshooting.md` (9 files). `troubleshooting.md` is the
+  1.0.0 revision, byte-identical to upstream (5,515 bytes, sha256
+  `e8968839c73c636108972f0cbd0073148a80b6fe974e7a5bf70e0bdb13d4d2c0`).
 - `assets/compose/` — `aws.yml`, `azure.yml`, `gcp.yml`, `multi-cloud.yml`, `oci.yml`
   (5 files).
 - `scripts/ensure-running.sh`.
@@ -37,7 +49,9 @@ Added at the skill root: `LICENSE`, this `UPSTREAM.md`.
 - Rewrote the missing-CLI message in `scripts/ensure-running.sh` so it no longer points at
   the removed installer.
 
-No other content was changed. Upstream paths and examples were kept as-is.
+No other content was changed. Upstream paths and examples were kept as-is. The 1.0.0
+refresh replaced only `references/troubleshooting.md`; the safety edits above are
+unchanged.
 
 ## Risks
 

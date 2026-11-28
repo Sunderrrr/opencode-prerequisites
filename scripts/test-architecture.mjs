@@ -15,7 +15,15 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const SKILLS = path.join(ROOT, "config/skills")
 const COMMAND = path.join(ROOT, "config/commands/architecture.md")
 const TABLE = path.join(ROOT, "profiles/packs.tsv")
-const SHA = "abeeaf95660ba9e8b7c753eb38f441ca707a8823"
+// Upstream commit per skill. The files are vendored individually, so each skill records
+// the commit its files were taken from: only domain-modeling moved past abeeaf9 (upstream
+// changed its GLOSSARY-FORMAT.md); the other three are unchanged there.
+const UPSTREAM_SHA = {
+  "improve-codebase-architecture": "abeeaf95660ba9e8b7c753eb38f441ca707a8823",
+  "codebase-design": "abeeaf95660ba9e8b7c753eb38f441ca707a8823",
+  "grilling": "abeeaf95660ba9e8b7c753eb38f441ca707a8823",
+  "domain-modeling": "bbadaa631c37af594e5a05c9cefacd9956136b18",
+}
 // The quartet: upstream skill name => directory under config/skills.
 const QUARTET = [
   "improve-codebase-architecture",
@@ -71,8 +79,9 @@ try {
     check(`${skill}: LICENSE present and MIT`,
       fs.existsSync(path.join(dir, "LICENSE")) && /^MIT License/m.test(read(path.join(dir, "LICENSE"))))
     const upstream = fs.existsSync(path.join(dir, "UPSTREAM.md")) ? read(path.join(dir, "UPSTREAM.md")) : ""
-    check(`${skill}: UPSTREAM records commit ${SHA.slice(0, 7)}`,
-      upstream.includes(SHA) && upstream.includes("mattpocock/skills") && /MIT/.test(upstream))
+    const sha = UPSTREAM_SHA[skill] ?? ""
+    check(`${skill}: UPSTREAM records commit ${sha.slice(0, 7)}`,
+      !!sha && upstream.includes(sha) && upstream.includes("mattpocock/skills") && /MIT/.test(upstream))
   }
 
   // ---------- 3. model invocation and inert vendored text ----------
