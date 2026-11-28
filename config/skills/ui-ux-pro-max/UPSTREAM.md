@@ -70,3 +70,11 @@ With `--design-system --persist`, the tool writes `design-system/<project-slug>/
 (and optionally `pages/<page>.md`) relative to the current working directory by default.
 Always pass `--output-dir "<project-root>"` so files land in the project instead of the
 shell's cwd. Without `--force`, an existing `MASTER.md` is left untouched.
+
+## KIT-PATCH (2026-11-28)
+
+One local code change differs from upstream `11ca2b3`: in `scripts/design_system.py`,
+`DesignSystemGenerator.generate()` forwards the explicit `direction` argument to both
+`resolve_preview_locale()` calls (query and project-name inference). Rationale: locale
+resolution should see the same explicit direction as the final recommendation, rather
+than resolving it a second time from the text alone. No other code differs.
