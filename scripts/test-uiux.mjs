@@ -137,6 +137,47 @@ try {
     && !previewHtml.includes("cdn.tailwindcss.com") && !/<script\b/i.test(previewHtml),
     pv.stderr.slice(0, 300) || `${previewHtml.length} bytes`)
 
+  const rtlDir = path.join(tmp, "preview-rtl")
+  fs.mkdirSync(rtlDir, { recursive: true })
+  const rtl = run(LAUNCHER, ["saas dashboard", "--design-system", "--preview", "--direction", "rtl",
+    "-p", "Latin Project", "--output-dir", rtlDir], { cwd: tmp })
+  const rtlFile = path.join(rtlDir, "preview.html")
+  const rtlHtml = fs.existsSync(rtlFile) ? read(rtlFile) : ""
+  const rtlHtmlTag = rtlHtml.match(/<html\b[^>]*>/)?.[0] ?? ""
+  check("search: --direction rtl sets dir=\"rtl\" on the preview",
+    rtl.status === 0 && /\blang="en"/.test(rtlHtmlTag) && /\bdir="rtl"/.test(rtlHtmlTag),
+    rtl.stderr.slice(0, 300) || rtlHtmlTag || "no preview.html")
+  const latinHtmlTag = previewHtml.match(/<html\b[^>]*>/)?.[0] ?? ""
+  check("search: Latin-only preview defaults to ltr",
+    /<html\b/.test(latinHtmlTag) && !/\bdir="rtl"/.test(latinHtmlTag),
+    latinHtmlTag || "no preview.html")
+
+  // The final `direction or preview_direction` fallback masks a missing
+  // forward at CLI level, so spy on the resolver to prove both call sites
+  // receive the explicit direction (an RTL project name forces the 2nd call).
+  const localeSpy = run("python3", ["-c", `
+import json
+import design_system
+
+calls = []
+original = design_system.resolve_preview_locale
+
+def spy(text, lang=None, direction=None):
+    calls.append(direction)
+    return original(text, lang=lang, direction=direction)
+
+design_system.resolve_preview_locale = spy
+result = design_system.DesignSystemGenerator().generate(
+    "saas dashboard", "لوحة تحكم", direction="ltr")
+print(json.dumps({"lang": result["lang"], "direction": result["direction"], "calls": calls}))
+`], { cwd: path.join(SKILL, "scripts") })
+  let spy = null
+  try { spy = JSON.parse(localeSpy.stdout) } catch { /* reported below */ }
+  check("search: locale resolution forwards --direction to both resolver calls",
+    localeSpy.status === 0 && spy?.lang === "ar" && spy?.direction === "ltr"
+    && Array.isArray(spy?.calls) && spy.calls.length === 2 && spy.calls.every((d) => d === "ltr"),
+    localeSpy.stderr.slice(0, 300) || localeSpy.stdout.slice(0, 200) || "no output")
+
   check("search: no __pycache__ written into the vendored skill",
     !fs.existsSync(path.join(SKILL, "scripts/__pycache__")))
 

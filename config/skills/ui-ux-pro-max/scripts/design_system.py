@@ -571,9 +571,9 @@ class DesignSystemGenerator:
         reasoning_effects = reasoning.get("key_effects", "")
         combined_effects = style_effects if style_effects else reasoning_effects
 
-        preview_lang, preview_direction = resolve_preview_locale(query, lang=lang)
+        preview_lang, preview_direction = resolve_preview_locale(query, lang=lang, direction=direction)
         if not lang and preview_direction == "ltr" and project_name:
-            preview_lang, preview_direction = resolve_preview_locale(project_name)
+            preview_lang, preview_direction = resolve_preview_locale(project_name, direction=direction)
 
         return {
             "project_name": project_name or query.upper(),
